@@ -6,22 +6,29 @@ let manifest = null;
 fetch('audio/manifest.json').then(r => r.ok ? r.json() : null).then(m => manifest = m).catch(() => { manifest = null; });
 
 const audioCache = {};
+let currentAudio = null;
 
 function playFile(url) {
   return new Promise(resolve => {
     try {
+      // 互斥：新播放立刻掐掉上一段，避免连点出现重音
+      if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
       let a = audioCache[url];
       if (!a) { a = new Audio(url); audioCache[url] = a; }
-      const done = ok => { a.onended = a.onerror = null; resolve(ok); };
+      const done = ok => { a.onended = a.onerror = null; if (currentAudio === a) currentAudio = null; resolve(ok); };
       a.onended = () => done(true);
       a.onerror = () => done(false);
       try { a.currentTime = 0; } catch (e) { /* ignore */ }
+      currentAudio = a;
       a.play().catch(() => done(false));
     } catch (e) { resolve(false); }
   });
 }
 
-// key 形如 "word/cat" / "syl/ap" / "letter/c"
+// key 形如 "word/cat" / "word/good-morning" / "syl/ap" / "letter/c"
+function fileKey(text) {
+  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 async function tryFile(key) {
   if (!manifest || !manifest[key]) return false;
   return playFile(manifest[key]);
@@ -67,20 +74,22 @@ function tts(text, { rate = 0.8, pitch = 1.05, onEnd } = {}) {
   speechSynthesis.speak(u);
 }
 
-// 对外发音入口：单词/音节/字母 自动匹配语音文件
+// 对外发音入口：单词/短语/音节/字母 自动匹配语音文件
 export async function speak(text, { rate = 0.8, onEnd } = {}) {
-  const t = String(text).toLowerCase().replace(/[^a-z]/g, '');
-  if (t) {
-    if (await tryFile(`word/${t}`)) { if (onEnd) onEnd(); return; }
-    if (await tryFile(`syl/${t}`)) { if (onEnd) onEnd(); return; }
-    if (t.length === 1 && await tryFile(`letter/${t}`)) { if (onEnd) onEnd(); return; }
+  const raw = String(text).trim();
+  const fk = fileKey(raw);
+  if (fk) {
+    if (await tryFile(`word/${fk}`)) { if (onEnd) onEnd(); return; }
+    const t = fk.replace(/-/g, '');
+    if (t && t.length === 1 && await tryFile(`letter/${t}`)) { if (onEnd) onEnd(); return; }
+    if (raw.includes(' ') || fk.includes('-')) { /* 多词短语没有独立文件时走 TTS */ }
   }
-  tts(text, { rate, onEnd });
+  tts(raw, { rate, onEnd });
 }
 
 // 慢速单词（有专门录的慢速文件）
 export function speakSlow(word, onEnd) {
-  tryFile('word/' + word + '_slow').then(ok => { if (!ok) tts(word, { rate: 0.55, onEnd }); else if (onEnd) onEnd(); });
+  tryFile('word/' + fileKey(word) + '_slow').then(ok => { if (!ok) tts(word, { rate: 0.55, onEnd }); else if (onEnd) onEnd(); });
 }
 
 // 逐音节慢读："but ter fly"

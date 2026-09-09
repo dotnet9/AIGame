@@ -10,6 +10,19 @@ const secure = location.protocol === 'https:'
 export const voiceBlockedByInsecure = !!SR && !secure;
 export const voiceSupported = !!SR && secure;
 
+// 识别服务不可用时（国内网络常见：Chrome 语音服务连不上），自动降级为字母块模式
+let broken = false;
+try { broken = sessionStorage.getItem('wp_voice_broken') === '1'; } catch (e) { /* ignore */ }
+let notAllowedCount = 0;
+
+export function isVoiceBroken() { return broken; }
+export function markVoiceBroken() {
+  broken = true;
+  try { sessionStorage.setItem('wp_voice_broken', '1'); } catch (e) { /* ignore */ }
+}
+
+const FATAL_ERRORS = ['network', 'service-not-allowed', 'language-not-supported', 'audio-capture'];
+
 let rec = null;
 let listening = false;
 let onResultCb = null;
@@ -44,15 +57,23 @@ function ensureRec() {
     listening = false;
     clearTimeout(autoTimer);
     if (onStateCb) onStateCb(false, e.error);
+    if (FATAL_ERRORS.includes(e.error)) {
+      markVoiceBroken(); // 识别服务根本不可用，标记降级
+      return;            // 提示由降级流程统一给出
+    }
+    if (e.error === 'not-allowed') {
+      notAllowedCount++;
+      if (notAllowedCount >= 2) markVoiceBroken(); // 反复拿不到麦克风权限，也降级
+    }
     if (onResultCb && e.error !== 'no-speech' && e.error !== 'aborted') onResultCb(null, e.error);
   };
   return rec;
 }
 
-// targetWords: 可接受的单词列表（第一个是主目标）
-// 返回 { ok, close, heard, score }  score: 0-100 发音评分
+// target: 单词或短语；返回 { ok, close, heard, score }  score: 0-100 发音评分
 export function matchAlt(alts, target) {
   const tol = target.length <= 3 ? 0 : target.length <= 5 ? 1 : 2;
+  const tNoSp = target.replace(/ /g, '');
   let best = { ok: false, close: false, heard: '', score: 0 };
   for (const a of alts || []) {
     const isObj = a && typeof a === 'object';
@@ -62,15 +83,14 @@ export function matchAlt(alts, target) {
     const heard = raw.toLowerCase().replace(/[^a-z ]/g, ' ').trim();
     if (!heard) continue;
     const tokens = heard.split(/\s+/);
+    const joined = tokens.join('');
     let s = null, ok = false, close = false;
-    if (tokens.includes(target)) {
+    if (tokens.includes(target) || joined === tNoSp || heard === target) {
       ok = true;
       s = Math.round(85 + 15 * conf);                       // 完全命中：85-100
     } else {
-      const joined = tokens.join('');
-      const dToken = Math.min(...tokens.map(t => lev(t, target)));
-      const dJoined = lev(joined, target);
-      const d = Math.min(dToken, dJoined);
+      let d = Math.min(...tokens.map(t => lev(t, target)), lev(joined, tNoSp));
+      if (target.includes(' ')) d = Math.min(d, lev(heard.replace(/ /g, ''), tNoSp));
       if (d === 0) { ok = true; s = Math.round(78 + 16 * conf); }        // 连读命中：78-94
       else if (d <= tol) { close = true; s = Math.round(63 + (tol - d) * 7 + 12 * conf); } // 接近：63-82
       else if (d <= tol + 1) { close = true; s = Math.round(46 + 16 * conf); }             // 勉强接近：46-62
@@ -101,7 +121,7 @@ function lev(a, b) {
 }
 
 export function startListening(onResult, onState) {
-  if (!SR || !voiceSupported) return false;
+  if (!SR || !voiceSupported || broken) return false;
   const r = ensureRec();
   gotResult = false;
   try { r.abort(); } catch (e) { /* ignore */ }
@@ -111,12 +131,13 @@ export function startListening(onResult, onState) {
     r.start();
     listening = true;
     if (onState) onState(true);
-    // 最长 5 秒自动收束
+    // 8 秒无结果自动收束（speech 引擎检测到静音也会自动结束）
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 5000);
+    autoTimer = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 8000);
     return true;
   } catch (e) {
     listening = false;
+    markVoiceBroken(); // start 都失败，识别基本不可用
     return false;
   }
 }

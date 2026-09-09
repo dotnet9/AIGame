@@ -21,6 +21,7 @@ try {
   window.__game = game; // 调试句柄
 } catch (err) {
   console.error(err);
+  window.__bootErr = err && (err.stack || err.message);
   const el = document.getElementById('loading');
   if (el) el.querySelector('.loading-text').textContent = '哎呀，这台设备跑不起来 3D 画面，换台电脑试试吧';
 }

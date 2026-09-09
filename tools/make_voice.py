@@ -15,9 +15,14 @@ import sys
 
 import edge_tts
 
-VOICE = "en-US-AnaNeural"
+VOICE = "en-US-JennyNeural"
 BASE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "game", "audio"))
 CONCURRENCY = 6
+
+
+def sanitize(en):
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", en.lower()).strip("-")
 
 
 def plan_tasks():
@@ -25,16 +30,35 @@ def plan_tasks():
     words = json.load(open(os.path.join(here, "words_data.json"), encoding="utf-8"))
     tasks = []  # (key, text, rate)
 
+    def add(en, rate="+0%"):
+        key = "word/" + sanitize(en)
+        tasks.append((key, en, rate))
+
     for w in words:
-        tasks.append((f"word/{w['id']}", w["en"], "+0%"))
-        tasks.append((f"word/{w['id']}_slow", w["en"], "-35%"))
+        add(w["en"])
+        add(w["en"] + "_slow", "-35%")
+    try:
+        cur = json.load(open(os.path.join(here, "curriculum_data.json"), encoding="utf-8"))
+        for sem in cur.values():
+            for unit in sem["units"]:
+                for item in unit["words"]:
+                    en = item.split("|")[0].strip()
+                    add(en)
+    except FileNotFoundError:
+        print("（无 curriculum_data.json，跳过课程语音）")
     syls = sorted({s.lower() for w in words for s in w["syl"]})
     for s in syls:
-        tasks.append((f"syl/{s}", s, "-25%"))
+        tasks.append(("syl/" + s, s, "-25%"))
     for i in range(26):
         ch = chr(ord("a") + i)
-        tasks.append((f"letter/{ch}", ch.upper(), "-25%"))
-    return tasks
+        tasks.append(("letter/" + ch, ch.upper(), "-25%"))
+    # 去重
+    seen, uniq = set(), []
+    for t in tasks:
+        if t[0] not in seen:
+            seen.add(t[0])
+            uniq.append(t)
+    return uniq
 
 
 async def gen(sem, key, text, rate):

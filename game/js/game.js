@@ -10,8 +10,10 @@ import { buildPlayer, letterTexture, petThumbnail } from './models.js';
 import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
-import { startListening, stopListening, matchAlt, voiceSupported } from './speech.js';
+import { startListening, stopListening, matchAlt, voiceSupported, markVoiceBroken } from './speech.js';
 import { speak, sfx } from './audio.js';
+import { ensureWhisper, recognizeBlob } from './whisper.js';
+import { CURRICULUM } from './curriculum.js';
 
 const PLAYER_SPEED = 4.4;
 const ISLE_CENTER = { x: -22, z: 27 };
@@ -242,16 +244,22 @@ export class Game {
     ui.bindHUD({
       onCatalog: () => this._openCatalog(),
       onHelp: () => {},
+      onBook: () => this._openBook(),
       onSummon: () => this._openSummon(),
       onPrompt: () => this._interact(),
       onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
       onMic: () => this._startVoice(),
-      onMicEnd: () => stopListening(),
+      onMicEnd: () => this._stopVoice(),
       isTouch: this.isTouch,
     });
     if (!save.getIntro()) {
-      setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch), 600);
+      setTimeout(() => ui.playIntro(() => {
+        save.setIntro(true);
+        if (!save.getBookSem()) this._openBook(); // 第一次玩：先选年级学期
+      }, this.isTouch), 600);
+    } else if (!save.getBookSem()) {
+      this._openBook();
     }
     // 位置存档：每 3 秒 + 离开页面时
     setInterval(() => this._savePosition(), 3000);
@@ -938,10 +946,126 @@ export class Game {
     return best;
   }
 
-  // ---------- 语音 ----------
+  // ================= 课本朗读练习 =================
+  _openBook(semKey) {
+    if (!semKey) semKey = save.getBookSem() || '3a';
+    save.setBookSem(semKey);
+    const labels = { '3a': '三上', '3b': '三下', '4a': '四上', '4b': '四下', '5a': '五上', '5b': '五下', '6a': '六上', '6b': '六下' };
+    const sems = Object.keys(CURRICULUM).map(k => ({ key: k, label: labels[k] || k, active: k === semKey }));
+    const units = CURRICULUM[semKey].units.map((u, i) => {
+      const res = save.getUnitResult(semKey + '#' + i);
+      return { name: u.name, total: u.words.length, scores: res ? res.scores : null };
+    });
+    ui.showBookPanel({
+      sems, units,
+      onSelect: k => this._openBook(k),
+      onStart: i => this._startPractice(semKey, i),
+    });
+  }
+
+  _startPractice(semKey, unitIdx) {
+    const unit = CURRICULUM[semKey].units[unitIdx];
+    const list = unit.words.map(item => {
+      const [en, zh] = item.split('|');
+      return { en, zh, syl: [en] };
+    });
+    this.practice = { key: semKey + '#' + unitIdx, list, idx: 0, scores: [] };
+    this._practiceNext();
+  }
+
+  _practiceNext() {
+    const p = this.practice;
+    if (!p) return;
+    if (p.idx >= p.list.length) {
+      save.saveUnitResult(p.key, p.scores);
+      ui.closeChallenge();
+      const avg = Math.round(p.scores.reduce((a, b) => a + b, 0) / Math.max(1, p.scores.length));
+      sfx.great();
+      ui.toast(`🎉 单元练习完成！平均 ${avg} 分，${avg >= 85 ? '你就是朗读小明星！' : '继续加油！'}`, 4200);
+      this.currentWord = null;
+      return;
+    }
+    const w = p.list[p.idx];
+    this.currentWord = w;
+    ui.openChallenge({
+      word: { en: w.en, zh: w.zh, syl: [w.en], hint: `第 ${p.idx + 1}/${p.list.length} 个 · 大声读给词宠听` },
+      mode: 'practice',
+      onSuccess: res => {
+        p.scores.push(res.score || 60);
+        p.idx++;
+        setTimeout(() => this._practiceNext(), 500);
+      },
+      onSkip: () => { p.scores.push(0); p.idx++; this._practiceNext(); },
+      onClose: () => { this.practice = null; this.currentWord = null; },
+    });
+  }
+
+  // ---------- 语音识别（优先级：浏览器本地 Whisper → Web Speech → 字母块） ----------
+  // 点击麦克风：开始录音；再点一次：结束并识别。返回 false 表示无法启动，UI 自动切字母块。
   _startVoice() {
-    if (!voiceSupported || !this.currentWord) return;
-    startListening(
+    if (!this.currentWord) return false;
+    if (this.isTouch && !navigator.mediaDevices) return this._startWebSpeech();
+    return this._startWhisper();
+  }
+
+  _startWhisper() {
+    const word = this.currentWord;
+    if (!word) return false;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+      return this._startWebSpeech();
+    }
+    this.voiceCancelled = false;
+    // 本地识别引擎（首次会下载模型，约 40MB，之后浏览器缓存秒开）
+    ui.voiceStatus('语音引擎准备中…（首次加载约 40MB，之后秒开）');
+    ensureWhisper().then(() => {
+      if (!this.currentWord) return;
+      return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        if (this.voiceCancelled || this.currentWord !== word) {
+          try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
+          return;
+        }
+        this.mediaStream = stream;
+        const rec = new MediaRecorder(stream);
+        this.recorder = rec;
+        this.chunks = [];
+        rec.ondataavailable = e => { if (e.data && e.data.size) this.chunks.push(e.data); };
+        rec.onstop = async () => {
+          try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
+          ui.voiceStatus('识别中…');
+          try {
+            const blob = new Blob(this.chunks, { type: rec.mimeType || 'audio/webm' });
+            const text = await recognizeBlob(blob);
+            if (!this.currentWord) return;
+            if (!text) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
+            ui.voiceResult(matchAlt([{ transcript: text, confidence: 0.9 }], this.currentWord.en));
+          } catch (e) {
+            ui.voiceResult({ score: 0, heard: '', error: 'no-result' });
+          }
+        };
+        rec.start();
+        ui.voiceRecording(); // “正在录音，再点一下结束”
+      });
+    }).catch(() => {
+      // 本地引擎失败 → Web Speech → 字母块
+      if (this.currentWord && this._startWebSpeech()) return;
+      markVoiceBroken();
+      ui.voiceUnavailable();
+    });
+    return true;
+  }
+
+  _stopVoice() {
+    if (this.recorder && this.recorder.state === 'recording') {
+      try { this.recorder.stop(); } catch (e) { /* ignore */ }
+    } else {
+      this.voiceCancelled = true; // 引擎还没就绪就取消了
+      stopListening();
+    }
+  }
+
+  _startWebSpeech() {
+    if (!voiceSupported) return false;
+    return startListening(
       alts => {
         if (!this.currentWord) return;
         if (!alts) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
@@ -949,9 +1073,7 @@ export class Game {
       },
       (listening, err) => {
         if (err === 'not-allowed') ui.toast('🎤 需要允许麦克风权限才能语音读单词哦（点地址栏旁的麦克风图标）', 5000);
-        else if (err === 'audio-capture') ui.toast('🎤 没有找到麦克风，可以用下面的字母块拼单词', 5000);
-        else if (err === 'network') ui.toast('🎤 语音识别需要联网，先用字母块拼一拼吧', 5000);
-        else if (err === 'service-not-allowed') ui.toast('🎤 识别服务不可用，先用字母块拼一拼吧', 5000);
+        else if (err && err !== 'no-result') ui.toast('🎤 语音识别暂时不可用，已切换为字母块拼写 🧩', 5000);
       }
     );
   }
