@@ -7,6 +7,8 @@ function fresh() {
   return {
     pets: {},          // id -> { hatchedAt, fedAt, feedStage, feeds }
     gates: {},         // boat / light / wind / beanstalk
+    visited: [],       // 去过的区域
+    player: null,      // 上次位置 {x,y,z,yaw,camYaw,isle}
     intro: false,
     playSeconds: 0,
   };
@@ -66,6 +68,17 @@ export function hatchedCount() { return Object.keys(data.pets).length; }
 
 export function setGate(name) { data.gates[name] = true; save(); }
 export function hasGate(name) { return !!data.gates[name]; }
+
+export function addVisited(zone) {
+  if (data.visited.includes(zone)) return false;
+  data.visited.push(zone);
+  save();
+  return true;
+}
+export function getVisited() { return data.visited; }
+
+export function savePlayer(p) { data.player = p; save(); }
+export function getPlayer() { return data.player; }
 
 export function setIntro(v) { data.intro = v; save(); }
 export function getIntro() { return data.intro; }

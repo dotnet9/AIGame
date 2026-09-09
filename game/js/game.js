@@ -18,6 +18,16 @@ const ISLE_CENTER = { x: -22, z: 27 };
 const CLIMB_TOP = { x: -22, z: 24.2, y: 14 };
 const CLIMB_BOTTOM = { x: -22, z: 28.6, y: 0 };
 
+// 区域范围（世界坐标），用于地图与探索提示
+const ZONE_RECTS = [
+  { key: 'orchard',  name: '阳光果园', x1: -34, z1: -30, x2: -5,  z2: -5 },
+  { key: 'windmill', name: '风车田',   x1: 8,   z1: -30, x2: 34,  z2: -7 },
+  { key: 'barnyard', name: '谷仓前院', x1: 14,  z1: 8,   x2: 34,  z2: 30 },
+  { key: 'garden',   name: '魔法菜园', x1: -34, z1: 10,  x2: -13, z2: 34 },
+  { key: 'meadow',   name: '出生草甸', x1: -18, z1: 5,   x2: 14,  z2: 34 },
+];
+const SKY_RECT = { key: 'sky', name: '天空岛', x1: -28, z1: 21, x2: -16, z2: 33 };
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -58,18 +68,45 @@ export class Game {
       this.composer.addPass(this.bloom);
     } catch (e) { this.composer = null; }
     this.camYaw = 0; this.camPitch = 0.42; this.camDist = 8.5;
+    this._initGuide();
   }
 
   _initPlayer() {
     const p = buildPlayer();
     this.player = p.group;
     this.playerParts = p.parts;
-    this.player.position.set(0, 0, 14);
     this.player.rotation.y = Math.PI; // 面朝北（河流方向）
+    // 恢复上次的位置与朝向（存档续玩）
+    const sp = save.getPlayer();
+    if (sp && typeof sp.x === 'number') {
+      this.player.position.set(sp.x, sp.y || 0, sp.z);
+      this.player.rotation.y = sp.yaw || Math.PI;
+      this.camYaw = sp.camYaw || 0;
+      this.onIsle = !!sp.isle;
+      if (this.onIsle) this.player.position.y = 14;
+    } else {
+      this.player.position.set(0, 0, 14);
+    }
     this.scene.add(this.player);
-    this.onIsle = false;
     this.climbing = false;
     this.walkT = 0;
+    this.lastZone = null;
+  }
+
+  // 向导箭头：漂浮在头顶，指向当前目标
+  _initGuide() {
+    const g = new THREE.Group();
+    const gold = new THREE.MeshBasicMaterial({ color: 0xFFB93C });
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.4, 8), gold);
+    shaft.rotation.z = Math.PI / 2;
+    shaft.position.x = -0.32;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.32, 8), gold);
+    head.rotation.z = -Math.PI / 2;
+    head.position.x = 0.2;
+    g.add(shaft, head);
+    g.visible = false;
+    this.scene.add(g);
+    this.guideArrow = g;
   }
 
   _initEntities() {
@@ -207,6 +244,7 @@ export class Game {
       onHelp: () => {},
       onSummon: () => this._openSummon(),
       onPrompt: () => this._interact(),
+      onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
       onMic: () => this._startVoice(),
       onMicEnd: () => stopListening(),
@@ -215,6 +253,19 @@ export class Game {
     if (!save.getIntro()) {
       setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch), 600);
     }
+    // 位置存档：每 3 秒 + 离开页面时
+    setInterval(() => this._savePosition(), 3000);
+    addEventListener('pagehide', () => this._savePosition());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this._savePosition(); });
+  }
+
+  _savePosition() {
+    const p = this.player.position;
+    save.savePlayer({
+      x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2),
+      yaw: +this.player.rotation.y.toFixed(2), camYaw: +this.camYaw.toFixed(2),
+      isle: this.onIsle,
+    });
   }
 
   onResize() {
@@ -244,12 +295,153 @@ export class Game {
     this._updatePlayer(dt);
     this._updateCamera(dt);
     this._updateWorldAnim(dt, t);
+    this._updateGuide(t);
+    this._updateZoneHint(dt);
     this._updateFx(dt);
     this.eggs.update(dt, t);
     this.pets.update(dt, t);
     this._updatePrompt();
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  // ================= 指引系统 =================
+  _zoneAt(p) {
+    if (this.onIsle) return 'sky';
+    if (p.x > 20.9 && p.x < 27.1 && p.z > 19.3 && p.z < 24.7) return 'barn';
+    for (const zr of ZONE_RECTS) {
+      if (p.x >= zr.x1 && p.x <= zr.x2 && p.z >= zr.z1 && p.z <= zr.z2) return zr.key;
+    }
+    return 'meadow';
+  }
+
+  _reachableZone(zone) {
+    if (zone === 'orchard' || zone === 'windmill') return save.hasGate('boat');
+    if (zone === 'barn') return save.hasGate('light');
+    if (zone === 'sky') return save.hasGate('beanstalk');
+    return true;
+  }
+
+  _eggById(id) { const e = this.eggs.get(id); return e ? e.group.position : null; }
+
+  _nearestReachableEgg() {
+    const p = this.player.position;
+    let best = null, bd = 1e9;
+    for (const e of this.eggs.eggs.values()) {
+      if (!this._reachableZone(e.word.zone)) continue;
+      const d = Math.hypot(e.group.position.x - p.x, e.group.position.z - p.z);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+
+  // 当前任务目标（文字 + 指路坐标）
+  _objective() {
+    if (save.hatchedCount() === 0) {
+      const e = this._nearestReachableEgg();
+      return { text: '走近一颗发光的蛋，读出单词唤醒词宠！', target: e ? e.group.position : null };
+    }
+    if (!save.hasGate('boat')) {
+      const ep = save.isHatched('boat') ? { x: 0, z: 4.6 } : this._eggById('boat');
+      return save.isHatched('boat')
+        ? { text: '去码头，点 🪄 召唤 boat 当小桥过河！', target: ep }
+        : { text: '码头边有一颗 boat 蛋，先去孵化它！', target: ep };
+    }
+    if (!save.hasGate('light')) {
+      const ep = save.isHatched('light') ? { x: 24, z: 18.5 } : this._eggById('light');
+      return save.isHatched('light')
+        ? { text: '谷仓里黑漆漆的，召唤 light 照亮它！', target: ep }
+        : { text: '南瓜地附近有一颗 light 蛋，谷仓需要它！', target: ep };
+    }
+    if (!save.hasGate('wind')) {
+      const ep = save.isHatched('wind') ? { x: 13, z: -6 } : this._eggById('wind');
+      return save.isHatched('wind')
+        ? { text: '风车田的干草球挡路了，召唤 wind 吹走它！', target: ep }
+        : { text: '风车田门口有一颗 wind 蛋！', target: ep };
+    }
+    if (!save.hasGate('beanstalk')) {
+      if (!this.planted) {
+        const ep = save.isHatched('seed') ? { x: -22, z: 25.5 } : this._eggById('seed');
+        return save.isHatched('seed')
+          ? { text: '魔法菜园的泥土在等 seed！', target: ep }
+          : { text: '菜园旁边有一颗 seed 蛋，捡起来！', target: ep };
+      }
+      const ep = save.isHatched('rain') ? { x: -22, z: 25.5 } : this._eggById('rain');
+      return save.isHatched('rain')
+        ? { text: '豆苗种下啦！呼唤 rain 让它长大！', target: ep }
+        : { text: '豆苗需要一场 rain 才能长大！', target: ep };
+    }
+    const remain = TOTAL - save.hatchedCount();
+    if (remain > 0) {
+      const e = this._nearestReachableEgg();
+      return { text: `还有 ${remain} 颗词宠蛋等着你！（🗺️ 看地图找一找）`, target: e ? e.group.position : null };
+    }
+    return { text: '🎉 恭喜你收集完阳光农场的全部词宠！', target: null };
+  }
+
+  _updateGuide(t) {
+    const obj = this._objective();
+    ui.setQuest(obj.text);
+    // 头顶箭头
+    const p = this.player.position;
+    if (obj.target) {
+      const dx = obj.target.x - p.x, dz = obj.target.z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 3.5) {
+        this.guideArrow.visible = true;
+        this.guideArrow.position.set(p.x, p.y + 2.15 + Math.sin(t * 3) * 0.12, p.z);
+        this.guideArrow.rotation.y = Math.atan2(-dz, dx);
+      } else this.guideArrow.visible = false;
+    } else this.guideArrow.visible = false;
+  }
+
+  // 区域进入提示
+  _updateZoneHint(dt) {
+    this._zoneTimer = (this._zoneTimer || 0) + dt;
+    if (this._zoneTimer < 0.6) return;
+    this._zoneTimer = 0;
+    const z = this._zoneAt(this.player.position);
+    if (z !== this.lastZone) {
+      this.lastZone = z;
+      if (save.addVisited(z)) {
+        const names = {
+          meadow: '出生草甸 · 词宠蛋的家', orchard: '阳光果园 · 过河就能摘果子',
+          windmill: '风车田 · 大风车的秘密', barnyard: '谷仓前院 · 马和绵羊的家',
+          barn: '谷仓里 · 灯亮了才能看清哦', garden: '魔法菜园 · 种下种子会发生什么？',
+          sky: '天空岛 · 传说中的金色词宠蛋！',
+        };
+        ui.toast('📍 ' + (names[z] || z), 3200);
+      }
+    }
+  }
+
+  // 地图
+  _openMap() {
+    const visited = save.getVisited();
+    const zones = ZONE_RECTS.map(zr => {
+      const inZone = WORDS.filter(w => w.zone === zr.key);
+      return {
+        key: zr.key, name: zr.name, x1: zr.x1, z1: zr.z1, x2: zr.x2, z2: zr.z2,
+        discovered: visited.includes(zr.key),
+        total: inZone.length,
+        hatched: inZone.filter(w => save.isHatched(w.id)).length,
+        locked: !this._reachableZone(zr.key),
+      };
+    });
+    const skyIn = WORDS.filter(w => w.zone === 'sky');
+    zones.push({
+      key: 'sky', name: SKY_RECT.name, x1: SKY_RECT.x1, z1: SKY_RECT.z1, x2: SKY_RECT.x2, z2: SKY_RECT.z2,
+      discovered: visited.includes('sky'), total: skyIn.length,
+      hatched: skyIn.filter(w => save.isHatched(w.id)).length,
+      locked: !save.hasGate('beanstalk'),
+    });
+    const eggs = [...this.eggs.eggs.values()].map(e => ({
+      x: e.group.position.x, z: e.group.position.z, golden: e.golden,
+    }));
+    ui.openMap({
+      player: { x: this.player.position.x, z: this.player.position.z },
+      zones, eggs,
+    });
   }
 
   // ================= 玩家 =================
@@ -751,12 +943,15 @@ export class Game {
     if (!voiceSupported || !this.currentWord) return;
     startListening(
       alts => {
-        if (this.currentWord) ui.voiceResult(matchAlt(alts, this.currentWord.en));
+        if (!this.currentWord) return;
+        if (!alts) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
+        ui.voiceResult(matchAlt(alts, this.currentWord.en));
       },
       (listening, err) => {
         if (err === 'not-allowed') ui.toast('🎤 需要允许麦克风权限才能语音读单词哦（点地址栏旁的麦克风图标）', 5000);
         else if (err === 'audio-capture') ui.toast('🎤 没有找到麦克风，可以用下面的字母块拼单词', 5000);
         else if (err === 'network') ui.toast('🎤 语音识别需要联网，先用字母块拼一拼吧', 5000);
+        else if (err === 'service-not-allowed') ui.toast('🎤 识别服务不可用，先用字母块拼一拼吧', 5000);
       }
     );
   }

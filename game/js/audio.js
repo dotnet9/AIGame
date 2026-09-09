@@ -1,13 +1,39 @@
-// 发音（TTS）+ 小音效（WebAudio 合成，无需音频文件）
+// 发音播放：优先预生成语音文件（<audio>，手机浏览器最稳），TTS 仅兜底
+// 另含 WebAudio 小音效
 
+// ---------- 语音文件 ----------
+let manifest = null;
+fetch('audio/manifest.json').then(r => r.ok ? r.json() : null).then(m => manifest = m).catch(() => { manifest = null; });
+
+const audioCache = {};
+
+function playFile(url) {
+  return new Promise(resolve => {
+    try {
+      let a = audioCache[url];
+      if (!a) { a = new Audio(url); audioCache[url] = a; }
+      const done = ok => { a.onended = a.onerror = null; resolve(ok); };
+      a.onended = () => done(true);
+      a.onerror = () => done(false);
+      try { a.currentTime = 0; } catch (e) { /* ignore */ }
+      a.play().catch(() => done(false));
+    } catch (e) { resolve(false); }
+  });
+}
+
+// key 形如 "word/cat" / "syl/ap" / "letter/c"
+async function tryFile(key) {
+  if (!manifest || !manifest[key]) return false;
+  return playFile(manifest[key]);
+}
+
+// ---------- TTS 兜底 ----------
 let enVoice = null;
-let voiceReady = false;
 
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
   if (!vs.length) return;
-  // 优先美音女声（更适合教学跟读）
-  const prefer = ['Aria', 'Jenny', 'Zira', 'Google US English', 'Samantha', 'Jenny (English'];
+  const prefer = ['Aria', 'Jenny', 'Zira', 'Google US English', 'Samantha'];
   for (const p of prefer) {
     const v = vs.find(v => /en[-_]US/i.test(v.lang) && v.name.includes(p));
     if (v) { enVoice = v; return; }
@@ -17,12 +43,19 @@ function pickVoice() {
 
 if ('speechSynthesis' in window) {
   pickVoice();
-  speechSynthesis.onvoiceschanged = () => { pickVoice(); voiceReady = true; };
+  speechSynthesis.onvoiceschanged = pickVoice;
 }
 
-export function speak(text, { rate = 0.8, pitch = 1.05, onEnd } = {}) {
+function tts(text, { rate = 0.8, pitch = 1.05, onEnd } = {}) {
   if (!('speechSynthesis' in window)) { if (onEnd) setTimeout(onEnd, 300); return; }
-  speechSynthesis.cancel();
+  try {
+    // Chrome 下 cancel 后立刻 speak 会吞掉声音：先停再延迟播
+    if (speechSynthesis.speaking || speechSynthesis.pending) {
+      speechSynthesis.cancel();
+      setTimeout(() => tts(text, { rate, pitch, onEnd }), 120);
+      return;
+    }
+  } catch (e) { /* ignore */ }
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'en-US';
   u.rate = rate;
@@ -30,24 +63,54 @@ export function speak(text, { rate = 0.8, pitch = 1.05, onEnd } = {}) {
   if (!enVoice) pickVoice();
   if (enVoice) u.voice = enVoice;
   if (onEnd) u.onend = onEnd;
+  u.onerror = () => { if (onEnd) onEnd(); };
   speechSynthesis.speak(u);
+}
+
+// 对外发音入口：单词/音节/字母 自动匹配语音文件
+export async function speak(text, { rate = 0.8, onEnd } = {}) {
+  const t = String(text).toLowerCase().replace(/[^a-z]/g, '');
+  if (t) {
+    if (await tryFile(`word/${t}`)) { if (onEnd) onEnd(); return; }
+    if (await tryFile(`syl/${t}`)) { if (onEnd) onEnd(); return; }
+    if (t.length === 1 && await tryFile(`letter/${t}`)) { if (onEnd) onEnd(); return; }
+  }
+  tts(text, { rate, onEnd });
+}
+
+// 慢速单词（有专门录的慢速文件）
+export function speakSlow(word, onEnd) {
+  tryFile('word/' + word + '_slow').then(ok => { if (!ok) tts(word, { rate: 0.55, onEnd }); else if (onEnd) onEnd(); });
 }
 
 // 逐音节慢读："but ter fly"
 export function speakSyllables(syl, onEnd) {
-  if (!syl || !syl.length) { speak('', { onEnd }); return; }
+  if (!syl || !syl.length) { if (onEnd) onEnd(); return; }
   let i = 0;
   const next = () => {
     if (i >= syl.length) { if (onEnd) onEnd(); return; }
-    speak(syl[i++], { rate: 0.6, onEnd: () => setTimeout(next, 160) });
+    const s = syl[i++].toLowerCase();
+    tryFile('syl/' + s).then(ok => {
+      if (ok) setTimeout(next, 180);
+      else tts(s, { rate: 0.55, onEnd: () => setTimeout(next, 180) });
+    });
   };
   next();
 }
 
-export function spellLetters(word) {
-  for (const ch of word.toUpperCase()) {
-    setTimeout(() => speak(ch, { rate: 0.6 }), 480 * word.indexOf(ch.toLowerCase()));
-  }
+// 逐字母
+export function spellLetters(word, onEnd) {
+  const w = word.toLowerCase();
+  let i = 0;
+  const next = () => {
+    if (i >= w.length) { if (onEnd) onEnd(); return; }
+    const ch = w[i++];
+    tryFile('letter/' + ch).then(ok => {
+      if (ok) setTimeout(next, 200);
+      else tts(ch, { rate: 0.55, onEnd: () => setTimeout(next, 200) });
+    });
+  };
+  next();
 }
 
 // ---------- WebAudio 小音效 ----------

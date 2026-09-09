@@ -25,6 +25,9 @@
   <div class="loading-text">词宠岛正在靠岸…</div>
 </div>
 
+<!-- 任务指引横幅 -->
+<div id="quest">🎯 <span id="quest-text">走近一颗发光的蛋，读出单词！</span></div>
+
 <!-- HUD -->
 <div id="hud">
   <div id="hud-left">
@@ -32,6 +35,7 @@
     <div id="hungry-pill" class="pill warn hidden">🍖 有词宠想你啦</div>
   </div>
   <div id="hud-right">
+    <button id="btn-map" class="round-btn" title="农场地图">🗺️</button>
     <button id="btn-summon" class="round-btn" title="召唤词宠帮忙">🪄</button>
     <button id="btn-help" class="round-btn" title="帮助">❓</button>
     <button id="btn-catalog" class="round-btn" title="词宠图鉴">📖</button>
@@ -58,8 +62,14 @@
     </div>
     <div id="voice-area">
       <button id="btn-play">🔊 听一听</button>
-      <button id="btn-mic">🎤<span>按住说话</span></button>
+      <button id="btn-mic">🎤<span id="mic-label">点我开始读</span></button>
       <div id="voice-feedback"></div>
+    </div>
+    <!-- 发音评分 -->
+    <div id="score-panel" class="hidden">
+      <div id="score-ring"><div id="score-num">0</div><div id="score-unit">分</div></div>
+      <div id="score-stars"></div>
+      <div id="score-msg"></div>
     </div>
     <div id="spell-area" class="hidden">
       <div id="spell-title">用字母块拼出它：</div>
@@ -93,6 +103,18 @@
       <button id="catalog-close" class="round-btn small">✕</button>
     </div>
     <div id="catalog-grid"></div>
+  </div>
+</div>
+
+<!-- 农场地图 -->
+<div id="map" class="overlay hidden">
+  <div id="map-card">
+    <div id="map-head">
+      <span>🗺️ 词宠岛地图</span>
+      <button id="map-close" class="round-btn small">✕</button>
+    </div>
+    <canvas id="map-canvas" width="340" height="340"></canvas>
+    <div id="map-legend">🔵 你在这里 · ⬤ 待孵化的词宠蛋 · 🔒 需要特殊词宠帮忙才能进入</div>
   </div>
 </div>
 
