@@ -12,6 +12,7 @@ for (const id of ['loading', 'hud', 'pet-count', 'score-pill', 'hungry-pill', 'p
   'btn-skip',
   'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-grid', 'picker-close',
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-canvas', 'map-close',
+  'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh',
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
   'toast', 'btn-catalog', 'btn-help']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
 
@@ -317,6 +318,64 @@ function setSpellMode(on) {
 }
 export function updatePlayerScore(score, sessionScore = score) {
   if (els.scorePill) els.scorePill.textContent = `🏆 ${score} 分 · 本局 ${sessionScore}`;
+  leaderboardCurrent.score = Number(score) || 0;
+  scheduleLeaderboardRefresh();
+}
+
+let leaderboardCurrent = { username: '', score: 0 };
+let leaderboardTimer = null;
+let leaderboardRequest = null;
+
+function leaderboardRowsHtml(rows, current = leaderboardCurrent) {
+  const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+  if (!rows.length) return '<div class="rank-loading">还没有记录，快来拿第一分吧！</div>';
+  return rows.slice(0, 5).map((x, i) => {
+    const name = String(x.username || '匿名小伙伴');
+    const active = current.username && name === current.username ? ' current' : '';
+    return `<div class="rank-row${active}"><b>${medals[i]}</b><span>${escapeHtml(name)}</span><strong>${Number(x.score) || 0} 分</strong></div>`;
+  }).join('');
+}
+
+async function fetchLeaderboardRows() {
+  if (!leaderboardRequest) {
+    leaderboardRequest = fetch('/api/leaderboard', { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw new Error('offline'); return r.json(); })
+      .then(rows => Array.isArray(rows) ? rows : [])
+      .finally(() => { leaderboardRequest = null; });
+  }
+  return leaderboardRequest;
+}
+
+function renderLeaderboardOffline() {
+  if (!els.leaderboardList) return;
+  if (leaderboardCurrent.username) {
+    els.leaderboardList.innerHTML = `<div class="rank-loading">暂时离线<br>${escapeHtml(leaderboardCurrent.username)}：${leaderboardCurrent.score} 分</div>`;
+  } else {
+    els.leaderboardList.innerHTML = '<div class="rank-loading">联网后显示前 5 名</div>';
+  }
+}
+
+export async function refreshLeaderboard(current = {}) {
+  if (current.username != null) leaderboardCurrent.username = String(current.username || '').trim();
+  if (current.score != null) leaderboardCurrent.score = Number(current.score) || 0;
+  if (!els.leaderboardList) return;
+  try {
+    const rows = await fetchLeaderboardRows();
+    els.leaderboardList.innerHTML = leaderboardRowsHtml(rows, leaderboardCurrent);
+  } catch (e) {
+    renderLeaderboardOffline();
+  }
+}
+
+function scheduleLeaderboardRefresh() {
+  clearTimeout(leaderboardTimer);
+  leaderboardTimer = setTimeout(() => refreshLeaderboard(), 500);
+}
+
+export function setLeaderboardPlayer(current = {}) {
+  leaderboardCurrent.username = String(current.username || '').trim();
+  leaderboardCurrent.score = Number(current.score) || 0;
+  refreshLeaderboard();
 }
 
 export function showProfile(onDone, profile = {}) {
@@ -356,11 +415,8 @@ export async function showLeaderboard(current = {}) {
   document.body.appendChild(ov); ov.querySelector('.rank-close').onclick = () => ov.remove();
   const list = ov.querySelector('.rank-list');
   try {
-    const r = await fetch('/api/leaderboard', { cache: 'no-store' }); if (!r.ok) throw new Error('offline');
-    const rows = await r.json();
-    list.innerHTML = rows.length ? rows.slice(0, 5).map((x, i) =>
-      `<div class="rank-row"><b>${['🥇','🥈','🥉','4️⃣','5️⃣'][i]}</b><span>${escapeHtml(x.username)}</span><strong>${x.score} 分</strong></div>`).join('')
-      : '<div class="rank-loading">还没有记录，快来拿第一分吧！</div>';
+    const rows = await fetchLeaderboardRows();
+    list.innerHTML = leaderboardRowsHtml(rows, current);
   } catch (e) { list.innerHTML = `<div class="rank-loading">暂时离线，${escapeHtml(current.username || '你')} 已有 ${current.score || 0} 分。</div>`; }
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
@@ -580,6 +636,7 @@ export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, 
   els.btnHelp.addEventListener('click', showHelp);
   const rankBtn = document.getElementById('btn-rank');
   if (rankBtn) rankBtn.addEventListener('click', onRank);
+  if (els.leaderboardRefresh) els.leaderboardRefresh.addEventListener('click', () => refreshLeaderboard());
   const summonBtn = document.getElementById('btn-summon');
   if (summonBtn) summonBtn.addEventListener('click', onSummon);
   const mapBtn = document.getElementById('btn-map');

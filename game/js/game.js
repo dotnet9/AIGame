@@ -278,6 +278,7 @@ export class Game {
 
   start() {
     ui.hideLoading();
+    ui.setLeaderboardPlayer({ username: save.getUsername(), score: save.getScore() });
     ui.updatePlayerScore(save.getScore(), save.getSessionScore());
     if (!save.getIntro()) {
       setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch), 600);

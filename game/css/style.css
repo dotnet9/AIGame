@@ -42,6 +42,23 @@ body {
 .round-btn:hover { transform: scale(1.1); }
 .round-btn.small { width: 34px; height: 34px; font-size: 15px; border: none; background: #FFE4EE; }
 
+/* ---------- 常驻前五排行榜 ---------- */
+#leaderboard-widget {
+  position: fixed; right: 14px; bottom: 18px; z-index: 19;
+  width: 218px; padding: 10px; pointer-events: auto;
+  background: rgba(255,253,248,.94); border: 2px solid #FFE0B8; border-radius: 16px;
+  box-shadow: 0 5px 16px rgba(150,110,60,.2); backdrop-filter: blur(4px);
+}
+.leaderboard-head { display: flex; align-items: center; justify-content: space-between; color: #B47514; font-size: 13px; font-weight: bold; margin: 0 2px 7px; }
+#leaderboard-refresh { border: 0; background: transparent; color: #C4A78F; font-family: inherit; font-size: 18px; font-weight: bold; line-height: 1; cursor: pointer; padding: 0 2px; }
+#leaderboard-refresh:hover { color: #B47514; transform: rotate(30deg); }
+#leaderboard-list { display: flex; flex-direction: column; gap: 4px; }
+#leaderboard-list .rank-row { grid-template-columns: 25px 1fr auto; gap: 5px; border-width: 1px; border-radius: 9px; padding: 5px 7px; font-size: 12px; }
+#leaderboard-list .rank-row b { font-size: 15px; }
+#leaderboard-list .rank-row strong { font-size: 11px; }
+#leaderboard-list .rank-row.current { background: #FFF0C9; border-color: #FFCB64; }
+#leaderboard-list .rank-loading { padding: 6px 2px; font-size: 12px; text-align: center; }
+
 /* ---------- 交互提示（手机上可直接点它） ---------- */
 #prompt {
   position: fixed; left: 50%; bottom: 18%; transform: translateX(-50%); z-index: 15;
@@ -321,4 +338,6 @@ body {
   #joy { left: 18px; bottom: 24px; }
   #prompt { bottom: 22%; font-size: 14px; padding: 8px 14px; }
   #catalog-grid { max-height: 56vh; }
+  #leaderboard-widget { right: 10px; bottom: 12px; width: 174px; padding: 8px; }
+  #leaderboard-list .rank-row { padding: 4px 6px; }
 }
