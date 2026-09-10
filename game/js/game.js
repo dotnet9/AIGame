@@ -252,6 +252,20 @@ export class Game {
       onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
       onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
+      onAccount: () => ui.showProfile((name, semKey) => {
+        save.setUsername(name);
+        save.setBookSem(semKey);
+        save.resetSessionScore();
+        location.reload();
+      }, { username: save.getUsername(), semKey: save.getBookSem() }, {
+        editing: true,
+        onLogout: () => {
+          if (confirm('退出当前账号并清除本机进度吗？')) {
+            save.resetSave();
+            location.reload();
+          }
+        },
+      }),
       onMic: () => this._startVoice(),
       onMicEnd: () => this._stopVoice(),
       isTouch: this.isTouch,

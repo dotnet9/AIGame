@@ -14,7 +14,7 @@ for (const id of ['loading', 'hud', 'pet-count', 'score-pill', 'hungry-pill', 'p
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-canvas', 'map-close',
   'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh',
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
-  'toast', 'btn-catalog', 'btn-help']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
+  'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
 
 // ---------- 通用 ----------
 let toastTimer = null;
@@ -390,13 +390,25 @@ export function setLeaderboardPlayer(current = {}) {
   refreshLeaderboard();
 }
 
-export function showProfile(onDone, profile = {}) {
+export function showProfile(onDone, profile = {}, options = {}) {
   const ov = document.getElementById('profile');
   const input = document.getElementById('profile-name');
   const grade = document.getElementById('profile-grade');
   const term = document.getElementById('profile-term');
   const error = document.getElementById('profile-error');
+  const title = ov.querySelector('h2');
+  const intro = ov.querySelector('p');
+  const start = document.getElementById('profile-start');
+  const close = document.getElementById('profile-close');
+  const logout = document.getElementById('profile-logout');
+  const editing = !!options.editing;
   input.value = profile.username || '';
+  title.textContent = editing ? '学习档案' : '开始前先设置学习档案';
+  intro.textContent = editing ? '可以换个名字或年级，保存后会重新进入词宠岛。' : '先选好年级，之后的单词和短语会跟着你的课本走。';
+  start.textContent = editing ? '保存并继续' : '出发去词宠岛';
+  close.classList.toggle('hidden', !editing);
+  logout.classList.toggle('hidden', !editing);
+  error.textContent = '';
   if (CURRICULUM[profile.semKey]) {
     grade.value = profile.semKey[0];
     term.value = profile.semKey[1] === 'a' ? 'up' : 'down';
@@ -415,7 +427,11 @@ export function showProfile(onDone, profile = {}) {
     ov.classList.add('hidden');
     onDone && onDone(name, semKey);
   };
-  document.getElementById('profile-start').onclick = submit;
+  start.onclick = submit;
+  logout.onclick = () => {
+    if (options.onLogout) options.onLogout();
+  };
+  close.onclick = () => ov.classList.add('hidden');
   input.onkeydown = e => { if (e.key === 'Enter') submit(); };
 }
 
@@ -642,12 +658,13 @@ export function showHelp() {
 }
 
 // ---------- 绑定 HUD 按钮 ----------
-export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, isTouch }) {
+export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, onAccount, isTouch }) {
   isTouchMode = !!isTouch;
   els.btnCatalog.addEventListener('click', onCatalog);
   els.btnHelp.addEventListener('click', showHelp);
   const rankBtn = document.getElementById('btn-rank');
   if (rankBtn) rankBtn.addEventListener('click', onRank);
+  if (els.btnAccount) els.btnAccount.addEventListener('click', onAccount);
   if (els.leaderboardRefresh) els.leaderboardRefresh.addEventListener('click', () => refreshLeaderboard());
   const summonBtn = document.getElementById('btn-summon');
   if (summonBtn) summonBtn.addEventListener('click', onSummon);

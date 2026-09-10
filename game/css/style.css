@@ -178,6 +178,7 @@ body {
   box-shadow: 0 18px 50px rgba(150,90,110,.25); padding: 26px; text-align: center; position: relative;
 }
 #profile-card .profile-emoji { font-size: 52px; }
+#profile-close { position: absolute; top: 12px; right: 12px; }
 #profile-card h2 { color: #C4788F; margin: 8px 0; }
 #profile-card p { color: #8A7664; font-size: 14px; line-height: 1.6; }
 #profile-name { width: 100%; margin: 18px 0 12px; border: 2px solid #FFD3E0; border-radius: 999px; padding: 12px 16px; font: inherit; text-align: center; outline: none; }
@@ -186,6 +187,11 @@ body {
 #profile-card select { flex: 1; border: 2px solid #D5EDC5; border-radius: 999px; background: #F3FAEC; color: #4E7A46; padding: 10px 12px; font: inherit; text-align: center; outline: none; }
 #profile-card .profile-tip { color: #C4A78F; font-size: 12px; margin-bottom: 14px; }
 #profile-start { border: none; background: #FF8FB0; color: #fff; font: inherit; font-weight: bold; padding: 12px 28px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 0 #E0678D; }
+#profile-logout {
+  display: block; margin: 14px auto 0; border: 0; background: transparent; color: #B47514;
+  font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline;
+}
+#profile-logout.hidden { display: none; }
 #profile-error { color: #D06A9C; min-height: 20px; margin-top: 10px; font-size: 13px; }
 #rank-card { border-color: #FFE0A8; }
 .rank-close { position: absolute; top: 12px; right: 12px; }
@@ -338,15 +344,15 @@ body {
 
 /* ---------- 手机小屏适配 ---------- */
 @media (max-width: 640px) {
-  .pill { font-size: 12px; padding: 5px 10px; }
-  .round-btn { width: 36px; height: 36px; font-size: 17px; }
+  .pill { font-size: 12px; padding: 5px 10px; background: rgba(255,255,255,.62); border-color: rgba(255,211,224,.72); box-shadow: 0 2px 8px rgba(120,100,100,.1); }
+  .round-btn { width: 36px; height: 36px; font-size: 17px; background: rgba(255,255,255,.52); border-color: rgba(255,211,224,.7); color: rgba(160,86,111,.92); box-shadow: 0 2px 8px rgba(120,100,100,.1); backdrop-filter: blur(2px); }
   #hud { top: 8px; left: 8px; right: 8px; }
   #hud > div { gap: 6px; }
-  /* 手机上只留最常用的四个：课本 / 地图 / 召唤 / 图鉴 */
+  /* 手机上隐藏次要入口，保留课本 / 地图 / 召唤 / 图鉴 / 账号 */
   #btn-rank, #btn-help { display: none; }
   /* 饥饿提醒出现时让出分数条的位置，避免横向挤爆 */
   body.has-hungry #score-pill { display: none; }
-  #quest { top: 54px; font-size: 13px; padding: 6px 14px; }
+  #quest { top: 54px; font-size: 13px; padding: 6px 14px; background: rgba(255,249,232,.68); border-color: rgba(255,224,168,.72); box-shadow: 0 3px 10px rgba(120,100,70,.12); backdrop-filter: blur(2px); }
   #word-en { font-size: 38px; }
   #modal-card { padding: 16px 14px 12px; }
   #btn-play { font-size: 15px; padding: 11px 16px; }
@@ -355,8 +361,13 @@ body {
   #voice-feedback { font-size: 14px; }
   .slot, .tile { width: 40px; height: 46px; font-size: 22px; }
   #joy { left: 18px; bottom: 24px; }
-  #prompt { bottom: 22%; font-size: 14px; padding: 8px 14px; }
+  #prompt { bottom: 22%; font-size: 14px; padding: 8px 14px; background: rgba(255,255,255,.64); border-color: rgba(205,235,200,.72); color: rgba(78,122,70,.95); box-shadow: 0 3px 10px rgba(100,140,90,.14); backdrop-filter: blur(2px); }
   #catalog-grid { max-height: 56vh; }
-  #leaderboard-widget { right: 10px; bottom: 12px; width: 174px; padding: 8px; }
+  /* 排行榜放在右上角，半透明显示以保留地图视野 */
+  #leaderboard-widget { top: 98px; right: 8px; bottom: auto; width: 174px; padding: 8px; background: rgba(255,253,248,.58); border-color: rgba(255,224,184,.7); box-shadow: 0 3px 12px rgba(120,100,70,.12); backdrop-filter: blur(3px); }
+  .leaderboard-head { color: rgba(180,117,20,.92); }
+  #leaderboard-list .rank-row { background: rgba(255,247,234,.54); border-color: rgba(255,224,184,.65); color: rgba(107,88,68,.9); }
+  #leaderboard-list .rank-row strong { color: rgba(180,117,20,.9); }
+  #leaderboard-list .rank-row.current { background: rgba(255,240,201,.72); border-color: rgba(255,203,100,.78); }
   #leaderboard-list .rank-row { padding: 4px 6px; }
 }
