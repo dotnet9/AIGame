@@ -4,14 +4,14 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { WORDS, WORD_MAP, TOTAL, ZONE_NAMES } from './words.js';
+import { WORDS, WORD_MAP, TOTAL, ZONE_NAMES, CHAPTERS, PER_CHAPTER, chapterIndex } from './words.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail } from './models.js';
 import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
 import { startListening, stopListening, matchAlt, voiceSupported, isVoiceBroken, markVoiceBroken } from './speech.js';
-import { speak, sfx } from './audio.js';
+import { speak, sfx, stopSpeaking } from './audio.js';
 import { ensureWhisper, recognizeBlob } from './whisper.js';
 import { CURRICULUM } from './curriculum.js';
 
@@ -76,7 +76,7 @@ export class Game {
   }
 
   _initPlayer() {
-    const p = buildPlayer();
+    const p = buildPlayer(save.getGender());
     this.player = p.group;
     this.playerParts = p.parts;
     this.player.rotation.y = Math.PI; // 面朝北（河流方向）
@@ -116,28 +116,73 @@ export class Game {
   _initEntities() {
     this.eggs = new EggManager(this.scene);
     this.pets = new PetManager(this.scene);
-    for (const w of WORDS) {
-      if (save.isHatched(w.id)) this.pets.spawn(w);
-      else this.eggs.spawnEgg(w, w.zone === 'sky');
-    }
-    // 已孵化词宠挂载点击 id
-    for (const p of this.pets.all()) p.group.userData.wordId = p.word.id;
-    for (const e of this.eggs.eggs.values()) e.group.userData.wordId = e.word.id;
+    this._spawnProgress();
     this.planted = save.hasGate('planted');
     this._refreshHungry();
   }
 
+  // 关卡制出蛋：已孵化的变词宠；蛋只出“当前关卡的 6 个”+ 剧情还没用掉的钥匙词蛋
+  _spawnProgress() {
+    const cur = new Set(CHAPTERS[chapterIndex(save.hatchedCount())].words);
+    for (const w of WORDS) {
+      if (save.isHatched(w.id)) {
+        if (!this.pets.get(w.id)) {
+          const pet = this.pets.spawn(w);
+          pet.group.userData.wordId = w.id;
+        }
+        continue;
+      }
+      if (this.eggs.get(w.id)) continue;
+      if (cur.has(w.id) || this._pendingGateWord(w.id)) {
+        const egg = this.eggs.spawnEgg(w, w.zone === 'sky');
+        egg.group.userData.wordId = w.id;
+      }
+    }
+  }
+
+  // 钥匙词蛋：只要对应机关还没触发就一直留在场上，保证剧情卡不死
+  _pendingGateWord(id) {
+    switch (id) {
+      case 'boat': return !save.hasGate('boat');
+      case 'light': return !save.hasGate('light');
+      case 'wind': return !save.hasGate('wind');
+      case 'seed': return !save.hasGate('planted');
+      case 'rain': return save.hasGate('planted') && !save.hasGate('beanstalk');
+      default: return false;
+    }
+  }
+
   _initInput() {
     this.joy = { x: 0, y: 0, active: false };
-    this.isTouch = matchMedia('(pointer: coarse)').matches
-      || 'ontouchstart' in window
-      || /[?&]touch=1/.test(location.search);
+    // 终端判断：手机/平板走触屏 UI，电脑（含触屏笔记本）走键盘鼠标
+    // ?touch=1 / ?touch=0 可强制指定
+    const q = /[?&]touch=(1|0)/.exec(location.search);
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent);
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const desktopLike = matchMedia('(hover: hover) and (pointer: fine)').matches;
+    this.isTouch = q ? q[1] === '1' : (uaMobile || (coarse && !desktopLike));
+    this.vy = 0;            // 跳跃垂直速度
+    this.onGround = true;
+    this.riding = false;    // 正在坐船过河
+    this.moveTarget = null; // 点击移动目标
+    // 点击移动的落点标记（金色小光环）
+    this.moveMarker = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.32, 24),
+      new THREE.MeshBasicMaterial({ color: 0xFFC94E, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+    this.moveMarker.rotation.x = -Math.PI / 2;
+    this.moveMarker.visible = false;
+    this.scene.add(this.moveMarker);
 
     addEventListener('keydown', e => {
       if (e.repeat) return;
       this.keys.add(e.code);
+      if (/^Key[WASD]$|^Arrow/.test(e.code)) this._clearMoveTarget(); // 手动方向一按，自动走路让位
       if (e.code === 'KeyE') this._interact();
       if (e.code === 'Tab') { e.preventDefault(); this._openSummon(); }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this._jump();
+      }
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     addEventListener('resize', () => this.onResize());
@@ -178,7 +223,7 @@ export class Game {
         if (this.touchCam.size === 2) {
           const [a, b] = [...this.touchCam.values()];
           const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (this.pinchDist > 0) this.camDist = THREE.MathUtils.clamp(this.camDist * this.pinchDist / d, 3.5, 14);
+          if (this.pinchDist > 0) this.camDist = THREE.MathUtils.clamp(this.camDist * this.pinchDist / d, 3.2, 48);
           this.pinchDist = d;
         }
       }
@@ -201,7 +246,7 @@ export class Game {
     addEventListener('pointerup', endPointer);
     addEventListener('pointercancel', endPointer);
     this.canvas.addEventListener('wheel', e => {
-      this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.008, 3.5, 14);
+      this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.012, 3.2, 48);
     }, { passive: true });
 
     // ---- 虚拟摇杆 ----
@@ -240,6 +285,52 @@ export class Game {
       joy.classList.remove('hidden');
       document.body.classList.add('touch');
     }
+    // 触屏跳跃按钮
+    const jumpBtn = document.getElementById('btn-jump');
+    if (jumpBtn) {
+      if (this.isTouch) jumpBtn.classList.remove('hidden');
+      jumpBtn.addEventListener('pointerdown', e => { e.preventDefault(); this._jump(); });
+    }
+  }
+
+  // ================= 跳跃 =================
+  _jump() {
+    if (!this.onGround || this.climbing || this.riding) return;
+    if (ui.challengeOpen()) return;
+    if (document.querySelector('.overlay:not(.hidden)')) return;  // 弹窗打开时不跳
+    const el = document.activeElement;
+    if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+    this.vy = 8.6;
+    this.onGround = false;
+    sfx.pop();
+    // 起跳小蹲
+    this.player.scale.set(1.08, 0.9, 1.08);
+    this.addTween(0.16, k => {
+      const s = 0.9 + k * 0.1 + Math.sin(k * Math.PI) * 0.06;
+      this.player.scale.set(1.08 - k * 0.08, s, 1.08 - k * 0.08);
+    }, () => this.player.scale.set(1, 1, 1));
+  }
+
+  // ================= 点击移动 =================
+  _clearMoveTarget() {
+    this.moveTarget = null;
+    if (this.moveMarker) this.moveMarker.visible = false;
+    this._stuckT = 0;
+  }
+
+  _setMoveTarget(e) {
+    if (this.riding || this.climbing) return;
+    const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.camera);
+    const groundY = this.onIsle ? 14 : 0;
+    const pt = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY), pt)) return;
+    const dc = Math.hypot(pt.x, pt.z);
+    if (dc > 36) { pt.x *= 36 / dc; pt.z *= 36 / dc; }   // 别点到世界外面去
+    this.moveTarget = { x: pt.x, z: pt.z };
+    this.moveMarker.position.set(pt.x, groundY + 0.06, pt.z);
+    this.moveMarker.visible = true;
   }
 
   _initUI() {
@@ -252,12 +343,13 @@ export class Game {
       onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
       onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
-      onAccount: () => ui.showProfile((name, semKey) => {
+      onAccount: () => ui.showProfile((name, semKey, gender) => {
         save.setUsername(name);
         save.setBookSem(semKey);
+        save.setGender(gender);
         save.resetSessionScore();
         location.reload();
-      }, { username: save.getUsername(), semKey: save.getBookSem() }, {
+      }, { username: save.getUsername(), semKey: save.getBookSem(), gender: save.getGender() }, {
         editing: true,
         onLogout: () => {
           if (confirm('退出当前账号并清除本机进度吗？')) {
@@ -294,6 +386,7 @@ export class Game {
 
   start() {
     ui.hideLoading();
+    ui.updateUser(save.getUsername());
     ui.setLeaderboardPlayer({ username: save.getUsername(), score: save.getScore() });
     ui.updatePlayerScore(save.getScore(), save.getSessionScore());
     if (!save.getIntro()) {
@@ -357,12 +450,11 @@ export class Game {
     return best;
   }
 
-  // 当前任务目标（文字 + 指路坐标）
+  // 当前任务目标（文字 + 指路坐标）：剧情钥匙优先，平时显示本关进度
   _objective() {
-    if (save.hatchedCount() === 0) {
-      const e = this._nearestReachableEgg();
-      return { text: '走近一颗发光的蛋，读出单词唤醒词宠！', target: e ? e.group.position : null };
-    }
+    const total = save.hatchedCount();
+    if (total >= TOTAL) return { text: '🎉 恭喜你集齐阳光农场全部 36 只词宠！', target: null };
+    const chIdx = chapterIndex(total);
     if (!save.hasGate('boat')) {
       const ep = save.isHatched('boat') ? { x: 0, z: 4.6 } : this._eggById('boat');
       return save.isHatched('boat')
@@ -393,12 +485,14 @@ export class Game {
         ? { text: '豆苗种下啦！呼唤 rain 让它长大！', target: ep }
         : { text: '豆苗需要一场 rain 才能长大！', target: ep };
     }
-    const remain = TOTAL - save.hatchedCount();
-    if (remain > 0) {
-      const e = this._nearestReachableEgg();
-      return { text: `还有 ${remain} 颗词宠蛋等着你！（🗺️ 看地图找一找）`, target: e ? e.group.position : null };
-    }
-    return { text: '🎉 恭喜你收集完阳光农场的全部词宠！', target: null };
+    // 本关进度：唤醒满 6 个就通关开新蛋
+    const cur = CHAPTERS[chIdx].words;
+    const left = cur.filter(id => !save.isHatched(id)).length;
+    const e = this._nearestReachableEgg();
+    return {
+      text: `第 ${chIdx + 1} 关「${CHAPTERS[chIdx].name}」：还剩 ${left} 个单词就通关！（共 ${total}/${TOTAL}）`,
+      target: e ? e.group.position : null,
+    };
   }
 
   _updateGuide(t) {
@@ -440,21 +534,26 @@ export class Game {
   // 地图
   _openMap() {
     const visited = save.getVisited();
+    const chIdx = chapterIndex(save.hatchedCount());
+    const chWords = new Set(CHAPTERS[chIdx].words);
+    // 统计“当前关卡 + 剧情钥匙蛋”落在该区域的词，和场上真实可见的蛋保持一致
+    const zoneStats = key => {
+      const inZone = WORDS.filter(w => w.zone === key && (chWords.has(w.id) || this._pendingGateWord(w.id)));
+      return { total: inZone.length, hatched: inZone.filter(w => save.isHatched(w.id)).length };
+    };
     const zones = ZONE_RECTS.map(zr => {
-      const inZone = WORDS.filter(w => w.zone === zr.key);
+      const st = zoneStats(zr.key);
       return {
         key: zr.key, name: zr.name, x1: zr.x1, z1: zr.z1, x2: zr.x2, z2: zr.z2,
         discovered: visited.includes(zr.key),
-        total: inZone.length,
-        hatched: inZone.filter(w => save.isHatched(w.id)).length,
+        total: st.total,
+        hatched: st.hatched,
         locked: !this._reachableZone(zr.key),
       };
     });
-    const skyIn = WORDS.filter(w => w.zone === 'sky');
     zones.push({
       key: 'sky', name: SKY_RECT.name, x1: SKY_RECT.x1, z1: SKY_RECT.z1, x2: SKY_RECT.x2, z2: SKY_RECT.z2,
-      discovered: visited.includes('sky'), total: skyIn.length,
-      hatched: skyIn.filter(w => save.isHatched(w.id)).length,
+      discovered: visited.includes('sky'), ...zoneStats('sky'),
       locked: !save.hasGate('beanstalk'),
     });
     const eggs = [...this.eggs.eggs.values()].map(e => ({
@@ -463,24 +562,51 @@ export class Game {
     ui.openMap({
       player: { x: this.player.position.x, z: this.player.position.z },
       zones, eggs,
+      chapterLabel: `第${chIdx + 1}关 · ${CHAPTERS[chIdx].name}`,
     });
   }
 
   // ================= 玩家 =================
   _updatePlayer(dt) {
-    if (this.climbing) return;
+    if (this.climbing || this.riding) return;
     const move = new THREE.Vector3();
+    // 键盘/摇杆方向是“相对镜头”的；点击移动是“世界坐标直线”，不随镜头转
+    let cameraRelative = true;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) move.z -= 1;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) move.z += 1;
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) move.x -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) move.x += 1;
     // 虚拟摇杆（手机）
     if (this.joy.active) { move.x += this.joy.x; move.z += this.joy.y; }
+    // 键盘/摇杆接管时取消点击移动
+    if (move.lengthSq() > 0 && this.moveTarget) this._clearMoveTarget();
+    // 点击移动：没有手动输入时，沿直线朝点击的地点走
+    if (move.lengthSq() === 0 && this.moveTarget) {
+      const dx = this.moveTarget.x - this.player.position.x;
+      const dz = this.moveTarget.z - this.player.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.4) {
+        this._clearMoveTarget();
+      } else {
+        cameraRelative = false;
+        move.x = dx / d; move.z = dz / d;
+        // 被障碍卡住（想走但走不动）一小会儿就放弃，别顶着墙抖
+        const step = Math.hypot(
+          this.player.position.x - (this._lastStepX ?? this.player.position.x),
+          this.player.position.z - (this._lastStepZ ?? this.player.position.z));
+        this._stuckT = step < PLAYER_SPEED * dt * 0.3 ? (this._stuckT || 0) + dt : 0;
+        if (this._stuckT > 0.7) { this._clearMoveTarget(); move.set(0, 0, 0); }
+        this._lastStepX = this.player.position.x;
+        this._lastStepZ = this.player.position.z;
+      }
+    }
     const moving = move.lengthSq() > 0;
+    // 空中保留操控且带一点冲劲：方向键+空格 = 向前跳
+    const speed = PLAYER_SPEED * (this.onGround ? 1 : 1.38);
     if (moving) {
-      move.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), this.camYaw);
-      this.player.position.x += move.x * PLAYER_SPEED * dt;
-      this.player.position.z += move.z * PLAYER_SPEED * dt;
+      if (cameraRelative) move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.camYaw);
+      this.player.position.x += move.x * speed * dt;
+      this.player.position.z += move.z * speed * dt;
       const targetYaw = Math.atan2(move.x, move.z);
       let dy = targetYaw - this.player.rotation.y;
       while (dy > Math.PI) dy -= Math.PI * 2;
@@ -488,18 +614,36 @@ export class Game {
       this.player.rotation.y += dy * Math.min(1, dt * 12);
       this.walkT += dt * 9;
     } else this.walkT += dt * 1.5;
-    // 走路摆动
-    const sw = Math.sin(this.walkT) * (moving ? 0.55 : 0.06);
+    // 跳跃物理
+    const groundY = this.onIsle ? 14 : 0;
+    if (!this.onGround) {
+      this.vy -= 20 * dt;
+      this.player.position.y += this.vy * dt;
+      if (this.player.position.y <= groundY) {
+        this.player.position.y = groundY;
+        this.onGround = true;
+        this.vy = 0;
+        // 落地一压，Q 弹一下
+        this.player.scale.set(1.12, 0.8, 1.12);
+        this.addTween(0.2, k => {
+          this.player.scale.set(1.12 - k * 0.12, 0.8 + k * 0.2, 1.12 - k * 0.12);
+        }, () => this.player.scale.set(1, 1, 1));
+      }
+    } else if (!this.onIsle) {
+      this.player.position.y = 0;
+    }
+    // 摆动：空中定格成张开的姿势
+    const sw = this.onGround ? Math.sin(this.walkT) * (moving ? 0.55 : 0.06) : 0.8;
     this.playerParts.legL.rotation.x = sw;
-    this.playerParts.legR.rotation.x = -sw;
+    this.playerParts.legR.rotation.x = this.onGround ? -sw : -0.35;
     this.playerParts.armL.rotation.x = -sw * 0.8;
     this.playerParts.armR.rotation.x = sw * 0.8;
-    this.playerParts.body.position.y = 0.3 + Math.abs(Math.sin(this.walkT)) * (moving ? 0.03 : 0.008);
+    this.playerParts.body.position.y = 0.3 + Math.abs(Math.sin(this.walkT)) * (moving && this.onGround ? 0.03 : 0.008);
 
     this._collide();
     // 天空岛逻辑
     if (this.onIsle) {
-      this.player.position.y = 14;
+      if (this.onGround) this.player.position.y = 14;
       const d = Math.hypot(this.player.position.x - ISLE_CENTER.x, this.player.position.z - ISLE_CENTER.z);
       if (d > 5.1 && !this.climbing) this._climb(false); // 走出边缘 → 滑下去
     }
@@ -583,6 +727,12 @@ export class Game {
       c.position.x += dt * 0.25;
       if (c.position.x > 42) c.position.x = -42;
     }
+    // 点击移动落点标记：呼吸闪烁
+    if (this.moveMarker && this.moveMarker.visible) {
+      const s = 1 + Math.sin(t * 8) * 0.18;
+      this.moveMarker.scale.setScalar(s);
+      this.moveMarker.material.opacity = 0.55 + Math.sin(t * 8) * 0.3;
+    }
     this.riverHintCd -= dt;
   }
 
@@ -627,12 +777,27 @@ export class Game {
       if (nearBase) { ui.showPrompt('顺着豆藤爬上天空岛', 'E'); this.promptAction = () => this._climb(true); return; }
       if (nearTop) { ui.showPrompt('顺着豆藤滑回农场', 'E'); this.promptAction = () => this._climb(false); return; }
     }
+    // 坐船过河：船就停在渡口，点一下（或按 E）直接坐过去，不用自己找路
+    if (save.hasGate('boat') && !this.riding
+        && Math.abs(p.x) < 6 && Math.abs(Math.abs(p.z) - 4.6) < 4.2) {
+      ui.showPrompt('坐 boat 过河 ⛵', 'E');
+      this.promptAction = () => this._rideBoat();
+      return;
+    }
     // 召唤提示
     const gate = this._activeGate();
     if (gate) {
-      const how = this.isTouch ? '点 🪄 召唤' : '按 Tab 召唤';
-      ui.showPrompt(gate.hint + '（' + how + '）', 'Tab');
-      this.promptAction = null;
+      const ready = gate.need.every(id => save.isHatched(id));
+      if (ready) {
+        // 需要的词宠已经孵化：走到这儿按 E / 点一下就一键召唤，不用进面板挑
+        const how = this.isTouch ? '（点这里召唤）' : '（按 E 召唤）';
+        ui.showPrompt(gate.hint + how, this.isTouch ? '🪄' : 'E');
+        this.promptAction = () => this._summon(gate.need[0], gate);
+      } else {
+        const how = this.isTouch ? '点 🪄 召唤' : '按 Tab 召唤';
+        ui.showPrompt(gate.hint + '（' + how + '）', 'Tab');
+        this.promptAction = null;
+      }
       return;
     }
     ui.hidePrompt();
@@ -652,14 +817,75 @@ export class Game {
     const targets = [];
     for (const eg of this.eggs.eggs.values()) targets.push(eg.group);
     for (const pt of this.pets.all()) if (save.isHungry(pt.word.id)) targets.push(pt.group);
+    // 河中央的船也可以点：直接坐船过河（但它饿的时候优先喂它）
+    const boat = this.pets.get('boat');
+    if (boat && save.hasGate('boat') && !save.isHungry('boat')) targets.push(boat.group);
     const hits = ray.intersectObjects(targets, true);
-    if (!hits.length) return;
+    if (!hits.length) { this._setMoveTarget(e); return; }   // 点的是空地 → 走过去
     let obj = hits[0].object;
     while (obj && obj.userData.wordId === undefined) obj = obj.parent;
-    if (!obj) return;
+    if (!obj) { this._setMoveTarget(e); return; }
     const id = obj.userData.wordId;
-    if (this.eggs.get(id)) this._openEgg(id);
-    else if (save.isHungry(id)) this._feedPet(id);
+    if (id === 'boat' && save.hasGate('boat') && !this.eggs.get('boat')) {
+      if (!this._rideBoat()) ui.toast('⛵ 走到渡口边上再坐船哦');
+      return;
+    }
+    if (this.eggs.get(id)) { this._clearMoveTarget(); this._openEgg(id); }
+    else if (save.isHungry(id)) { this._clearMoveTarget(); this._feedPet(id); }
+    else this._setMoveTarget(e);   // 点的是空地 → 走过去（手机轻点同理）
+  }
+
+  // 坐船过河：船划到岸边接人 → 驮着过河 → 自己划回渡口守桥
+  _rideBoat() {
+    if (this.riding || this.climbing || !save.hasGate('boat')) return false;
+    this._clearMoveTarget();
+    const p = this.player.position;
+    if (Math.abs(p.x) > 7) return false;   // 离渡口太远
+    const fromZ = p.z >= 0 ? 4.6 : -4.6;
+    const toZ = -fromZ;
+    const from = new THREE.Vector3(THREE.MathUtils.clamp(p.x, -1.8, 1.8), 0, fromZ);
+    const to = new THREE.Vector3(0, 0, toZ);
+    const center = new THREE.Vector3(0, 0, 0.4);
+    const boat = this.pets.get('boat');
+    const dock = new THREE.Vector3(from.x, 0, from.z);
+    const farDock = new THREE.Vector3(0, 0, toZ);
+    this.riding = true;
+    this.onGround = true; this.vy = 0;
+    this.player.rotation.y = toZ < fromZ ? Math.PI : 0; // 面朝对岸
+    ui.hidePrompt();
+    sfx.pop();
+    this.addTween(3.4, k => {
+      const seg = (a, b) => Math.min(1, Math.max(0, (k - a) / (b - a)));
+      if (!boat) {
+        this.player.position.lerpVectors(from, to, seg(0, 0.7));
+        return;
+      }
+      if (k < 0.22) {          // 船划过来接人
+        const t = seg(0, 0.22);
+        boat.group.position.lerpVectors(center, dock, t);
+      } else if (k < 0.72) {   // 驮着小朋友过河
+        const t = seg(0.22, 0.72);
+        const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        boat.group.position.lerpVectors(dock, farDock, e);
+        this.player.position.lerpVectors(from, to, e);
+        this.player.position.y = Math.abs(Math.sin(e * Math.PI * 3)) * 0.05; // 随水波轻晃
+      } else {                 // 船自己划回河中央守桥
+        const t = seg(0.72, 1);
+        boat.group.position.lerpVectors(farDock, center, t);
+      }
+      // 别让“溜达 AI”把船拽回去
+      if (boat) boat.target.set(boat.group.position.x, boat.group.position.z);
+    }, () => {
+      this.riding = false;
+      this.player.position.copy(to);
+      this.player.position.y = 0;
+      if (boat) {
+        boat.target.set(0, 0.4);
+        boat.home.set(0, 0.4);
+      }
+      sfx.good();
+    });
+    return true;
   }
 
   // ---------- 孵化 ----------
@@ -695,7 +921,28 @@ export class Game {
       speak(word.en);
       this._refreshHungry();
       this._checkFirstHatchHint();
-    }, 650);
+      // 每唤醒 6 只词宠 = 通关：庆祝一下，放出下一关的蛋
+      const total = save.hatchedCount();
+      if (total % PER_CHAPTER === 0 && total < TOTAL) {
+        setTimeout(() => this._chapterComplete(total / PER_CHAPTER), 1100);
+      }
+    }, 280);
+  }
+
+  // 通关演出：庆祝 + 新一关的蛋登场
+  _chapterComplete(doneCount) {
+    sfx.great();
+    setTimeout(() => sfx.magic(), 350);
+    const p = this.player.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+    this._letterBurst(p, '★✨⭐');
+    const next = CHAPTERS[doneCount];
+    this._spawnProgress();
+    this._refreshHungry();
+    if (next) {
+      ui.toast(`🎊 第 ${doneCount} 关「${CHAPTERS[doneCount - 1].name}」全部唤醒！第 ${doneCount + 1} 关「${next.name}」的蛋出现啦`, 5000);
+    } else {
+      ui.toast('🎊 全部词宠都被你唤醒啦，你就是词宠岛传奇！', 5000);
+    }
   }
 
   _letterBurst(pos, word) {
@@ -770,7 +1017,7 @@ export class Game {
           sfx.good();
           ui.toast(`🍖「${word.en}」吃饱啦，心满意足地转了个圈`, 3000);
           this._refreshHungry();
-        }, 600);
+        }, 280);
       },
       onClose: () => { this.currentWord = null; },
     });
@@ -780,7 +1027,11 @@ export class Game {
     for (const pet of this.pets.all()) {
       this.pets.setHungry(pet.word.id, save.isHungry(pet.word.id));
     }
-    ui.updateHUD(save.hatchedCount(), TOTAL, save.hungryPets().length);
+    // HUD 显示本关进度：第 X 关 · 本关唤醒 n/6
+    const total = save.hatchedCount();
+    const chIdx = chapterIndex(total);
+    const inChapter = CHAPTERS[chIdx].words.filter(id => save.isHatched(id)).length;
+    ui.updateHUD(inChapter, PER_CHAPTER, save.hungryPets().length, `第${chIdx + 1}关`);
   }
 
   // ---------- 召唤解谜 ----------
@@ -917,6 +1168,7 @@ export class Game {
   _climb(up) {
     if (this.climbing) return;
     this.climbing = true;
+    this._clearMoveTarget();
     const from = this.player.position.clone();
     const to = up
       ? new THREE.Vector3(CLIMB_TOP.x, CLIMB_TOP.y, CLIMB_TOP.z)
@@ -935,6 +1187,7 @@ export class Game {
       this.climbing = false;
       this.onIsle = up;
       this.player.position.copy(to);
+      this.onGround = true; this.vy = 0;
       if (up) ui.toast('☁️ 欢迎来到天空岛！这里有两颗金色的蛋…', 3600);
     });
   }
@@ -1029,7 +1282,7 @@ export class Game {
         save.addPoint();
         ui.updatePlayerScore(save.getScore(), save.getSessionScore());
         p.idx++;
-        setTimeout(() => this._practiceNext(), 500);
+        setTimeout(() => this._practiceNext(), 300);
       },
       onSkip: () => { p.scores.push(0); p.idx++; this._practiceNext(); },
       onClose: () => { this.practice = null; this.currentWord = null; },
@@ -1037,9 +1290,11 @@ export class Game {
   }
 
   // ---------- 语音识别（优先级：Web Speech → 本地 Whisper → 字母块） ----------
-  // 点击麦克风：开始录音；再点一次：结束并识别。返回 false 表示无法启动，UI 自动切字母块。
+  // 点击麦克风：开始录音（10 秒倒计时自动收）；再点一次：立即识别。返回 false 表示无法启动，UI 自动切字母块。
   _startVoice() {
     if (!this.currentWord) return false;
+    stopSpeaking();                    // 示范发音立刻停，别盖过孩子的声音
+    ui.showReplay(null);               // 清掉上一轮的回放按钮
     // Web Speech 在支持的浏览器里几乎立即返回结果，避免第一次朗读先下载 40MB 模型；
     // 它连续读不到时（手机微信里很常见）改用自带的本地模型。
     if (!this.preferWhisper && voiceSupported && !isVoiceBroken()) return this._startWebSpeech();
@@ -1068,10 +1323,18 @@ export class Game {
         this.chunks = [];
         rec.ondataavailable = e => { if (e.data && e.data.size) this.chunks.push(e.data); };
         rec.onstop = async () => {
+          clearTimeout(this._recCap);
           try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
-          ui.voiceStatus('识别中…');
           try {
             const blob = new Blob(this.chunks, { type: rec.mimeType || 'audio/webm' });
+            // 留下孩子自己的读音，评分后可以回放对比
+            if (blob.size > 800) {
+              if (this._lastRecUrl) URL.revokeObjectURL(this._lastRecUrl);
+              this._lastRecUrl = URL.createObjectURL(blob);
+              ui.showReplay(this._lastRecUrl);
+            }
+            if (!this.currentWord) return;
+            ui.voiceStatus('识别中…');
             const text = await recognizeBlob(blob);
             if (!this.currentWord) return;
             if (!text) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
@@ -1081,7 +1344,12 @@ export class Game {
           }
         };
         rec.start();
-        ui.voiceRecording(); // “正在录音，再点一下结束”
+        ui.voiceRecording(); // “正在录音，读完再点一下”
+        // 10 秒硬上限：倒计时归零自动收音识别，绝不让孩子干等
+        clearTimeout(this._recCap);
+        this._recCap = setTimeout(() => {
+          if (rec.state === 'recording') { try { rec.stop(); } catch (e) { /* ignore */ } }
+        }, 10000);
       });
     }).catch(() => {
       // 本地引擎失败 → Web Speech → 字母块
@@ -1093,6 +1361,7 @@ export class Game {
   }
 
   _stopVoice() {
+    clearTimeout(this._recCap);
     if (this.recorder && this.recorder.state === 'recording') {
       try { this.recorder.stop(); } catch (e) { /* ignore */ }
     } else {

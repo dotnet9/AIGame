@@ -98,5 +98,20 @@ export const ZONE_NAMES = {
   barnyard: '谷仓前院', barn: '谷仓里', garden: '魔法菜园', sky: '天空岛',
 };
 
+// 关卡制：每关 6 个词，通关后新一批蛋才会出现（避免一上来 36 颗蛋太散太累）
+// 钥匙词固定钉在对应关卡：boat→第1关过河，light→第2关照亮谷仓，wind→第3关吹走干草球，
+// seed/rain→第4关种豆藤，star/moon→第6关天空岛金色传说
+export const CHAPTERS = [
+  { name: '出生草甸', words: ['cat', 'dog', 'duck', 'rabbit', 'mouse', 'boat'] },
+  { name: '阳光果园', words: ['flower', 'grass', 'frog', 'apple', 'banana', 'light'] },
+  { name: '果园丰收', words: ['carrot', 'tomato', 'potato', 'corn', 'goat', 'wind'] },
+  { name: '风车田与菜园', words: ['pig', 'cow', 'bird', 'bee', 'seed', 'rain'] },
+  { name: '谷仓与牧场', words: ['horse', 'sheep', 'hen', 'milk', 'bread', 'egg'] },
+  { name: '天空岛传说', words: ['cake', 'tractor', 'tree', 'sun', 'star', 'moon'] },
+];
+export const PER_CHAPTER = 6;
+export const chapterIndex = hatchedCount => Math.min(Math.floor(hatchedCount / PER_CHAPTER), CHAPTERS.length - 1);
+export const chapterWordIds = idx => CHAPTERS[idx].words;
+
 // 喂养复习的遗忘曲线（毫秒）
 export const FEED_INTERVALS = [10 * 60e3, 1 * 864e5, 3 * 864e5, 7 * 864e5, 14 * 864e5];

@@ -51,6 +51,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
             username = str(body.get("username", "")).strip()[:20]
             delta = max(0, min(100, int(body.get("delta", 1))))
+            gender = "girl" if body.get("gender") == "girl" else "boy"  # 未上报的老数据默认男孩
             if not username or not delta:
                 return self._json(400, {"error": "invalid score"})
         except (ValueError, TypeError, json.JSONDecodeError):
@@ -59,9 +60,10 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             rows = read_board()
             row = next((x for x in rows if x.get("username") == username), None)
             if row is None:
-                row = {"username": username, "score": 0}
+                row = {"username": username, "score": 0, "gender": gender}
                 rows.append(row)
             row["score"] = int(row.get("score", 0)) + delta
+            row["gender"] = gender
             write_board(rows)
         return self._json(200, row)
 

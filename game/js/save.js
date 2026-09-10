@@ -12,7 +12,7 @@ function fresh() {
     book: { sem: null, units: {} }, // 课本：选中学期 + 单元成绩 {'3a#0': {scores:[..], done:true}}
     intro: false,
     playSeconds: 0,
-    profile: { username: '', score: 0, sessionScore: 0 },
+    profile: { username: '', score: 0, sessionScore: 0, gender: 'boy' },
   };
 }
 
@@ -29,7 +29,8 @@ function load() {
     merged.gates = d.gates || {};
     merged.visited = d.visited || [];
     merged.book = Object.assign({ sem: null, units: {} }, d.book || {});
-    merged.profile = Object.assign({ username: '', score: 0, sessionScore: 0 }, d.profile || {});
+    merged.profile = Object.assign({ username: '', score: 0, sessionScore: 0, gender: 'boy' }, d.profile || {});
+    if (!merged.profile.gender) merged.profile.gender = 'boy'; // 老存档没有性别字段 → 默认男孩
     if (!merged.player) merged.player = null;
     return merged;
   } catch (e) {
@@ -110,6 +111,11 @@ export function setUsername(name) {
   data.profile.username = String(name || '').trim().slice(0, 20);
   save();
 }
+export function getGender() { return data.profile.gender === 'girl' ? 'girl' : 'boy'; }
+export function setGender(g) {
+  data.profile.gender = g === 'girl' ? 'girl' : 'boy';
+  save();
+}
 
 // 每完成一个学习挑战加 1 分；本地先记账，联网时再同步到排行榜服务。
 export function addPoint() {
@@ -117,7 +123,7 @@ export function addPoint() {
   data.profile.score = getScore() + 1;
   data.profile.sessionScore = getSessionScore() + 1;
   save();
-  const body = JSON.stringify({ username: data.profile.username, delta: 1 });
+  const body = JSON.stringify({ username: data.profile.username, delta: 1, gender: getGender() });
   try {
     fetch('/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
   } catch (e) { /* 静态站点或离线时保留本地积分 */ }

@@ -503,31 +503,39 @@ function tagDepth(g, h) {
   return Math.min(0.3, (c.z - box.min.z) + (box.max.z - box.min.z) * 0.3 + 0.05);
 }
 
-// ================= 玩家（小花匠） =================
-export function buildPlayer() {
+// ================= 玩家（小花匠：男孩 草帽+背带裤 / 女孩 双马尾+粉裙） =================
+export function buildPlayer(gender = 'boy') {
   const g = G();
+  const girl = gender === 'girl';
   const skin = '#FFE0CC';
+  const clothes = girl ? '#FF9FB6' : '#7EA8E8';
   // 腿
   const legL = G(), legR = G();
   legL.position.set(-0.075, 0.3, 0); legR.position.set(0.075, 0.3, 0);
   for (const [leg, sx] of [[legL, -1], [legR, 1]]) {
-    cap(leg, 0.042, 0.16, '#7EA8E8', 0, -0.15, 0);
-    sph(leg, 0.058, '#FFE08A', 0, -0.285, 0.02, 1, 0.62, 1.25); // 小黄鞋
+    cap(leg, 0.042, 0.16, girl ? skin : '#7EA8E8', 0, -0.15, 0);      // 女孩光腿小腿，男孩裤子
+    sph(leg, 0.058, girl ? '#FF7B9C' : '#FFE08A', 0, -0.285, 0.02, 1, 0.62, 1.25); // 鞋
   }
   g.add(legL, legR);
-  // 身体（背带裤）
+  // 身体：男孩背带裤 / 女孩小裙子
   const body = G(); body.position.set(0, 0.3, 0); g.add(body);
-  cyl(body, 0.135, 0.24, 0.34, '#7EA8E8', 0, 0.17, 0, 0, 0, 0, 16);
-  sph(body, 0.125, '#FFF6C8', 0, 0.4, 0, 1, 0.55, 0.92);            // 上身
-  box(body, 0.035, 0.2, 0.02, '#5C8F46', -0.06, 0.36, 0.115);       // 背带
-  box(body, 0.035, 0.2, 0.02, '#5C8F46', 0.06, 0.36, 0.115);
+  if (girl) {
+    cyl(body, 0.125, 0.205, 0.2, clothes, 0, 0.3, 0, 0, 0, 0, 16);    // 上身
+    cyl(body, 0.205, 0.27, 0.16, clothes, 0, 0.12, 0, 0, 0, 0, 18);   // 裙摆
+    cyl(body, 0.1, 0.125, 0.06, '#FFFFFF', 0, 0.415, 0, 0, 0, 0, 16); // 白色小领子
+  } else {
+    cyl(body, 0.135, 0.24, 0.34, clothes, 0, 0.17, 0, 0, 0, 0, 16);
+    sph(body, 0.125, '#FFF6C8', 0, 0.4, 0, 1, 0.55, 0.92);            // 上身
+    box(body, 0.035, 0.2, 0.02, '#5C8F46', -0.06, 0.36, 0.115);       // 背带
+    box(body, 0.035, 0.2, 0.02, '#5C8F46', 0.06, 0.36, 0.115);
+  }
   // 手臂
   const armL = G(), armR = G();
   armL.position.set(-0.15, 0.2, 0); armR.position.set(0.15, 0.2, 0);
   for (const arm of [armL, armR]) {
     cap(arm, 0.03, 0.1, skin, 0, -0.09, 0);
     sph(arm, 0.042, skin, 0, -0.17, 0);
-    sph(arm, 0.052, '#7EA8E8', 0, -0.015, 0, 1.1, 0.6, 1.1);
+    sph(arm, 0.052, clothes, 0, -0.015, 0, 1.1, 0.6, 1.1);
   }
   body.add(armL, armR);
   // 头
@@ -537,15 +545,25 @@ export function buildPlayer() {
   sph(head, 0.07, '#8A5A3C', -0.075, 0.11, 0.13, 1.4, 0.7, 0.7);    // 刘海
   sph(head, 0.08, '#8A5A3C', 0, 0.125, 0.14, 1.4, 0.75, 0.75);
   sph(head, 0.07, '#8A5A3C', 0.075, 0.11, 0.13, 1.4, 0.7, 0.7);
+  if (girl) {
+    // 双马尾 + 粉色发圈 + 头顶蝴蝶结
+    for (const sx of [-1, 1]) {
+      sph(head, 0.075, '#8A5A3C', 0.185 * sx, 0.02, -0.02, 0.85, 1.15, 0.9);
+      sph(head, 0.045, '#FF7B9C', 0.185 * sx, 0.115, -0.01, 1.1, 0.7, 1.1);
+    }
+    sph(head, 0.05, '#FF5E9C', 0.09, 0.155, 0.12, 1, 0.75, 1);
+    sph(head, 0.035, '#FF5E9C', -0.095, 0.15, 0.13, 1, 0.75, 1);
+  } else {
+    // 草帽（蓝色帽带）
+    cyl(head, 0.13, 0.26, 0.04, '#F5D76E', 0, 0.155, 0, 0, 0, 0, 18);
+    sph(head, 0.13, '#F5D76E', 0, 0.17, 0, 1, 0.7, 1);
+    cyl(head, 0.145, 0.148, 0.035, '#7EC4F2', 0, 0.175, 0, 0, 0, 0, 18);
+  }
   for (const sx of [-1, 1]) {
     sph(head, 0.03, '#4A4046', 0.068 * sx, 0.012, 0.158, 1, 1.35, 0.55);
     sph(head, 0.01, '#FFFFFF', 0.079 * sx, 0.044, 0.172);
     sph(head, 0.036, '#FFB3C1', 0.118 * sx, -0.048, 0.138, 1, 0.7, 0.4);
   }
-  // 草帽
-  cyl(head, 0.13, 0.26, 0.04, '#F5D76E', 0, 0.155, 0, 0, 0, 0, 18);
-  sph(head, 0.13, '#F5D76E', 0, 0.17, 0, 1, 0.7, 1);
-  cyl(head, 0.145, 0.148, 0.035, '#FF9FB6', 0, 0.175, 0, 0, 0, 0, 18);
   return { group: g, parts: { legL, legR, armL, armR, body, head } };
 }
 

@@ -148,6 +148,7 @@ const server = http.createServer(async (req, res) => {
       }
       const username = String(body && body.username != null ? body.username : '').trim().slice(0, 20);
       const delta = Math.max(0, Math.min(100, Math.floor(Number(body && body.delta != null ? body.delta : 1)) || 0));
+      const gender = body && body.gender === 'girl' ? 'girl' : 'boy';   // 未上报的老数据按男孩处理
       if (!username || !delta) {
         sendJson(res, 400, { error: 'invalid score' });
         log(req, 400, 'invalid score');
@@ -155,8 +156,9 @@ const server = http.createServer(async (req, res) => {
       }
       const rows = readBoard();
       let row = rows.find(x => x && x.username === username);
-      if (!row) { row = { username, score: 0 }; rows.push(row); }
+      if (!row) { row = { username, score: 0, gender }; rows.push(row); }
       row.score = (Number(row.score) || 0) + delta;
+      row.gender = gender;
       writeBoard(rows);
       sendJson(res, 200, row);
       log(req, 200, `${username}=${row.score}`);

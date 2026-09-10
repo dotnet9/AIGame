@@ -131,9 +131,9 @@ export function startListening(onResult, onState) {
     r.start();
     listening = true;
     if (onState) onState(true);
-    // 8 秒无结果自动收束（speech 引擎检测到静音也会自动结束）
+    // 10 秒倒计时收束：说完没点结束也会自动识别，超时不再让孩子干等
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 8000);
+    autoTimer = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, 10000);
     return true;
   } catch (e) {
     listening = false;

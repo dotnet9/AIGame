@@ -1,20 +1,25 @@
 // DOM UI：HUD、挑战弹窗（语音+拼块）、召唤、图鉴、引导、提示
-import { sfx, speak, speakSlow, speakSyllables, spellLetters } from './audio.js';
+import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice } from './audio.js';
 import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.js';
 import { CURRICULUM, gradeKey } from './curriculum.js';
 
 const $ = id => document.getElementById(id);
 const els = {};
-for (const id of ['loading', 'hud', 'pet-count', 'score-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
-  'quest', 'quest-text', 'modal', 'modal-title', 'word-en', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
-  'mic-label', 'voice-feedback', 'score-panel', 'score-ring', 'score-num', 'score-stars', 'score-msg',
+for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
+  'quest', 'quest-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
+  'mic-label', 'btn-replay', 'voice-feedback', 'score-panel', 'score-float', 'score-ring', 'score-num', 'score-stars', 'score-msg',
   'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
   'btn-skip',
   'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-grid', 'picker-close',
-  'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-canvas', 'map-close',
+  'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-head', 'map-canvas', 'map-close',
   'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh',
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
-  'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
+  'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout',
+  'hud-menu', 'btn-menu']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
+
+// 音标表（tools/gen_ipa.py 生成，可选：404 时静默跳过）
+let ipaMap = null;
+fetch('data/ipa.json').then(r => r.ok ? r.json() : null).then(m => ipaMap = m).catch(() => { ipaMap = null; });
 
 // ---------- 通用 ----------
 let toastTimer = null;
@@ -27,15 +32,41 @@ export function toast(text, ms = 2800) {
 
 let isTouchMode = false;
 export function showPrompt(text, key = 'E') {
-  els.promptKey.textContent = (isTouchMode && key === 'E') ? '👆' : key;
+  let chip = key;
+  if (isTouchMode) {
+    if (key === 'E') chip = '👆';
+    else if (key === 'Tab') chip = '🪄';   // 手机没有 Tab 键，别把电脑按键显示给孩子
+  }
+  els.promptKey.textContent = chip;
   els.promptText.textContent = ' ' + text;
   els.prompt.classList.remove('hidden');
 }
 export function hidePrompt() { els.prompt.classList.add('hidden'); }
 
-export function updateHUD(count, total, hungryCount) {
+// 左上角显示当前登录用户名
+export function updateUser(name) {
+  if (!els.userPill) return;
+  const n = String(name || '').trim();
+  els.userPill.textContent = n ? `👤 ${n}` : '👤';
+  els.userPill.classList.toggle('hidden', !n);
+  els.userPill.title = n ? `${n} 的学习档案` : '';
+}
+
+// 劲舞团式喝彩分级：分数 → (大字, 样式)
+const SCORE_LEVELS = [
+  [95, 'PERFECT!', 'perfect'],
+  [85, 'GREAT!', 'great'],
+  [75, 'COOL!', 'cool'],
+  [60, 'NICE!', 'nice'],
+  [40, 'BAD...', 'bad'],
+  [0, 'MISS...', 'miss'],
+];
+
+export function updateHUD(count, total, hungryCount, chapterText = '') {
   // 手机上横向空间小：去掉可推断的字，只留数字
-  els.petCount.textContent = isTouchMode ? `🐾 ${count}/${total}` : `🐾 词宠 ${count}/${total}`;
+  els.petCount.textContent = isTouchMode
+    ? `🐾 ${count}/${total}`
+    : `🐾 ${chapterText ? chapterText + ' · ' : ''}词宠 ${count}/${total}`;
   const hungry = hungryCount > 0;
   els.hungryPill.classList.toggle('hidden', !hungry);
   els.hungryPill.textContent = isTouchMode ? `🍖 ${hungryCount} 只饿啦` : `🍖 有 ${hungryCount} 只词宠想你啦`;
@@ -56,22 +87,28 @@ export function setQuest(text) {
 const ch = {
   open: false, word: null, mode: 'hatch', spellMode: false,
   slots: [], filled: [], tiles: [], onSuccess: null, onClose: null,
-  busy: false, listening: false, canVoice: false,
+  busy: false, listening: false, canVoice: false, replayUrl: null,
 };
 
 export function openChallenge({ word, mode, onSuccess, onClose, onSkip }) {
   ch.open = true; ch.word = word; ch.mode = mode; ch.onSuccess = onSuccess; ch.onClose = onClose; ch.onSkip = onSkip;
-  ch.busy = false; ch.spellMode = false; ch.listening = false;
+  ch.busy = false; ch.spellMode = false; ch.listening = false; ch.replayUrl = null;
+  toggleHudMenu(false);   // 弹窗打开时收起菜单
   els.modalTitle.textContent = mode === 'feed' ? '🍖 词宠饿啦，喊它的名字喂它'
     : mode === 'practice' ? '📖 跟读练习 · 大声读给词宠听'
     : '🥚 遇见词宠蛋！念出单词唤醒它';
   els.wordEn.textContent = word.en;
   els.wordEn.classList.remove('spell-hidden');
+  // 音标（有数据才显示）
+  const ipa = ipaMap && ipaMap[String(word.en).toLowerCase()];
+  els.wordIpa.textContent = ipa ? `/${ipa}/` : '';
+  els.wordIpa.classList.toggle('hidden', !ipa);
   els.wordZh.textContent = word.zh;
   els.wordHint.textContent = '小提示：' + word.hint;
   els.voiceFeedback.textContent = '';
   els.voiceFeedback.className = '';
   els.scorePanel.classList.add('hidden');
+  els.btnReplay.classList.add('hidden');
   els.micLabel.textContent = '点我开始读';
   els.spellArea.classList.add('hidden');
   els.modalFoot.classList.remove('hidden');
@@ -107,13 +144,39 @@ export function closeChallenge() {
 
 export function challengeOpen() { return ch.open; }
 
-// ---------- 麦克风：点击开始，再点结束（说完也会自动识别） ----------
-let listeningTimer = null;
+// ---------- 麦克风：点击开始 → 10 秒倒计时内读完 → 再点结束（到时也自动识别） ----------
+let countdownTimer = null;
+const LISTEN_SECONDS = 10;
+
+function stopCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+}
 
 function setListening(on) {
   ch.listening = on;
   els.btnMic.classList.toggle('listening', on);
-  els.micLabel.textContent = on ? '说完点这里' : '点我开始读';
+  stopCountdown();
+  if (on) {
+    // 10 秒倒计时：显示在麦克风按钮上，到时自动收音识别，不让小朋友干等
+    let left = LISTEN_SECONDS;
+    els.micLabel.textContent = `读完点这里 ${left}s`;
+    countdownTimer = setInterval(() => {
+      left--;
+      if (left <= 0) {
+        stopCountdown();
+        if (ch.listening) {   // 到时自动结束并识别（和点一下结束等价）
+          setListening(false);
+          els.voiceFeedback.textContent = '识别中…';
+          if (ch.onMicEnd) ch.onMicEnd();
+        }
+        return;
+      }
+      if (ch.listening) els.micLabel.textContent = `读完点这里 ${left}s`;
+    }, 1000);
+  } else {
+    els.micLabel.textContent = '点我开始读';
+  }
 }
 
 export function voiceStatus(text) {
@@ -138,14 +201,15 @@ els.btnMic.addEventListener('click', () => {
   if (!ch.open || ch.busy || !ch.canVoice) return;
   if (ch.listening) {
     setListening(false);
-    clearTimeout(listeningTimer);
     els.voiceFeedback.textContent = '识别中…';
     if (ch.onMicEnd) ch.onMicEnd();
     return;
   }
+  stopSpeaking();          // 停掉示范发音，别盖过孩子的声音
+  els.btnReplay.classList.add('hidden');
   setListening(true);
-  els.voiceFeedback.textContent = '正在连接语音引擎，请稍等…';
-  els.voiceFeedback.className = '';
+  els.voiceFeedback.textContent = `● 开口大声读！${LISTEN_SECONDS} 秒内读完会自动识别`;
+  els.voiceFeedback.className = 'good';
   const ok = ch.onMic ? ch.onMic() : false;
   if (ok === false) {
     // 识别引擎启动失败：立即降级为字母块，不让小朋友干等
@@ -154,18 +218,12 @@ els.btnMic.addEventListener('click', () => {
     setTimeout(() => setSpellMode(true), 500);
     return;
   }
-  // 首次加载模型 / 录音最长 30 秒自动收束
-  clearTimeout(listeningTimer);
-  listeningTimer = setTimeout(() => {
-    if (ch.listening) { setListening(false); if (ch.onMicEnd) ch.onMicEnd(); }
-  }, 30000);
 });
 
 // 语音结果由 game 调用进来：res = { ok, close, heard, score } 或 { error }
 export function voiceResult(res) {
   if (!ch.open || ch.busy) return;
   setListening(false);
-  clearTimeout(listeningTimer);
   if (res.error) {
     els.voiceFeedback.textContent = res.error === 'no-result'
       ? '没听清，再大声读一次～'
@@ -178,9 +236,33 @@ export function voiceResult(res) {
   showScore(s, res.heard, res);
 }
 
-// 评分演出：数字滚动 + 星级 + 音效，≥80 分过关；opts.msg 可自定义评语
+// 游戏层拿到录音 blob 后调进来：显示“听我读的”回放按钮；传 null 表示隐藏（新一轮录音前）
+export function showReplay(url) {
+  if (!ch.open) return;
+  if (!url) { els.btnReplay.classList.add('hidden'); return; }
+  ch.replayUrl = url;
+  els.btnReplay.classList.remove('hidden');
+}
+
+els.btnReplay.addEventListener('click', () => {
+  if (!ch.replayUrl) return;
+  sfx.pop();
+  els.voiceFeedback.textContent = '🎧 这是你刚才的读音，听听和标准音差在哪～';
+  els.voiceFeedback.className = '';
+  playRecording(ch.replayUrl);
+});
+
+// 评分演出：喝彩飘字 + 带情绪语音 + 数字滚动 + 星级，≥80 分过关；opts.msg 可自定义评语
 function showScore(score, heard, opts = {}) {
   ch.busy = true;
+  els.voiceFeedback.textContent = '';   // 分数都打出来了，“识别中…”别再挂着
+  els.voiceFeedback.className = '';
+  // 喝彩大字：像游戏加分一样往上飘、渐渐消失
+  const lv = SCORE_LEVELS.find(l => score >= l[0]);
+  els.scoreFloat.className = '';
+  els.scoreFloat.textContent = lv[1];
+  void els.scoreFloat.offsetWidth;      // 重启动画
+  els.scoreFloat.className = 'float-run c-' + lv[2];
   els.scorePanel.classList.remove('hidden');
   els.scoreRing.style.setProperty('--deg', '0deg');
   // 数字 + 进度环滚动
@@ -220,26 +302,46 @@ function showScore(score, heard, opts = {}) {
   els.scoreMsg.textContent = msg;
   els.scoreMsg.className = score >= 80 ? 'good' : 'bad';
   els.scoreMsg.style.color = score >= 80 ? '#4E9A46' : '#D06A9C';
+  scoreVoice(score);   // 带情绪的英文喝彩（Perfect!/Great!/Cool!/…）
   if (score >= 85) { sfx.great(); setTimeout(() => sfx.magic(), 500); }
   else if (score >= 70) sfx.good();
   else if (score >= 60) sfx.pop();
   else sfx.miss();
 
   if (score >= 80) {
+    // 过关就要爽快：1.4 秒内自动关卡，不让孩子干等
     setTimeout(() => {
       els.scorePanel.classList.add('hidden');
       ch.onSuccess && ch.onSuccess({ score, heard });
-    }, 1900);
+    }, 1400);
   } else {
-    // 未过关：示范音节引导，可继续尝试或换字母块
+    // 未过关：先示范标准慢速音（音节高亮同步显示），可继续尝试或换字母块
     setTimeout(() => {
       els.scorePanel.classList.add('hidden');
       ch.busy = false;
-      els.voiceFeedback.textContent = `跟我一起读：${ch.word.syl.join(' · ')}`;
-      els.voiceFeedback.className = 'bad';
-      speakSyllables(ch.word.syl);
-    }, 2300);
+      playFollowAlong();
+    }, 1900);
   }
+}
+
+// 跟读示范：播整词标准慢速音，音节只做高亮同步（不单独念音节，避免 TTS 念走调）
+function playFollowAlong() {
+  const word = ch.word;
+  const syl = word.syl && word.syl.length && !(word.syl.length === 1 && word.syl[0] === word.en)
+    ? word.syl : null;
+  if (syl) {
+    els.voiceFeedback.innerHTML = '跟我一起读：' + syl.map((s, i) =>
+      `<span class="syl" data-i="${i}">${escapeHtml(s)}</span>`).join(' · ');
+  } else {
+    els.voiceFeedback.textContent = '跟我一起读：慢速示范';
+  }
+  els.voiceFeedback.className = '';
+  const marks = els.voiceFeedback.querySelectorAll('.syl');
+  speakFollow(word.en, syl || [word.en], i => {
+    marks.forEach(el => el.classList.toggle('on', +el.dataset.i === i));
+  }, () => {
+    marks.forEach(el => el.classList.remove('on'));
+  });
 }
 
 // 练习模式跳过
@@ -338,8 +440,9 @@ function leaderboardRowsHtml(rows, current = leaderboardCurrent) {
   if (!rows.length) return '<div class="rank-loading">还没有记录，快来拿第一分吧！</div>';
   return rows.slice(0, 5).map((x, i) => {
     const name = String(x.username || '匿名小伙伴');
+    const gIcon = x.gender === 'girl' ? '👧' : '👦';   // 没有性别记录的老数据默认男孩
     const active = current.username && name === current.username ? ' current' : '';
-    return `<div class="rank-row${active}"><b>${medals[i]}</b><span>${escapeHtml(name)}</span><strong>${Number(x.score) || 0} 分</strong></div>`;
+    return `<div class="rank-row${active}"><b>${medals[i]}</b><span>${gIcon} ${escapeHtml(name)}</span><strong>${Number(x.score) || 0} 分</strong></div>`;
   }).join('');
 }
 
@@ -401,10 +504,21 @@ export function showProfile(onDone, profile = {}, options = {}) {
   const start = document.getElementById('profile-start');
   const close = document.getElementById('profile-close');
   const logout = document.getElementById('profile-logout');
+  const boyBtn = document.getElementById('gender-boy');
+  const girlBtn = document.getElementById('gender-girl');
   const editing = !!options.editing;
+  // 性别：男孩 / 女孩，可随时改
+  let gender = profile.gender === 'girl' ? 'girl' : 'boy';
+  const paintGender = () => {
+    boyBtn.classList.toggle('active', gender === 'boy');
+    girlBtn.classList.toggle('active', gender === 'girl');
+  };
+  boyBtn.onclick = () => { gender = 'boy'; sfx.pop(); paintGender(); };
+  girlBtn.onclick = () => { gender = 'girl'; sfx.pop(); paintGender(); };
+  paintGender();
   input.value = profile.username || '';
   title.textContent = editing ? '学习档案' : '开始前先设置学习档案';
-  intro.textContent = editing ? '可以换个名字或年级，保存后会重新进入词宠岛。' : '先选好年级，之后的单词和短语会跟着你的课本走。';
+  intro.textContent = editing ? '可以换个名字、形象或年级，保存后会重新进入词宠岛。' : '先选好年级和你的小形象，单词会跟着你的课本走。';
   start.textContent = editing ? '保存并继续' : '出发去词宠岛';
   close.classList.toggle('hidden', !editing);
   logout.classList.toggle('hidden', !editing);
@@ -425,7 +539,7 @@ export function showProfile(onDone, profile = {}, options = {}) {
     if (!CURRICULUM[semKey]) return;
     submitted = true;
     ov.classList.add('hidden');
-    onDone && onDone(name, semKey);
+    onDone && onDone(name, semKey, gender);
   };
   start.onclick = submit;
   logout.onclick = () => {
@@ -530,9 +644,13 @@ export function openMap(data) {
     c.font = 'bold 12px "Microsoft YaHei"';
     c.textAlign = 'center';
     c.fillText((zn.discovered ? zn.name : '？？？') + (zn.locked ? ' 🔒' : ''), x + w / 2, y + h / 2 - 4);
-    if (zn.discovered) {
+    // 只显示当前关卡在该区域的蛋（没有就不显示，别写 0/0）
+    if (zn.discovered && zn.total > 0) {
       c.font = '11px "Microsoft YaHei"';
       c.fillText(`词宠蛋 ${zn.total - zn.hatched}/${zn.total}`, x + w / 2, y + h / 2 + 12);
+    } else if (zn.discovered) {
+      c.font = '11px "Microsoft YaHei"';
+      c.fillText('本关没有蛋', x + w / 2, y + h / 2 + 12);
     }
   }
   // 蛋点
@@ -549,6 +667,9 @@ export function openMap(data) {
   c.arc(X(data.player.x), Z(data.player.z), 5.5, 0, Math.PI * 2);
   c.fill();
   c.lineWidth = 2.5; c.strokeStyle = '#fff'; c.stroke();
+  // 标题带上当前关卡
+  const headSpan = els.mapHead.querySelector('span');
+  if (headSpan) headSpan.textContent = '🗺️ 词宠岛地图' + (data.chapterLabel ? ' · ' + data.chapterLabel : '');
   els.map.classList.remove('hidden');
 }
 if (els.mapClose) els.mapClose.addEventListener('click', () => els.map.classList.add('hidden'));
@@ -603,14 +724,14 @@ export function closeBookPanel() { if (bookOv) bookOv.classList.add('hidden'); }
 // ---------- 开场引导 ----------
 export function playIntro(onDone, isTouch = false) {
   const move = isTouch
-    ? '用左下角<b>摇杆</b>走路，屏幕上拖动转视角，双指缩放。'
-    : '用 <b>W A S D</b> 走路，鼠标右键转动视角，<br>滚轮可以拉近看词宠。';
+    ? '用左下角<b>摇杆</b>走路，<b>跳</b>按钮蹦一蹦，<br>屏幕上拖动转视角，双指缩放。'
+    : '用 <b>W A S D</b> 或方向键走路，按<b>空格</b>跳一跳，<br>方向键+空格能向前跳，右键拖动转视角。';
   const steps = [
     ['🌼', '欢迎来到 <b>词宠岛</b>！<br>这座农场里住着好多词宠蛋，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。'],
     ['🎮', move],
     ['🥚', isTouch
-      ? '走近<b>发光的蛋</b>，点一点它，<br>先听发音，再<b>按住 🎤 大声读出来</b>！'
-      : '走近<b>发光的蛋</b>，按 <b>E</b> 打开它，<br>先听发音，再<b>按住 🎤 大声读出来</b>！'],
+      ? '走近<b>发光的蛋</b>，点一点它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分！'
+      : '走近<b>发光的蛋</b>，按 <b>E</b> 打开它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分！'],
     ['🐾', '孵出来的词宠会成为你的伙伴：<br><b>召唤</b>它们帮你过河、照亮谷仓，<br>它们饿了还会找你<b>复习</b>呢！'],
   ];
   let i = 0;
@@ -636,15 +757,17 @@ export function showHelp() {
   const ov = document.createElement('div');
   ov.className = 'overlay';
   const touchLines = matchMedia('(pointer: coarse)').matches
-    ? `<div>🕹️ 左下摇杆走路 · 拖动屏幕转视角 · 双指缩放</div>
+    ? `<div>🕹️ 左下摇杆走路 · <b>跳</b>按钮蹦一蹦 · 拖动屏幕转视角 · 双指缩放</div>
        <div>👆 走近蛋/词宠时，点屏幕下方的提示条互动</div>`
-    : `<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走路 · 鼠标右键拖动转视角 · 滚轮缩放</div>
-       <div><kbd>E</kbd> 或点击：打开词宠蛋 / 和词宠互动</div>`;
+    : `<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键走路 · 鼠标右键拖动转视角 · 滚轮缩放</div>
+       <div><kbd>空格</kbd> 跳一跳（按住方向键再按空格 = 向前跳）</div>
+       <div><kbd>E</kbd> 或点击：打开词宠蛋 / 和词宠互动 / 坐船过河</div>
+       <div><kbd>Tab</kbd> 或点 🪄：召唤词宠帮忙</div>`;
   ov.innerHTML = `
     <div id="help-card">
       <h3>🌼 怎么玩</h3>
       ${touchLines}
-      <div>🎤 按住说话，念出单词就能孵化词宠</div>
+      <div>🎤 点 🎤 开口读，10 秒内读完自动打分，还能 🎧 回放自己的读音</div>
       <div>🧩 不会读？换成字母块拼一拼！</div>
       <div>🗺️ 不知道去哪？点左上角地图，跟着头顶的金色箭头走</div>
       <div>✨ 被挡路时，点 🪄 召唤词宠来帮忙</div>
@@ -655,6 +778,14 @@ export function showHelp() {
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'help-close') ov.remove(); });
   document.body.appendChild(ov);
+}
+
+// ---------- 右上角菜单：点 ☰ 展开 / 点别处或选项后收起 ----------
+export function toggleHudMenu(show) {
+  if (!els.hudMenu) return;
+  const open = show != null ? show : els.hudMenu.classList.contains('hidden');
+  els.hudMenu.classList.toggle('hidden', !open);
+  if (els.btnMenu) els.btnMenu.textContent = open ? '✕' : '☰';
 }
 
 // ---------- 绑定 HUD 按钮 ----------
@@ -672,6 +803,15 @@ export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, 
   if (mapBtn) mapBtn.addEventListener('click', onMap);
   const bookBtn = document.getElementById('btn-book');
   if (bookBtn) bookBtn.addEventListener('click', onBook);
+  // 菜单：点 ☰ 展开/收起；点菜单里的项执行完顺手收起
+  if (els.btnMenu) els.btnMenu.addEventListener('click', e => { e.stopPropagation(); toggleHudMenu(); });
+  if (els.hudMenu) {
+    els.hudMenu.addEventListener('click', e => e.stopPropagation());
+    els.hudMenu.querySelectorAll('.menu-item').forEach(b => b.addEventListener('click', () => toggleHudMenu(false)));
+  }
+  document.addEventListener('click', e => {
+    if (els.hudMenu && !els.hudMenu.classList.contains('hidden')) toggleHudMenu(false);
+  });
   // 交互提示可以直接点（手机上主要交互方式）
   els.prompt.addEventListener('click', onPrompt);
   if (isTouch) els.promptKey.textContent = '👆';

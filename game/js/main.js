@@ -19,7 +19,7 @@ window.addEventListener('error', e => {
 });
 
 let started = false;
-function begin(name, semKey) {
+function begin(name, semKey, gender) {
   if (started) return;
   started = true;
   try {
@@ -27,6 +27,7 @@ function begin(name, semKey) {
     if (profile) profile.classList.add('hidden');
     if (name) save.setUsername(name);
     if (semKey) save.setBookSem(semKey);
+    if (gender) save.setGender(gender);   // 只在档案提交时更新；续玩/改档案后的自动重载不带参，别把性别重置
     save.resetSessionScore();
     const game = new Game(canvas);
     game.start();

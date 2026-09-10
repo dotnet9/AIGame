@@ -8,20 +8,41 @@ fetch('audio/manifest.json').then(r => r.ok ? r.json() : null).then(m => manifes
 const audioCache = {};
 let currentAudio = null;
 
-function playFile(url) {
+function playFile(url, { cache = true } = {}) {
   return new Promise(resolve => {
     try {
       // 互斥：新播放立刻掐掉上一段，避免连点出现重音
       if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
-      let a = audioCache[url];
-      if (!a) { a = new Audio(url); audioCache[url] = a; }
-      const done = ok => { a.onended = a.onerror = null; if (currentAudio === a) currentAudio = null; resolve(ok); };
+      let a = cache ? audioCache[url] : null;
+      if (!a) { a = new Audio(url); if (cache) audioCache[url] = a; }
+      const done = ok => { a.onended = a.onerror = null; a.onloadedmetadata = null; if (currentAudio === a) currentAudio = null; resolve(ok); };
       a.onended = () => done(true);
       a.onerror = () => done(false);
       try { a.currentTime = 0; } catch (e) { /* ignore */ }
       currentAudio = a;
       a.play().catch(() => done(false));
     } catch (e) { resolve(false); }
+  });
+}
+
+// 播放并顺便给出时长（秒），用于跟读音节的视觉同步
+function playFileMeta(url) {
+  return new Promise(resolve => {
+    try {
+      if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
+      const a = new Audio(url);
+      const finish = (ok, dur) => { a.onended = a.onerror = a.onloadedmetadata = null; if (currentAudio === a) currentAudio = null; resolve({ ok, dur: dur || 0 }); };
+      a.onloadedmetadata = () => {
+        const dur = isFinite(a.duration) ? a.duration : 0;
+        // 互斥播放
+        currentAudio = a;
+        a.play().then(() => finish(true, dur)).catch(() => finish(false, dur));
+      };
+      a.onerror = () => finish(false);
+      a.load();
+      // 某些浏览器不触发 loadedmetadata 的兜底
+      setTimeout(() => { if (a.paused && a.currentTime === 0 && currentAudio !== a) finish(false); }, 2500);
+    } catch (e) { resolve({ ok: false, dur: 0 }); }
   });
 }
 
@@ -32,6 +53,10 @@ function fileKey(text) {
 async function tryFile(key) {
   if (!manifest || !manifest[key]) return false;
   return playFile(manifest[key]);
+}
+async function tryFileMeta(key) {
+  if (!manifest || !manifest[key]) return { ok: false, dur: 0 };
+  return playFileMeta(manifest[key]);
 }
 
 // ---------- TTS 兜底 ----------
@@ -92,19 +117,34 @@ export function speakSlow(word, onEnd) {
   tryFile('word/' + fileKey(word) + '_slow').then(ok => { if (!ok) tts(word, { rate: 0.55, onEnd }); else if (onEnd) onEnd(); });
 }
 
-// 逐音节慢读："but ter fly"
-export function speakSyllables(syl, onEnd) {
-  if (!syl || !syl.length) { if (onEnd) onEnd(); return; }
-  let i = 0;
-  const next = () => {
-    if (i >= syl.length) { if (onEnd) onEnd(); return; }
-    const s = syl[i++].toLowerCase();
-    tryFile('syl/' + s).then(ok => {
-      if (ok) setTimeout(next, 180);
-      else tts(s, { rate: 0.55, onEnd: () => setTimeout(next, 180) });
-    });
+// 跟读：播放整词慢速标准音（真人录音变速），音节只做视觉高亮同步，不再单独念音节
+// （拆开的音节交给 TTS 念会走调，比如 ter/ple/rab，听感就是“乱读”）
+export function speakFollow(word, syl, onSyl, onEnd) {
+  const parts = syl && syl.length ? syl : [word];
+  const estimate = Math.max(0.7, parts.length * 0.42);
+  const schedule = dur => {
+    const per = Math.max(0.22, dur / parts.length);
+    parts.forEach((_, i) => setTimeout(() => onSyl && onSyl(i), per * 1000 * i));
+    if (onEnd) setTimeout(onEnd, Math.max(dur, per * parts.length) * 1000 + 80);
   };
-  next();
+  tryFileMeta('word/' + fileKey(word) + '_slow').then(res => {
+    if (res.ok) schedule(res.dur || estimate);
+    else {
+      tts(word, { rate: 0.55 });
+      schedule(Math.max(0.8, word.length * 0.09));
+    }
+  });
+}
+
+// 立刻停下正在播的发音（点麦克风开口前调用，避免示范音压过孩子的声音）
+export function stopSpeaking() {
+  if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+}
+
+// 回放小朋友自己的录音（blob URL，不进缓存）
+export function playRecording(url, onEnd) {
+  return playFile(url, { cache: false }).then(ok => { if (onEnd) onEnd(); return ok; });
 }
 
 // 逐字母
@@ -120,6 +160,18 @@ export function spellLetters(word, onEnd) {
     });
   };
   next();
+}
+
+// 劲舞团式评分喝彩：Perfect / Great / Cool / Nice / Bad / Miss
+// 优先播放预生成的情绪童声（audio/fx/，AnaNeural），缺文件时用 TTS 提调兜底
+export function scoreVoice(score) {
+  const key = score >= 95 ? 'perfect' : score >= 85 ? 'great' : score >= 75 ? 'cool'
+    : score >= 60 ? 'nice' : score >= 40 ? 'bad' : 'miss';
+  const texts = { perfect: 'Perfect!', great: 'Great!', cool: 'Cool!', nice: 'Nice try!', bad: 'Oh, bad...', miss: 'Miss...' };
+  const happy = score >= 60;
+  tryFile('fx/' + key).then(ok => {
+    if (!ok) tts(texts[key], { rate: happy ? 1 : 0.85, pitch: happy ? 1.35 : 0.8 });
+  });
 }
 
 // ---------- WebAudio 小音效 ----------
