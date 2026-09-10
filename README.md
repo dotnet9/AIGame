@@ -27,8 +27,8 @@
 点 **📚 课本**：选择年级（3-6）和学期（上/下册）→ 选择单元 → 进入跟读练习：听标准发音 → 点 🎤 大声读 → **0-100 分评分**（进度环滚动 + 星级动画 + 分级音效）。支持单词和短语（如 good morning / happy birthday），人教版 PEP 8 学期 46 单元 **449 个词/短语**，单元成绩自动保存。课程数据在 `js/curriculum.js`，可直接编辑增删。
 
 **语音识别三级降级链**：
-1. 🥇 **浏览器本地 Whisper 模型**（自托管在 `models/`，客户端解析，国内网络无障碍，首次加载约 40MB 后秒开）
-2. 🥈 Web Speech API（部分浏览器可用）
+1. 🥇 **Web Speech API**（支持的 HTTPS 浏览器即时识别，不需要等待模型）
+2. 🥈 **浏览器本地 Whisper 模型**（仅在没有 Web Speech 时按需加载，自托管于 `models/`）
 3. 🥉 字母块拼写（100% 可用，永远能过关）
 
 ## 🚀 本地运行
@@ -40,6 +40,8 @@ cd AIGame
 python tools/serve.py 8080     # 禁缓存开发服务器
 # 浏览器打开 http://localhost:8080/game/
 ```
+
+排行榜接口由 `tools/serve.py` 提供：`GET /api/leaderboard`、`POST /api/score`，积分保存在 `tools/leaderboard.json`。线上部署若使用纯静态托管，游戏仍可离线记录本机积分，但要启用多人排行榜，请把该服务器（或等价的后端接口）与 `/api/*` 一起部署，并确保排行榜文件可写。
 
 ## ☁️ 在线部署（分享给小朋友）
 

@@ -12,6 +12,7 @@ function fresh() {
     book: { sem: null, units: {} }, // 课本：选中学期 + 单元成绩 {'3a#0': {scores:[..], done:true}}
     intro: false,
     playSeconds: 0,
+    profile: { username: '', score: 0, sessionScore: 0 },
   };
 }
 
@@ -28,6 +29,7 @@ function load() {
     merged.gates = d.gates || {};
     merged.visited = d.visited || [];
     merged.book = Object.assign({ sem: null, units: {} }, d.book || {});
+    merged.profile = Object.assign({ username: '', score: 0, sessionScore: 0 }, d.profile || {});
     if (!merged.player) merged.player = null;
     return merged;
   } catch (e) {
@@ -100,5 +102,27 @@ export function setIntro(v) { data.intro = v; save(); }
 export function getIntro() { return data.intro; }
 
 export function addPlaySeconds(s) { data.playSeconds += s; save(); }
+
+export function getUsername() { return data.profile.username || ''; }
+export function getScore() { return Number(data.profile.score) || 0; }
+export function getSessionScore() { return Number(data.profile.sessionScore) || 0; }
+export function setUsername(name) {
+  data.profile.username = String(name || '').trim().slice(0, 20);
+  save();
+}
+
+// 每完成一个学习挑战加 1 分；本地先记账，联网时再同步到排行榜服务。
+export function addPoint() {
+  if (!data.profile.username) return;
+  data.profile.score = getScore() + 1;
+  data.profile.sessionScore = getSessionScore() + 1;
+  save();
+  const body = JSON.stringify({ username: data.profile.username, delta: 1 });
+  try {
+    fetch('/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  } catch (e) { /* 静态站点或离线时保留本地积分 */ }
+}
+
+export function resetSessionScore() { data.profile.sessionScore = 0; save(); }
 
 export function resetSave() { data = fresh(); save(); }

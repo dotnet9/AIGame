@@ -249,18 +249,11 @@ export class Game {
       onPrompt: () => this._interact(),
       onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
+      onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
       onMic: () => this._startVoice(),
       onMicEnd: () => this._stopVoice(),
       isTouch: this.isTouch,
     });
-    if (!save.getIntro()) {
-      setTimeout(() => ui.playIntro(() => {
-        save.setIntro(true);
-        if (!save.getBookSem()) this._openBook(); // 第一次玩：先选年级学期
-      }, this.isTouch), 600);
-    } else if (!save.getBookSem()) {
-      this._openBook();
-    }
     // 位置存档：每 3 秒 + 离开页面时
     setInterval(() => this._savePosition(), 3000);
     addEventListener('pagehide', () => this._savePosition());
@@ -285,6 +278,10 @@ export class Game {
 
   start() {
     ui.hideLoading();
+    ui.updatePlayerScore(save.getScore(), save.getSessionScore());
+    if (!save.getIntro()) {
+      setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch), 600);
+    }
     this._loop();
     setInterval(() => this._refreshHungry(), 1500);
     // 指一条路：最近的可孵蛋
@@ -663,6 +660,8 @@ export class Game {
     setTimeout(() => {
       ui.closeChallenge();
       save.hatch(word.id);
+      save.addPoint();
+      ui.updatePlayerScore(save.getScore(), save.getSessionScore());
       this.eggs.removeEgg(word.id);
       const pet = this.pets.spawn(word);
       pet.group.userData.wordId = word.id;
@@ -747,6 +746,8 @@ export class Game {
         setTimeout(() => {
           ui.closeChallenge();
           save.feed(id);
+          save.addPoint();
+          ui.updatePlayerScore(save.getScore(), save.getSessionScore());
           this.pets.setHungry(id, false);
           this.pets.celebrate(id);
           sfx.good();
@@ -960,7 +961,23 @@ export class Game {
       sems, units,
       onSelect: k => this._openBook(k),
       onStart: i => this._startPractice(semKey, i),
+      onQuickRound: () => this._startQuickRound(semKey),
     });
+  }
+
+  _startQuickRound(semKey) {
+    const source = CURRICULUM[semKey].units.flatMap(u => u.words);
+    for (let i = source.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [source[i], source[j]] = [source[j], source[i]];
+    }
+    const picked = source.slice(0, 5);
+    const list = picked.map(item => {
+      const [en, zh] = item.split('|');
+      return { en, zh, syl: [en] };
+    });
+    this.practice = { key: `quick#${semKey}`, list, idx: 0, scores: [], quick: true };
+    this._practiceNext();
   }
 
   _startPractice(semKey, unitIdx) {
@@ -977,11 +994,11 @@ export class Game {
     const p = this.practice;
     if (!p) return;
     if (p.idx >= p.list.length) {
-      save.saveUnitResult(p.key, p.scores);
+      if (!p.quick) save.saveUnitResult(p.key, p.scores);
       ui.closeChallenge();
       const avg = Math.round(p.scores.reduce((a, b) => a + b, 0) / Math.max(1, p.scores.length));
       sfx.great();
-      ui.toast(`🎉 单元练习完成！平均 ${avg} 分，${avg >= 85 ? '你就是朗读小明星！' : '继续加油！'}`, 4200);
+      ui.toast(`${p.quick ? '🎯 3 分钟挑战完成！' : '🎉 单元练习完成！'}平均 ${avg} 分，${avg >= 85 ? '你就是朗读小明星！' : '继续加油！'}`, 4200);
       this.currentWord = null;
       return;
     }
@@ -991,7 +1008,9 @@ export class Game {
       word: { en: w.en, zh: w.zh, syl: [w.en], hint: `第 ${p.idx + 1}/${p.list.length} 个 · 大声读给词宠听` },
       mode: 'practice',
       onSuccess: res => {
-        p.scores.push(res.score || 60);
+        p.scores.push(res.score || 80);
+        save.addPoint();
+        ui.updatePlayerScore(save.getScore(), save.getSessionScore());
         p.idx++;
         setTimeout(() => this._practiceNext(), 500);
       },
@@ -1000,11 +1019,12 @@ export class Game {
     });
   }
 
-  // ---------- 语音识别（优先级：浏览器本地 Whisper → Web Speech → 字母块） ----------
+  // ---------- 语音识别（优先级：Web Speech → 本地 Whisper → 字母块） ----------
   // 点击麦克风：开始录音；再点一次：结束并识别。返回 false 表示无法启动，UI 自动切字母块。
   _startVoice() {
     if (!this.currentWord) return false;
-    if (this.isTouch && !navigator.mediaDevices) return this._startWebSpeech();
+    // Web Speech 在支持的浏览器里几乎立即返回结果，避免第一次朗读先下载 40MB 模型。
+    if (voiceSupported) return this._startWebSpeech();
     return this._startWhisper();
   }
 
@@ -1015,8 +1035,8 @@ export class Game {
       return this._startWebSpeech();
     }
     this.voiceCancelled = false;
-    // 本地识别引擎（首次会下载模型，约 40MB，之后浏览器缓存秒开）
-    ui.voiceStatus('语音引擎准备中…（首次加载约 40MB，之后秒开）');
+    // 仅在浏览器没有 Web Speech 时使用本地模型；模型只在需要时加载。
+    ui.voiceStatus('正在准备朗读小助手，第一次需要一点时间…');
     ensureWhisper().then(() => {
       if (!this.currentWord) return;
       return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {

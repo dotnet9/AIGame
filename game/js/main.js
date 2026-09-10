@@ -1,6 +1,9 @@
 // 词宠岛 · 入口
 import * as THREE from 'three';
 import { Game } from './game.js';
+import * as save from './save.js';
+import * as ui from './ui.js';
+import { CURRICULUM } from './curriculum.js';
 
 window.THREE = THREE; // 调试句柄
 
@@ -15,13 +18,26 @@ window.addEventListener('error', e => {
   }
 });
 
-try {
-  const game = new Game(canvas);
-  game.start();
-  window.__game = game; // 调试句柄
-} catch (err) {
-  console.error(err);
-  window.__bootErr = err && (err.stack || err.message);
-  const el = document.getElementById('loading');
-  if (el) el.querySelector('.loading-text').textContent = '哎呀，这台设备跑不起来 3D 画面，换台电脑试试吧';
+let started = false;
+function begin(name, semKey) {
+  if (started) return;
+  started = true;
+  try {
+    const profile = document.getElementById('profile');
+    if (profile) profile.classList.add('hidden');
+    if (name) save.setUsername(name);
+    if (semKey) save.setBookSem(semKey);
+    save.resetSessionScore();
+    const game = new Game(canvas);
+    game.start();
+    window.__game = game; // 调试句柄
+  } catch (err) {
+    console.error(err);
+    window.__bootErr = err && (err.stack || err.message);
+    const el = document.getElementById('loading');
+    if (el) el.querySelector('.loading-text').textContent = '哎呀，这台设备跑不起来 3D 画面，换台电脑试试吧';
+  }
 }
+
+if (save.getUsername() && CURRICULUM[save.getBookSem()]) begin();
+else ui.showProfile(begin, { username: save.getUsername(), semKey: save.getBookSem() });

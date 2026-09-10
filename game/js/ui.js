@@ -1,11 +1,11 @@
 // DOM UI：HUD、挑战弹窗（语音+拼块）、召唤、图鉴、引导、提示
 import { sfx, speak, speakSlow, speakSyllables, spellLetters } from './audio.js';
 import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.js';
-import { CURRICULUM } from './curriculum.js';
+import { CURRICULUM, gradeKey } from './curriculum.js';
 
 const $ = id => document.getElementById(id);
 const els = {};
-for (const id of ['loading', 'hud', 'pet-count', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
+for (const id of ['loading', 'hud', 'pet-count', 'score-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
   'quest', 'quest-text', 'modal', 'modal-title', 'word-en', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
   'mic-label', 'voice-feedback', 'score-panel', 'score-ring', 'score-num', 'score-stars', 'score-msg',
   'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
@@ -62,6 +62,7 @@ export function openChallenge({ word, mode, onSuccess, onClose, onSkip }) {
     : mode === 'practice' ? '📖 跟读练习 · 大声读给词宠听'
     : '🥚 遇见词宠蛋！念出单词唤醒它';
   els.wordEn.textContent = word.en;
+  els.wordEn.classList.remove('spell-hidden');
   els.wordZh.textContent = word.zh;
   els.wordHint.textContent = '小提示：' + word.hint;
   els.voiceFeedback.textContent = '';
@@ -169,7 +170,7 @@ export function voiceResult(res) {
   showScore(s, res.heard, res);
 }
 
-// 评分演出：数字滚动 + 星级 + 音效，≥60 分过关；opts.msg 可自定义评语
+// 评分演出：数字滚动 + 星级 + 音效，≥80 分过关；opts.msg 可自定义评语
 function showScore(score, heard, opts = {}) {
   ch.busy = true;
   els.scorePanel.classList.remove('hidden');
@@ -184,7 +185,7 @@ function showScore(score, heard, opts = {}) {
   };
   requestAnimationFrame(tick);
   // 星级
-  const stars = score >= 85 ? 3 : score >= 70 ? 2 : score >= 60 ? 1 : 0;
+  const stars = score >= 90 ? 3 : score >= 80 ? 2 : score >= 60 ? 1 : 0;
   els.scoreStars.innerHTML = '';
   for (let i = 0; i < stars; i++) {
     const sp = document.createElement('span');
@@ -204,19 +205,19 @@ function showScore(score, heard, opts = {}) {
   if (opts.msg) msg = opts.msg;
   else if (score >= 95) msg = '🌟 完美发音！你就是单词小明星！';
   else if (score >= 85) msg = '太棒了！发音非常标准！';
-  else if (score >= 70) msg = '说得真棒！再练一次就能满分！';
-  else if (score >= 60) msg = '不错哦！马上就完美啦！';
+  else if (score >= 80) msg = '合格啦！再练一次会更稳！';
+  else if (score >= 60) msg = '再试一次，达到 80 分就能过关哦！';
   else if (heard) msg = `听到的是「${heard}」，勇敢再试一次！`;
   else msg = '没听清呢，大声一点点再试！';
   els.scoreMsg.textContent = msg;
-  els.scoreMsg.className = score >= 60 ? 'good' : 'bad';
-  els.scoreMsg.style.color = score >= 60 ? '#4E9A46' : '#D06A9C';
+  els.scoreMsg.className = score >= 80 ? 'good' : 'bad';
+  els.scoreMsg.style.color = score >= 80 ? '#4E9A46' : '#D06A9C';
   if (score >= 85) { sfx.great(); setTimeout(() => sfx.magic(), 500); }
   else if (score >= 70) sfx.good();
   else if (score >= 60) sfx.pop();
   else sfx.miss();
 
-  if (score >= 60) {
+  if (score >= 80) {
     setTimeout(() => {
       els.scorePanel.classList.add('hidden');
       ch.onSuccess && ch.onSuccess({ score, heard });
@@ -310,8 +311,59 @@ function setSpellMode(on) {
   ch.spellMode = on;
   els.spellArea.classList.toggle('hidden', !on);
   els.modalFoot.classList.toggle('hidden', on);
+  els.wordEn.classList.toggle('spell-hidden', on);
+  if (on) els.voiceFeedback.textContent = '看中文提示，用字母块拼出英文单词吧！';
   if (on) buildSpell();
 }
+export function updatePlayerScore(score, sessionScore = score) {
+  if (els.scorePill) els.scorePill.textContent = `🏆 ${score} 分 · 本局 ${sessionScore}`;
+}
+
+export function showProfile(onDone, profile = {}) {
+  const ov = document.getElementById('profile');
+  const input = document.getElementById('profile-name');
+  const grade = document.getElementById('profile-grade');
+  const term = document.getElementById('profile-term');
+  const error = document.getElementById('profile-error');
+  input.value = profile.username || '';
+  if (CURRICULUM[profile.semKey]) {
+    grade.value = profile.semKey[0];
+    term.value = profile.semKey[1] === 'a' ? 'up' : 'down';
+  }
+  let submitted = false;
+  ov.classList.remove('hidden'); input.focus();
+  const submit = () => {
+    if (submitted) return;
+    const name = input.value.trim();
+    if (!name) { error.textContent = '先写一个名字再出发哦～'; input.focus(); return; }
+    if (!grade.value) { error.textContent = '请选择你的年级'; grade.focus(); return; }
+    if (!term.value) { error.textContent = '请选择上册或下册'; term.focus(); return; }
+    const semKey = gradeKey(grade.value, term.value);
+    if (!CURRICULUM[semKey]) return;
+    submitted = true;
+    ov.classList.add('hidden');
+    onDone && onDone(name, semKey);
+  };
+  document.getElementById('profile-start').onclick = submit;
+  input.onkeydown = e => { if (e.key === 'Enter') submit(); };
+}
+
+export async function showLeaderboard(current = {}) {
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div id="rank-card"><button class="round-btn small rank-close">✕</button>
+    <div class="rank-title">🏆 词宠岛小小排行榜</div><div class="rank-sub">完成一个挑战得 1 分</div>
+    <div class="rank-list"><div class="rank-loading">正在看看谁是单词小明星…</div></div></div>`;
+  document.body.appendChild(ov); ov.querySelector('.rank-close').onclick = () => ov.remove();
+  const list = ov.querySelector('.rank-list');
+  try {
+    const r = await fetch('/api/leaderboard', { cache: 'no-store' }); if (!r.ok) throw new Error('offline');
+    const rows = await r.json();
+    list.innerHTML = rows.length ? rows.slice(0, 5).map((x, i) =>
+      `<div class="rank-row"><b>${['🥇','🥈','🥉','4️⃣','5️⃣'][i]}</b><span>${escapeHtml(x.username)}</span><strong>${x.score} 分</strong></div>`).join('')
+      : '<div class="rank-loading">还没有记录，快来拿第一分吧！</div>';
+  } catch (e) { list.innerHTML = `<div class="rank-loading">暂时离线，${escapeHtml(current.username || '你')} 已有 ${current.score || 0} 分。</div>`; }
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 els.btnSwitchSpell.addEventListener('click', () => { setSpellMode(true); sfx.pop(); });
 els.btnReplayLetters.addEventListener('click', () => { spellLetters(ch.word.en); speak(ch.word.en); });
 els.btnShowHelpWord.addEventListener('click', () => {
@@ -447,6 +499,7 @@ export function showBookPanel(data) {
         <button id="book-close" class="round-btn small">✕</button>
       </div>
       <div id="book-sems">${chips}</div>
+      <button id="book-quick" class="book-go">🎯 本学期 3 分钟挑战 · 随机 5 题</button>
       <div id="book-units">${rows}</div>
       <div id="book-tip">选择单元 → 听发音 → 点麦克风跟读 → 得分！短语和单词都支持哦</div>
     </div>`;
@@ -454,7 +507,11 @@ export function showBookPanel(data) {
   bookOv.querySelectorAll('.book-chip').forEach(b =>
     b.addEventListener('click', () => { sfx.pop(); data.onSelect(b.dataset.k); }));
   bookOv.querySelectorAll('.book-go').forEach(b =>
-    b.addEventListener('click', () => { sfx.pop(); bookOv.classList.add('hidden'); data.onStart(+b.dataset.i); }));
+    b.addEventListener('click', () => {
+      sfx.pop(); bookOv.classList.add('hidden');
+      if (b.id === 'book-quick') data.onQuickRound && data.onQuickRound();
+      else data.onStart(+b.dataset.i);
+    }));
   bookOv.querySelector('#book-close').addEventListener('click', () => bookOv.classList.add('hidden'));
 }
 export function closeBookPanel() { if (bookOv) bookOv.classList.add('hidden'); }
@@ -517,10 +574,12 @@ export function showHelp() {
 }
 
 // ---------- 绑定 HUD 按钮 ----------
-export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, isTouch }) {
+export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, isTouch }) {
   isTouchMode = !!isTouch;
   els.btnCatalog.addEventListener('click', onCatalog);
   els.btnHelp.addEventListener('click', showHelp);
+  const rankBtn = document.getElementById('btn-rank');
+  if (rankBtn) rankBtn.addEventListener('click', onRank);
   const summonBtn = document.getElementById('btn-summon');
   if (summonBtn) summonBtn.addEventListener('click', onSummon);
   const mapBtn = document.getElementById('btn-map');
