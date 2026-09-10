@@ -28,20 +28,21 @@
 
 **语音识别三级降级链**：
 1. 🥇 **Web Speech API**（支持的 HTTPS 浏览器即时识别，不需要等待模型）
-2. 🥈 **浏览器本地 Whisper 模型**（仅在没有 Web Speech 时按需加载，自托管于 `models/`）
+2. 🥈 **浏览器本地 Whisper 模型**（没有 Web Speech、或它连续读不出结果时按需加载，自托管于 `models/`）
 3. 🥉 字母块拼写（100% 可用，永远能过关）
 
 ## 🚀 本地运行
 
-任意静态服务器指向仓库即可（需要 ES modules + CDN）：
+Windows 双击 **`run.bat`** 一键启动后端（端口 6000，自动选用 Node 或 Python）；也可以手动：
 
 ```bash
 cd AIGame
-python tools/serve.py 8080     # 禁缓存开发服务器
-# 浏览器打开 http://localhost:8080/game/
+node tools/serve.js 6000       # 禁缓存开发服务器（零依赖，需 Node 14+）
+python tools/serve.py 6000     # 等价实现（需 Python 3）
+# 浏览器打开 http://localhost:6000/game/
 ```
 
-排行榜接口由 `tools/serve.py` 提供：`GET /api/leaderboard`、`POST /api/score`，积分保存在 `tools/leaderboard.json`。线上部署若使用纯静态托管，游戏仍可离线记录本机积分，但要启用多人排行榜，请把该服务器（或等价的后端接口）与 `/api/*` 一起部署，并确保排行榜文件可写。
+排行榜接口由该服务提供：`GET /api/leaderboard`、`POST /api/score`，积分保存在 `tools/leaderboard.json`。线上部署若使用纯静态托管，游戏仍可离线记录本机积分，但要启用多人排行榜，请把该服务（或等价后端）与 `/api/*` 一起部署——nginx 加一段 `location /api/ { proxy_pass http://127.0.0.1:6000; }` 再 reload 即可，并确保排行榜文件可写。
 
 ## ☁️ 在线部署（分享给小朋友）
 
