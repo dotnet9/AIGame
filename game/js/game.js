@@ -10,7 +10,7 @@ import { buildPlayer, letterTexture, petThumbnail } from './models.js';
 import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
-import { startListening, stopListening, matchAlt, voiceSupported, markVoiceBroken } from './speech.js';
+import { startListening, stopListening, matchAlt, voiceSupported, isVoiceBroken, markVoiceBroken } from './speech.js';
 import { speak, sfx } from './audio.js';
 import { ensureWhisper, recognizeBlob } from './whisper.js';
 import { CURRICULUM } from './curriculum.js';
@@ -38,6 +38,8 @@ export class Game {
     this.fx = [];
     this.clock = new THREE.Clock();
     this.riverHintCd = 0;
+    this.preferWhisper = false;   // 在线识别连续失败后，改用自带的本地模型
+    this.voiceMiss = 0;
     this._initRenderer();
     this._initScene();
     this._initPlayer();
@@ -1024,8 +1026,9 @@ export class Game {
   // 点击麦克风：开始录音；再点一次：结束并识别。返回 false 表示无法启动，UI 自动切字母块。
   _startVoice() {
     if (!this.currentWord) return false;
-    // Web Speech 在支持的浏览器里几乎立即返回结果，避免第一次朗读先下载 40MB 模型。
-    if (voiceSupported) return this._startWebSpeech();
+    // Web Speech 在支持的浏览器里几乎立即返回结果，避免第一次朗读先下载 40MB 模型；
+    // 它连续读不到时（手机微信里很常见）改用自带的本地模型。
+    if (!this.preferWhisper && voiceSupported && !isVoiceBroken()) return this._startWebSpeech();
     return this._startWhisper();
   }
 
@@ -1036,8 +1039,8 @@ export class Game {
       return this._startWebSpeech();
     }
     this.voiceCancelled = false;
-    // 仅在浏览器没有 Web Speech 时使用本地模型；模型只在需要时加载。
-    ui.voiceStatus('正在准备朗读小助手，第一次需要一点时间…');
+    // 在线识别不可用/不好用时使用本地模型；模型只在需要时加载。
+    ui.voiceStatus('第一次用本地识别，稍等一下下…');
     ensureWhisper().then(() => {
       if (!this.currentWord) return;
       return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
@@ -1089,13 +1092,27 @@ export class Game {
     return startListening(
       alts => {
         if (!this.currentWord) return;
-        if (!alts) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
+        if (!alts) { this._noteVoiceMiss(); ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
         ui.voiceResult(matchAlt(alts, this.currentWord.en));
       },
       (listening, err) => {
         if (err === 'not-allowed') ui.toast('🎤 需要允许麦克风权限才能语音读单词哦（点地址栏旁的麦克风图标）', 5000);
-        else if (err && err !== 'no-result') ui.toast('🎤 语音识别暂时不可用，已切换为字母块拼写 🧩', 5000);
+        else if (err && err !== 'no-result') {
+          this._noteVoiceMiss();
+          if (!this.preferWhisper) ui.toast('🎤 识别不太顺，也可以点“换成拼字母块”过关', 4000);
+        }
       }
     );
+  }
+
+  // 在线识别连续两次拿不到结果（手机微信里很常见）→ 下次改用本地模型
+  _noteVoiceMiss() {
+    this.voiceMiss += 1;
+    if (this.preferWhisper || this.voiceMiss < 2) return;
+    const canRecord = typeof MediaRecorder !== 'undefined'
+      && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!canRecord) return;
+    this.preferWhisper = true;
+    ui.toast('🎤 下次改用本地识别，第一次要等一下下', 4000);
   }
 }

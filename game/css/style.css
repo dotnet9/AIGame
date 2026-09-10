@@ -24,17 +24,19 @@ body {
 /* ---------- HUD ---------- */
 #hud { position: fixed; top: 14px; left: 14px; right: 14px; z-index: 20;
   display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-#hud > div { display: flex; gap: 10px; }
+#hud > div { display: flex; gap: 10px; min-width: 0; }
 .pill {
   pointer-events: auto;
   background: rgba(255,255,255,.9); border: 2px solid #FFD3E0; color: #A0566F;
   padding: 8px 16px; border-radius: 999px; font-size: 15px; font-weight: bold;
   box-shadow: 0 3px 10px rgba(214,120,150,.18);
+  /* 屏幕窄的时候宁可省略，也不要竖排折成一根长条 */
+  white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis;
 }
 .pill.warn { border-color: #FFC46B; color: #B47514; cursor: pointer; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.06) } }
 .round-btn {
-  pointer-events: auto; cursor: pointer;
+  pointer-events: auto; cursor: pointer; flex: none;
   width: 48px; height: 48px; border-radius: 50%; border: 2px solid #FFD3E0;
   background: rgba(255,255,255,.92); font-size: 22px; color: #A0566F;
   box-shadow: 0 3px 10px rgba(214,120,150,.18); transition: transform .15s;
@@ -155,6 +157,15 @@ body {
   transform: translate(-50%,-50%); box-shadow: 0 3px 10px rgba(200,120,150,.3);
   display: flex; align-items: center; justify-content: center; font-size: 22px;
 }
+/* 四个方向指示：让小朋友一眼看出摇杆往哪推 */
+#joy .joy-dir {
+  position: absolute; color: #A0566F; opacity: .85; font-size: 12px; line-height: 1;
+  text-shadow: 0 1px 2px rgba(255,255,255,.9); pointer-events: none;
+}
+#joy .joy-up { top: 6px; left: 50%; transform: translateX(-50%); }
+#joy .joy-down { bottom: 6px; left: 50%; transform: translateX(-50%); }
+#joy .joy-left { left: 8px; top: 50%; transform: translateY(-50%); }
+#joy .joy-right { right: 8px; top: 50%; transform: translateY(-50%); }
 
 /* ---------- 弹窗通用 ---------- */
 .overlay {
@@ -202,10 +213,10 @@ body {
 #word-en.spell-hidden { visibility: hidden; height: 0; margin: 0; }
 #word-zh { font-size: 18px; color: #C4788F; margin-top: 4px; font-weight: bold; }
 #word-hint { font-size: 14px; color: #9C8C7A; margin-top: 8px; }
-#voice-area { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 16px 0 6px; }
+#voice-area { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 16px 0 6px; flex-wrap: wrap; }
 #btn-play, #btn-mic {
   border: none; cursor: pointer; border-radius: 999px; font-weight: bold;
-  transition: transform .15s; font-family: inherit;
+  transition: transform .15s; font-family: inherit; flex: none; white-space: nowrap;
 }
 #btn-play { background: #E8F4D9; color: #4E7A46; font-size: 17px; padding: 13px 22px; border: 2px solid #CDEBC8; }
 #btn-mic {
@@ -220,7 +231,8 @@ body {
 @keyframes blink { 50% { opacity: 0 } }
 @keyframes micPulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.07) } }
 #btn-play:hover, #btn-mic:hover { transform: scale(1.06); }
-#voice-feedback { text-align: center; min-height: 22px; font-size: 15px; color: #B47514; font-weight: bold; margin-bottom: 4px; }
+/* 提示文字单独占一行：不和按钮抢宽度，避免挤成竖排 */
+#voice-feedback { flex-basis: 100%; text-align: center; min-height: 22px; font-size: 15px; color: #B47514; font-weight: bold; margin-bottom: 4px; }
 #voice-feedback.good { color: #4E9A46; }
 #voice-feedback.bad { color: #D06A9C; }
 
@@ -326,14 +338,21 @@ body {
 
 /* ---------- 手机小屏适配 ---------- */
 @media (max-width: 640px) {
-  .pill { font-size: 13px; padding: 6px 12px; }
-  .round-btn { width: 42px; height: 42px; font-size: 19px; }
-  #hud { top: 10px; left: 10px; right: 10px; }
+  .pill { font-size: 12px; padding: 5px 10px; }
+  .round-btn { width: 36px; height: 36px; font-size: 17px; }
+  #hud { top: 8px; left: 8px; right: 8px; }
+  #hud > div { gap: 6px; }
+  /* 手机上只留最常用的四个：课本 / 地图 / 召唤 / 图鉴 */
+  #btn-rank, #btn-help { display: none; }
+  /* 饥饿提醒出现时让出分数条的位置，避免横向挤爆 */
+  body.has-hungry #score-pill { display: none; }
+  #quest { top: 54px; font-size: 13px; padding: 6px 14px; }
   #word-en { font-size: 38px; }
   #modal-card { padding: 16px 14px 12px; }
   #btn-play { font-size: 15px; padding: 11px 16px; }
   #btn-mic { font-size: 15px; padding: 11px 18px; }
   #voice-area { gap: 10px; }
+  #voice-feedback { font-size: 14px; }
   .slot, .tile { width: 40px; height: 46px; font-size: 22px; }
   #joy { left: 18px; bottom: 24px; }
   #prompt { bottom: 22%; font-size: 14px; padding: 8px 14px; }

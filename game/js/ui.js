@@ -34,9 +34,12 @@ export function showPrompt(text, key = 'E') {
 export function hidePrompt() { els.prompt.classList.add('hidden'); }
 
 export function updateHUD(count, total, hungryCount) {
-  els.petCount.textContent = `🐾 词宠 ${count}/${total}`;
-  els.hungryPill.classList.toggle('hidden', hungryCount === 0);
-  els.hungryPill.textContent = `🍖 有 ${hungryCount} 只词宠想你啦`;
+  // 手机上横向空间小：去掉可推断的字，只留数字
+  els.petCount.textContent = isTouchMode ? `🐾 ${count}/${total}` : `🐾 词宠 ${count}/${total}`;
+  const hungry = hungryCount > 0;
+  els.hungryPill.classList.toggle('hidden', !hungry);
+  els.hungryPill.textContent = isTouchMode ? `🍖 ${hungryCount} 只饿啦` : `🍖 有 ${hungryCount} 只词宠想你啦`;
+  document.body.classList.toggle('has-hungry', hungry);
 }
 
 export function hideLoading() {
@@ -53,7 +56,7 @@ export function setQuest(text) {
 const ch = {
   open: false, word: null, mode: 'hatch', spellMode: false,
   slots: [], filled: [], tiles: [], onSuccess: null, onClose: null,
-  busy: false, listening: false,
+  busy: false, listening: false, canVoice: false,
 };
 
 export function openChallenge({ word, mode, onSuccess, onClose, onSkip }) {
@@ -73,17 +76,20 @@ export function openChallenge({ word, mode, onSuccess, onClose, onSkip }) {
   els.spellArea.classList.add('hidden');
   els.modalFoot.classList.remove('hidden');
   els.btnSkip.classList.toggle('hidden', mode !== 'practice');
-  const noVoice = !voiceSupported || isVoiceBroken();
-  els.btnMic.classList.toggle('hidden', noVoice);
-  if (isVoiceBroken()) {
-    // 该浏览器/网络已确认无法语音识别：直接切换字母块模式
-    els.voiceFeedback.textContent = '🎤 当前网络无法使用语音识别，已切换为字母块拼写模式（一样能孵出词宠！）';
+  // 能不能“读”：在线识别可用，或设备能录音（改走自带的本地识别模型）
+  const canRecord = typeof MediaRecorder !== 'undefined'
+    && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const onlineVoice = voiceSupported && !isVoiceBroken();
+  const canVoice = onlineVoice || canRecord;
+  els.btnMic.classList.toggle('hidden', !canVoice);
+  ch.canVoice = canVoice;
+  if (voiceBlockedByInsecure) {
+    els.voiceFeedback.textContent = '🎤 要 https:// 网址才能语音，先拼字母块吧';
     setSpellMode(true);
-  } else if (voiceBlockedByInsecure) {
-    els.voiceFeedback.textContent = '🎤 手机上要用 https:// 开头的网址才能语音，现在先用字母块拼一拼吧';
-    setSpellMode(true);
-  } else if (!voiceSupported) {
-    els.voiceFeedback.textContent = '这台浏览器不支持语音识别，用下面的字母块吧～';
+  } else if (canRecord && !onlineVoice) {
+    els.voiceFeedback.textContent = '🎤 用本地识别朗读，第一次要下载一下';
+  } else if (!canVoice) {
+    els.voiceFeedback.textContent = '🎤 这台设备用不了语音，先拼字母块吧';
     setSpellMode(true);
   }
   els.modal.classList.remove('hidden');
@@ -115,20 +121,21 @@ export function voiceStatus(text) {
 }
 export function voiceRecording() {
   if (!ch.open) return;
-  els.voiceFeedback.textContent = '● 正在录音！大声读出来，读完再点一下麦克风';
+  els.voiceFeedback.textContent = '● 正在录音，读完再点一下';
   els.voiceFeedback.className = 'good';
 }
 export function voiceUnavailable() {
   if (!ch.open) return;
   setListening(false);
   els.btnMic.classList.add('hidden');
-  els.voiceFeedback.textContent = '🎤 当前设备无法使用语音识别，已切换为字母块拼写模式（一样能孵出词宠！）';
+  ch.canVoice = false;
+  els.voiceFeedback.textContent = '🎤 语音用不了，改用字母块拼吧';
   setSpellMode(true);
   sfx.miss();
 }
 
 els.btnMic.addEventListener('click', () => {
-  if (!ch.open || ch.busy || !voiceSupported) return;
+  if (!ch.open || ch.busy || !ch.canVoice) return;
   if (ch.listening) {
     setListening(false);
     clearTimeout(listeningTimer);
@@ -143,7 +150,7 @@ els.btnMic.addEventListener('click', () => {
   if (ok === false) {
     // 识别引擎启动失败：立即降级为字母块，不让小朋友干等
     setListening(false);
-    els.voiceFeedback.textContent = '🎤 语音启动失败，已切换为字母块拼写模式';
+    els.voiceFeedback.textContent = '🎤 语音启动失败，改用字母块拼吧';
     setTimeout(() => setSpellMode(true), 500);
     return;
   }
@@ -161,8 +168,8 @@ export function voiceResult(res) {
   clearTimeout(listeningTimer);
   if (res.error) {
     els.voiceFeedback.textContent = res.error === 'no-result'
-      ? '没听清呢，大声一点点再试，或用字母块拼！'
-      : '这次没成功，再试一次或用字母块拼吧';
+      ? '没听清，再大声读一次～'
+      : '再读一次试试～';
     els.voiceFeedback.className = 'bad';
     sfx.miss();
     return;
@@ -313,11 +320,11 @@ function setSpellMode(on) {
   els.spellArea.classList.toggle('hidden', !on);
   els.modalFoot.classList.toggle('hidden', on);
   els.wordEn.classList.toggle('spell-hidden', on);
-  if (on) els.voiceFeedback.textContent = '看中文提示，用字母块拼出英文单词吧！';
+  if (on) els.voiceFeedback.textContent = '用字母块拼出英文单词吧！';
   if (on) buildSpell();
 }
 export function updatePlayerScore(score, sessionScore = score) {
-  if (els.scorePill) els.scorePill.textContent = `🏆 ${score} 分 · 本局 ${sessionScore}`;
+  if (els.scorePill) els.scorePill.textContent = isTouchMode ? `🏆 ${score}` : `🏆 ${score} 分 · 本局 ${sessionScore}`;
   leaderboardCurrent.score = Number(score) || 0;
   scheduleLeaderboardRefresh();
 }
@@ -339,20 +346,25 @@ function leaderboardRowsHtml(rows, current = leaderboardCurrent) {
 async function fetchLeaderboardRows() {
   if (!leaderboardRequest) {
     leaderboardRequest = fetch('/api/leaderboard', { cache: 'no-store' })
-      .then(r => { if (!r.ok) throw new Error('offline'); return r.json(); })
+      .then(r => {
+        if (!r.ok) { const err = new Error('offline'); err.status = r.status; throw err; }
+        return r.json();
+      })
       .then(rows => Array.isArray(rows) ? rows : [])
       .finally(() => { leaderboardRequest = null; });
   }
   return leaderboardRequest;
 }
 
-function renderLeaderboardOffline() {
+// 排行榜接口不可用时，说清是“后端没部署”还是“网络不通”，并留住自己的分数
+function leaderboardOfflineReason(err) {
+  return err && err.status === 404 ? '排行榜暂未开通' : '排行榜连不上';
+}
+
+function renderLeaderboardOffline(err) {
   if (!els.leaderboardList) return;
-  if (leaderboardCurrent.username) {
-    els.leaderboardList.innerHTML = `<div class="rank-loading">暂时离线<br>${escapeHtml(leaderboardCurrent.username)}：${leaderboardCurrent.score} 分</div>`;
-  } else {
-    els.leaderboardList.innerHTML = '<div class="rank-loading">联网后显示前 5 名</div>';
-  }
+  const mine = leaderboardCurrent.username ? `<br>你已有 ${leaderboardCurrent.score} 分` : '';
+  els.leaderboardList.innerHTML = `<div class="rank-loading">${leaderboardOfflineReason(err)}${mine}</div>`;
 }
 
 export async function refreshLeaderboard(current = {}) {
@@ -363,7 +375,7 @@ export async function refreshLeaderboard(current = {}) {
     const rows = await fetchLeaderboardRows();
     els.leaderboardList.innerHTML = leaderboardRowsHtml(rows, leaderboardCurrent);
   } catch (e) {
-    renderLeaderboardOffline();
+    renderLeaderboardOffline(e);
   }
 }
 
@@ -417,7 +429,7 @@ export async function showLeaderboard(current = {}) {
   try {
     const rows = await fetchLeaderboardRows();
     list.innerHTML = leaderboardRowsHtml(rows, current);
-  } catch (e) { list.innerHTML = `<div class="rank-loading">暂时离线，${escapeHtml(current.username || '你')} 已有 ${current.score || 0} 分。</div>`; }
+  } catch (e) { list.innerHTML = `<div class="rank-loading">${leaderboardOfflineReason(e)}，${escapeHtml(current.username || '你')} 已有 ${current.score || 0} 分。</div>`; }
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 els.btnSwitchSpell.addEventListener('click', () => { setSpellMode(true); sfx.pop(); });
