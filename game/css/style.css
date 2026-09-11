@@ -113,6 +113,14 @@ body {
 #leaderboard-list .rank-row.current { background: rgba(255,240,201,.66); border-color: rgba(255,203,100,.75); }
 #leaderboard-list .rank-loading { padding: 6px 2px; font-size: 12px; text-align: center; color: rgba(156,140,122,.95); }
 
+/* ---------- 彩带雨（PERFECT / 孵蛋 / FEVER 共用） ---------- */
+.confetti-holder { position: fixed; inset: 0; z-index: 80; pointer-events: none; overflow: hidden; }
+.confetti-holder i { position: absolute; top: -16px; display: block; opacity: .95; animation: confetti-fall linear forwards; }
+@keyframes confetti-fall {
+  0% { transform: translate(0, -4vh) rotate(0deg); opacity: 1 }
+  100% { transform: translate(var(--dx, 0), 108vh) rotate(var(--rot, 540deg)); opacity: .8 }
+}
+
 /* ---------- 交互提示（手机上可直接点它） ---------- */
 #prompt {
   position: fixed; left: 50%; bottom: calc(18% + var(--sab)); transform: translateX(-50%); z-index: 15;

@@ -302,6 +302,31 @@ els.btnReplay.addEventListener('click', () => {
   playRecording(ch.replayUrl);
 });
 
+// ---------- 庆祝组件：彩带雨 + 震动（PERFECT / 孵蛋 / FEVER 共用） ----------
+export function confettiBurst(n = 60) {
+  const colors = ['#FF8FB0', '#FFD166', '#7CC96F', '#7C9CC4', '#C6A5F0', '#FF9F68'];
+  const holder = document.createElement('div');
+  holder.className = 'confetti-holder';
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement('i');
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.background = colors[i % colors.length];
+    p.style.animationDelay = (Math.random() * 0.3) + 's';
+    p.style.animationDuration = (1.6 + Math.random() * 1.2) + 's';
+    p.style.setProperty('--dx', (Math.random() * 180 - 90) + 'px');
+    p.style.setProperty('--rot', (Math.random() * 900 - 450) + 'deg');
+    const big = Math.random() < 0.3;
+    p.style.width = p.style.height = big ? '10px' : '7px';
+    if (Math.random() < 0.35) p.style.borderRadius = '50%';
+    holder.appendChild(p);
+  }
+  document.body.appendChild(holder);
+  setTimeout(() => holder.remove(), 3300);
+}
+export function vibrate(pattern) {
+  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* 不支持就算了 */ }
+}
+
 // 评分演出：喝彩大字弹在弹窗之外的屏幕层（飘升消失）+ 带情绪语音 + 数字滚动 + 星级，≥80 分过关
 function showScore(score, heard, opts = {}) {
   ch.busy = true;
@@ -354,6 +379,9 @@ function showScore(score, heard, opts = {}) {
   els.scoreMsg.className = score >= 80 ? 'good' : 'bad';
   els.scoreMsg.style.color = score >= 80 ? '#4E9A46' : '#D06A9C';
   scoreVoice(score);   // 带情绪的英文喝彩（Perfect!/Great!/Cool!/…）
+  // 完美时刻的庆祝：PERFECT 彩带雨 + 震动，85+ 小彩带
+  if (score >= 95) { confettiBurst(80); vibrate([30, 50, 80]); }
+  else if (score >= 85) confettiBurst(36);
   if (score >= 85) { sfx.great(); setTimeout(() => sfx.magic(), 500); }
   else if (score >= 70) sfx.good();
   else if (score >= 60) sfx.pop();
