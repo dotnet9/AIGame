@@ -1,5 +1,5 @@
 // DOM UI：HUD、挑战弹窗（语音+拼块）、召唤、图鉴、引导、提示
-import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice, updateBgm, isBgmMuted, setBgmMuted } from './audio.js';
+import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice, updateBgm, isBgmMuted, setBgmMuted, setBgmFever } from './audio.js';
 import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.js';
 import { CURRICULUM, gradeKey } from './curriculum.js';
 
@@ -327,6 +327,27 @@ export function vibrate(pattern) {
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* 不支持就算了 */ }
 }
 
+// ---------- FEVER 连击：连续 3 次 PERFECT(95+) 触发，星星翻倍，读非完美即断 ----------
+let perfectStreak = 0;
+let feverOn = false;
+export function isFever() { return feverOn; }
+function setFever(on) {
+  if (feverOn === on) return;
+  feverOn = on;
+  document.body.classList.toggle('fever', on);
+  setBgmFever(on);   // 背景音乐升调加速
+  if (on) {
+    confettiBurst(90);
+    vibrate([40, 60, 40, 60, 120]);
+    sfx.magic();
+    const b = document.createElement('div');
+    b.id = 'fever-bar';
+    b.textContent = '🔥 FEVER x2 · 连续完美，星星翻倍！';
+    document.body.appendChild(b);
+    setTimeout(() => b.remove(), 2800);
+  }
+}
+
 // 评分演出：喝彩大字弹在弹窗之外的屏幕层（飘升消失）+ 带情绪语音 + 数字滚动 + 星级，≥80 分过关
 function showScore(score, heard, opts = {}) {
   ch.busy = true;
@@ -379,9 +400,10 @@ function showScore(score, heard, opts = {}) {
   els.scoreMsg.className = score >= 80 ? 'good' : 'bad';
   els.scoreMsg.style.color = score >= 80 ? '#4E9A46' : '#D06A9C';
   scoreVoice(score);   // 带情绪的英文喝彩（Perfect!/Great!/Cool!/…）
-  // 完美时刻的庆祝：PERFECT 彩带雨 + 震动，85+ 小彩带
-  if (score >= 95) { confettiBurst(80); vibrate([30, 50, 80]); }
-  else if (score >= 85) confettiBurst(36);
+  // 完美时刻的庆祝：PERFECT 彩带雨 + 震动，85+ 小彩带；顺路维护 FEVER 连击
+  if (score >= 95) { perfectStreak++; confettiBurst(80); vibrate([30, 50, 80]); }
+  else { perfectStreak = 0; if (score >= 85) confettiBurst(36); }
+  setFever(perfectStreak >= 3);
   if (score >= 85) { sfx.great(); setTimeout(() => sfx.magic(), 500); }
   else if (score >= 70) sfx.good();
   else if (score >= 60) sfx.pop();

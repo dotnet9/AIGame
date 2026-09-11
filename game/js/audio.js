@@ -239,6 +239,9 @@ let bgmGain = null;      // BGM 总音量（淡入淡出）
 let bgmTimer = null;
 let bgmBar = 0;          // 循环到第几小节
 let bgmNextBarTime = 0;  // 下一小节的 AudioContext 时间
+let bgmFever = false;    // FEVER 连击：升调 + 加速，下一小节起生效
+
+export function setBgmFever(on) { bgmFever = !!on; }
 
 // C 大调五声音阶（C D E G A）配 C→G→Am→F 和弦进行，旋律音落在任何和弦上都不刺耳
 const BPM = 96, BEAT = 60 / BPM, BAR = BEAT * 4;
@@ -278,12 +281,15 @@ function bgmVoice(freq, t0, dur, type, peak) {
 }
 
 function bgmScheduleBar(idx, t0) {
+  // FEVER 时整体升一个大二度、节奏快 8%，曲子瞬间“燃”起来
+  const tf = bgmFever ? 1.1225 : 1;
+  const beat = BEAT * (bgmFever ? 0.92 : 1);
   const chord = CHORDS[idx % CHORDS.length];
-  bgmVoice(chord.bass, t0, BEAT * 0.95, 'sine', 0.05);            // 低音：第 1 拍
-  bgmVoice(chord.bass, t0 + BEAT * 2, BEAT * 0.95, 'sine', 0.04); // 低音：第 3 拍
-  chord.pad.forEach(f => bgmVoice(f, t0, BEAT * 3.6, 'sine', 0.013)); // 垫音铺满小节
-  for (const [beat, freq, dur] of MELODY[idx % MELODY.length]) {
-    bgmVoice(freq, t0 + beat * BEAT, dur * BEAT * 0.92, 'triangle', 0.055); // 主旋律：三角波像木琴
+  bgmVoice(chord.bass * tf, t0, beat * 0.95, 'sine', 0.05);            // 低音：第 1 拍
+  bgmVoice(chord.bass * tf, t0 + beat * 2, beat * 0.95, 'sine', 0.04); // 低音：第 3 拍
+  chord.pad.forEach(f => bgmVoice(f * tf, t0, beat * 3.6, 'sine', 0.013)); // 垫音铺满小节
+  for (const [b, freq, dur] of MELODY[idx % MELODY.length]) {
+    bgmVoice(freq * tf, t0 + b * beat, dur * beat * 0.92, 'triangle', 0.055); // 主旋律：三角波像木琴
   }
 }
 

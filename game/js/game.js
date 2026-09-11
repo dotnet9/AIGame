@@ -1172,8 +1172,8 @@ export class Game {
       save.hatch(word.id);
       save.addPoint();
       ui.updatePlayerScore(save.getScore(), save.getSessionScore());
-      // 星星奖励：读得越准赚得越多（95+ 得 2 颗，80+ 得 1 颗）
-      const earned = score >= 95 ? 2 : 1;
+      // 星星奖励：读得越准赚得越多（95+ 得 2 颗，80+ 得 1 颗）；FEVER 连击期间翻倍
+      const earned = (score >= 95 ? 2 : 1) * (ui.isFever() ? 2 : 1);
       save.addStars(earned);
       ui.updateStars(save.getStars());
       if (save.bumpDaily('hatch2') === 'done') this._afterDaily();
@@ -1353,7 +1353,7 @@ export class Game {
           save.feed(id);
           save.addPoint();
           ui.updatePlayerScore(save.getScore(), save.getSessionScore());
-          save.addStars(1);
+          save.addStars(ui.isFever() ? 2 : 1);
           ui.updateStars(save.getStars());
           if (save.bumpDaily('feed2') === 'done') this._afterDaily();
           this.pets.setHungry(id, false);
@@ -1430,8 +1430,8 @@ export class Game {
     if (gate.need.includes(id)) {
       const tries = this.gateTries[gate.id] || 0;
       if (tries === 0 && gate.id !== 'boat') {
-        // 一次答对：聪明星奖励（第一个 boat 机关是必经教学关，不算）
-        save.addStars(3);
+        // 一次答对：聪明星奖励（第一个 boat 机关是必经教学关，不算）；FEVER 期间翻倍
+        save.addStars(ui.isFever() ? 6 : 3);
         ui.updateStars(save.getStars());
         setTimeout(() => ui.toast('🌟 一次就答对！聪明星 +3⭐', 2800), 200);
         this._starBurst(pet.group.position.clone().add(new THREE.Vector3(0, 1, 0)), 3);
