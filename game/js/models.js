@@ -1456,9 +1456,9 @@ export function buildPlayer(gender = 'boy', wear = {}) {
   const armL = G(), armR = G();
   armL.position.set(-0.15, 0.2, 0); armR.position.set(0.15, 0.2, 0);
   for (const arm of [armL, armR]) {
-    cap(arm, 0.03, 0.1, skin, 0, -0.09, 0);
-    sph(arm, 0.042, skin, 0, -0.17, 0);
-    sph(arm, 0.052, clothes, 0, -0.015, 0, 1.1, 0.6, 1.1);
+    cap(arm, 0.036, 0.11, clothes, 0, -0.095, 0);
+    cap(arm, 0.033, 0.06, skin, 0, -0.155, 0);
+    sph(arm, 0.058, skin, 0, -0.195, 0.012);   // 小手：加大到能看见，微微朝前
   }
   body.add(armL, armR);
   // 头
