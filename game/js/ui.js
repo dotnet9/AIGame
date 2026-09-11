@@ -602,11 +602,11 @@ els.modalClose.addEventListener('click', () => { sfx.pop(); closeChallenge(); })
 export function openPicker(list, onPick, onClose, opts = {}) {
   els.pickerTitle.textContent = opts.title || '召唤一只词宠来帮忙：';
   els.pickerGrid.innerHTML = '';
+  const lazy = [];
   for (const p of list) {
     const chip = document.createElement('div');
     chip.className = 'pick-chip';
     const img = document.createElement('img');
-    img.src = p.thumb;
     const n = document.createElement('span');
     n.className = 'n'; n.textContent = p.en;
     const z = document.createElement('span');
@@ -614,48 +614,102 @@ export function openPicker(list, onPick, onClose, opts = {}) {
     chip.append(img, n, z);
     chip.addEventListener('click', () => { sfx.pop(); els.picker.classList.add('hidden'); onPick(p.id); });
     els.pickerGrid.appendChild(chip);
+    lazy.push({ img, thumb: p.thumb });
   }
+  // 缩略图按时间预算分帧补上（全收集后召唤盘可能有几百只）
+  let i = 0;
+  const fillNext = () => {
+    if (!els.pickerGrid.isConnected || els.picker.classList.contains('hidden')) return;
+    const t0 = performance.now();
+    while (i < lazy.length && performance.now() - t0 < 24) {
+      const { img, thumb } = lazy[i++];
+      try { img.src = typeof thumb === 'function' ? thumb() : thumb; } catch (e) { /* ignore */ }
+    }
+    if (i < lazy.length) requestAnimationFrame(fillNext);
+  };
+  requestAnimationFrame(fillNext);
   els.picker.classList.remove('hidden');
   els.picker.onclose = onClose;
 }
 els.pickerClose.addEventListener('click', () => els.picker.classList.add('hidden'));
 
 // ---------- 图鉴 ----------
-export function openCatalog(entries) {
-  // entries: [{word, hatched, hungry, thumb}]
+export function openCatalog(entries, getThumb) {
   els.catalogGrid.innerHTML = '';
+  const lazyThumbs = [];   // 缩略图分帧生成：全收集 932 只，一次全画会把页面卡死
   for (const e of entries) {
     const d = document.createElement('div');
     d.className = 'cat-item ' + (e.hatched ? 'open' : 'locked') + (e.hungry ? ' hungry' : '');
     if (e.hatched) {
-      d.innerHTML = `<div class="ico"><img src="${e.thumb}" alt=""></div>
+      d.innerHTML = `<div class="ico"><span class="ico-ph">🐾</span></div>
         <div class="en">${e.word.en}</div><div class="zh">${e.word.zh}</div>`;
       d.title = e.word.story;
       d.addEventListener('click', () => {
         toast(`「${e.word.en}」${e.word.zh} —— ${e.word.story}`, 4200);
         speak(e.word.en);
       });
+      lazyThumbs.push({ d, w: e.word });
     } else {
       d.innerHTML = `<div class="ico">❓</div><div class="en">？？？</div><div class="zh">还没发现</div>`;
       d.title = '去岛上找找发光的词宠蛋吧！';
     }
     els.catalogGrid.appendChild(d);
   }
+  // 按时间预算分帧生成（每帧最多 24ms），不阻塞滚动
+  let i = 0;
+  const fillNext = () => {
+    const grid = els.catalogGrid;
+    if (!grid.isConnected) return;   // 图鉴已关闭
+    const t0 = performance.now();
+    while (i < lazyThumbs.length && performance.now() - t0 < 24) {
+      const { d, w } = lazyThumbs[i++];
+      const ico = d.querySelector('.ico');
+      if (ico && getThumb) {
+        try {
+          const url = getThumb(w);
+          if (url) ico.innerHTML = `<img src="${url}" alt="">`;
+        } catch (e) { /* 单张失败不影响其余 */ }
+      }
+    }
+    if (i < lazyThumbs.length) requestAnimationFrame(fillNext);
+  };
+  requestAnimationFrame(fillNext);
   els.catalog.classList.remove('hidden');
 }
 els.catalogClose.addEventListener('click', () => els.catalog.classList.add('hidden'));
+
+// ---------- 小火车站 ----------
+export function openStation(list, onPick) {
+  els.pickerTitle.textContent = '🚂 小火车要开去哪座岛？';
+  els.pickerGrid.innerHTML = '';
+  for (const isl of list) {
+    const chip = document.createElement('div');
+    chip.className = 'pick-chip station-chip' + (isl.unlocked ? '' : ' locked');
+    const img = document.createElement('span');
+    img.className = 'st-emoji';
+    img.textContent = isl.emoji;
+    const n = document.createElement('span');
+    n.className = 'n'; n.textContent = isl.name;
+    const z = document.createElement('span');
+    z.className = 'z'; z.textContent = isl.unlocked ? '已开放' : `🔒 ${isl.need}`;
+    chip.append(img, n, z);
+    if (isl.unlocked) chip.addEventListener('click', () => { sfx.pop(); els.picker.classList.add('hidden'); onPick(isl.key); });
+    els.pickerGrid.appendChild(chip);
+  }
+  els.picker.classList.remove('hidden');
+}
 
 // ---------- 农场地图 ----------
 export function openMap(data) {
   const cv = els.mapCanvas, c = cv.getContext('2d');
   const W = cv.width, H = cv.height;
-  const scale = W / 128;                       // 世界 ±64 都画进来（含海滩与森林）
+  const scale = W / 420;                       // 世界 ±210 都画进来（主岛 + 内圈主题岛 + 中圈短语岛 + 外圈拓展岛）
   const X = x => W / 2 + x * scale, Z = z => H / 2 + z * scale;
   c.clearRect(0, 0, W, H);
   // 大海
   c.fillStyle = '#8FCDE8';
   c.beginPath(); c.roundRect(0, 0, W, H, 16); c.fill();
-  // 岛屿
+  // 主岛
   c.fillStyle = '#BFE8AC';
   c.beginPath(); c.arc(X(0), Z(0), 52 * scale, 0, Math.PI * 2); c.fill();
   // 海滩沙子（南）
@@ -675,50 +729,55 @@ export function openMap(data) {
   if (!data.gates || !data.gates.sandWall) {
     c.fillStyle = '#C9A46B';
     c.fillRect(X(-32), Z(37.6), 64 * scale, 1.6 * scale);
-    c.font = '13px sans-serif'; c.textAlign = 'center';
-    c.fillText('🧱', X(0), Z(38.6) + 4);
   }
   if (!data.gates || !data.gates.vines) {
     c.fillStyle = '#3E7A44';
     c.fillRect(X(-38.8), Z(4.5), 1.6 * scale, 29 * scale);
     c.fillRect(X(-38.8), Z(-33.5), 1.6 * scale, 29 * scale);
-    c.font = '13px sans-serif'; c.textAlign = 'center';
-    c.fillText('🌿', X(-38), Z(12) + 4);
   }
+  // 群岛
+  for (const isl of data.islands || []) {
+    c.fillStyle = isl.unlocked ? '#D8F0C8' : '#D8DDE4';
+    c.beginPath(); c.arc(X(isl.cx), Z(isl.cz), isl.r * scale, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = isl.unlocked ? '#5CA85C' : '#B9AC9E';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.font = '13px sans-serif';
+    c.textAlign = 'center';
+    c.fillText(isl.emoji, X(isl.cx), Z(isl.cz) - isl.r * scale + 14);
+    c.fillStyle = isl.unlocked ? '#3E6B36' : '#8C8478';
+    c.font = 'bold 10px "Microsoft YaHei"';
+    c.fillText(isl.name.replace('岛', '').replace('大陆', ''), X(isl.cx), Z(isl.cz) + isl.r * scale - 3);
+  }
+  // 火车站
+  c.font = '12px sans-serif';
+  c.fillText('🚂', X(-9), Z(9.6) + 4);
   // 区域
   for (const zn of data.zones) {
     const x = X(zn.x1), y = Z(zn.z1), w = (zn.x2 - zn.x1) * scale, h = (zn.z2 - zn.z1) * scale;
     c.strokeStyle = zn.discovered ? '#5CA85C' : '#B9AC9E';
-    c.lineWidth = 2;
-    c.setLineDash(zn.discovered ? [] : [6, 5]);
-    c.fillStyle = zn.discovered ? 'rgba(255,255,255,.42)' : 'rgba(255,255,255,.22)';
-    c.beginPath(); c.roundRect(x, y, w, h, 10); c.fill(); c.stroke();
+    c.lineWidth = 1.5;
+    c.setLineDash(zn.discovered ? [] : [5, 4]);
+    c.fillStyle = zn.discovered ? 'rgba(255,255,255,.32)' : 'rgba(255,255,255,.18)';
+    c.beginPath(); c.roundRect(x, y, w, h, 8); c.fill(); c.stroke();
     c.setLineDash([]);
     c.fillStyle = zn.discovered ? '#3E6B36' : '#B9AC9E';
-    c.font = 'bold 12px "Microsoft YaHei"';
+    c.font = 'bold 11px "Microsoft YaHei"';
     c.textAlign = 'center';
-    c.fillText((zn.discovered ? zn.name : '？？？') + (zn.locked ? ' 🔒' : ''), x + w / 2, y + h / 2 - 4);
-    // 只显示当前关卡在该区域的蛋（没有就不显示，别写 0/0）
-    if (zn.discovered && zn.total > 0) {
-      c.font = '11px "Microsoft YaHei"';
-      c.fillText(`词宠蛋 ${zn.total - zn.hatched}/${zn.total}`, x + w / 2, y + h / 2 + 12);
-    } else if (zn.discovered) {
-      c.font = '11px "Microsoft YaHei"';
-      c.fillText('本关没有蛋', x + w / 2, y + h / 2 + 12);
-    }
+    c.fillText((zn.discovered ? zn.name : '？？？') + (zn.locked ? ' 🔒' : ''), x + w / 2, y + h / 2 - 3);
   }
   // 蛋点
   for (const e of data.eggs) {
     c.beginPath();
     c.fillStyle = e.golden ? '#FFC94E' : '#FF9FB6';
-    c.arc(X(e.x), Z(e.z), 3.4, 0, Math.PI * 2);
+    c.arc(X(e.x), Z(e.z), 3, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke();
   }
   // 玩家
   c.beginPath();
   c.fillStyle = '#4A90D9';
-  c.arc(X(data.player.x), Z(data.player.z), 5.5, 0, Math.PI * 2);
+  c.arc(X(data.player.x), Z(data.player.z), 5, 0, Math.PI * 2);
   c.fill();
   c.lineWidth = 2.5; c.strokeStyle = '#fff'; c.stroke();
   // 标题带上当前关卡

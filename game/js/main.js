@@ -4,9 +4,16 @@ import { Game } from './game.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
 import { CURRICULUM } from './curriculum.js';
+import { AUTO_SPECS, WORDS } from './words.js';
+import { setAutoSpecs, buildPet, petThumbnail } from './models.js';
+
+setAutoSpecs(AUTO_SPECS); // 海岛词宠的参数化模型配方
 
 window.THREE = THREE; // 调试句柄
 window.__save = save; // 调试句柄
+window.__words = WORDS; // 调试句柄
+window.__buildPet = buildPet; // 调试句柄
+window.__petThumb = petThumbnail; // 调试句柄
 
 const canvas = document.getElementById('scene');
 

@@ -186,6 +186,12 @@
 <!-- 喝彩大字：弹窗之外的屏幕层，飘起后消失 -->
 <div id="cheer"><span id="cheer-emoji">🌟</span><span id="cheer-word">PERFECT!</span></div>
 
+<script>
+// 早期错误捕获：模块加载失败也能留下线索（调试用）
+window.__errLog = [];
+addEventListener('error', e => window.__errLog.push((e.message || 'error') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0)));
+addEventListener('unhandledrejection', e => window.__errLog.push('rejection: ' + String(e.reason && e.reason.message || e.reason)));
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

@@ -386,6 +386,10 @@ body {
 .pick-chip img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #EAF7DC; }
 .pick-chip .n { color: #3E6B36; font-weight: bold; font-size: 16px; }
 .pick-chip .z { color: #8FAF83; font-size: 12px; }
+.station-chip { min-width: 150px; justify-content: center; }
+.station-chip.locked { opacity: .55; cursor: not-allowed; background: #F4F0EC; border-color: #E5DDD4; }
+.station-chip.locked .n { color: #9C8C7A; }
+.st-emoji { font-size: 26px; width: 40px; text-align: center; }
 #picker-close { position: absolute; top: 14px; right: 14px; }
 
 /* ---------- 图鉴 ---------- */
@@ -399,6 +403,7 @@ body {
 .cat-item.locked { background: #F4F0EC; border-color: #E5DDD4; color: #B9AC9E; }
 .cat-item.open { background: #FFF4F8; border-color: #FFC9DD; }
 .cat-item .ico { font-size: 34px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.cat-item .ico .ico-ph { opacity: .4; font-size: 26px; }
 .cat-item.open .ico img { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; }
 .cat-item .en { font-weight: 900; font-size: 15px; margin-top: 4px; }
 .cat-item.open .en { color: #5A4632; }

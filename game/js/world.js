@@ -1,12 +1,27 @@
-// 农场岛屿世界搭建：地形彩绘、河流、果园、风车田、谷仓、菜园、天空岛、阳光海滩、神秘森林
+// 农场岛屿世界搭建：地形彩绘、河流、果园、风车田、谷仓、菜园、天空岛、阳光海滩、神秘森林、环形群岛
 import * as THREE from 'three';
-import { PROPS } from './models.js';
+import { PROPS, badge } from './models.js';
+import { ISLANDS } from './words.js';
 
 const M = (color, o = {}) => new THREE.MeshStandardMaterial({
   color, roughness: o.rough ?? 0.9, metalness: 0,
   emissive: o.emissive ?? 0x000000, emissiveIntensity: o.ei ?? 1,
   transparent: !!o.alpha, opacity: o.alpha ?? 1, side: o.side ?? THREE.FrontSide,
 });
+
+// 简易几何辅助（火车站等小构筑物用）
+const box = (g, w, h, d, c, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c));
+  m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
+};
+const cyl = (g, rt, rb, h, c, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, seg = 12) => {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), M(c));
+  m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
+};
+const cone = (g, r, h, c, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, seg = 12) => {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.001, r, h, seg), M(c));
+  m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
+};
 
 // 岛屿半径（可玩范围）， 海从 52 以外开始
 const ISLE_R = 52;
@@ -177,7 +192,7 @@ export function buildWorld(scene) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(140, 24, 16),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }));
   scene.add(dome);
-  scene.fog = new THREE.Fog(0xDFF3EC, 42, 115);
+  scene.fog = new THREE.Fog(0xDFF3EC, 42, 150);
 
   // ---- 太阳（亮核 + 光晕） ----
   const sunDir = new THREE.Vector3(18, 30, 12).normalize();
@@ -208,9 +223,9 @@ export function buildWorld(scene) {
   sun.shadow.bias = -0.0004;
   scene.add(sun);
 
-  // ---- 大海（全岛外圈） ----
+  // ---- 大海（全岛外圈 + 群岛） ----
   const seaMat = M('#4A9ED9', { rough: 0.32 });
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(300, 300).rotateX(-Math.PI / 2), seaMat);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(420, 420).rotateX(-Math.PI / 2), seaMat);
   sea.position.y = -0.14;
   scene.add(sea);
   world.anim.sea = sea;
@@ -540,6 +555,76 @@ export function buildWorld(scene) {
       place(scene, PROPS.rock(2.4), x, z);
       colC(x, z, 2.2);
     }
+  }
+
+  // ---- 群岛：52 座海岛（16 座主题岛 + 8 座短语岛 + 28 座教材拓展岛，小火车往返） ----
+  world.islands = [];
+  for (const isl of ISLANDS) {
+    const { cx, cz, r, color, key } = isl;
+    const grp = new THREE.Group();
+    // 岛身：草顶 + 岩底
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 6, 26),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#9CCF8C'), 0.55), roughness: 0.95 }));
+    top.position.y = -3;
+    top.receiveShadow = true;
+    const rock = new THREE.Mesh(new THREE.ConeGeometry(r * 0.92, r * 0.9, 26), M('#A8825B'));
+    rock.rotation.x = Math.PI;
+    rock.position.y = -6 - r * 0.45;
+    grp.add(top, rock);
+    // 岛边浪花圈
+    const surf2 = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r + 0.7, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.4, depthWrite: false }));
+    surf2.position.y = 0.03;
+    grp.add(surf2);
+    world.anim.islandSurf = world.anim.islandSurf || [];
+    world.anim.islandSurf.push(surf2);
+    // 岛上装饰
+    const decoSpots = [];
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI * 2 * i / 7 + (r % 3);
+      decoSpots.push([cx + Math.cos(a) * (r - 3), cz + Math.sin(a) * (r - 3)]);
+    }
+    for (const [x, z] of decoSpots) {
+      let obj = null;
+      if (isl.style === 'pine') obj = PROPS.pine(0.9 + Math.random() * 0.4);
+      else if (isl.style === 'house') obj = PROPS.bush(0.9 + Math.random() * 0.4);
+      else obj = PROPS.tree(false);
+      place(scene, obj, x, z, Math.random() * 3);
+      colC(x, z, 0.55);
+    }
+    // 返回台：发光圆环 + 小信标
+    const pad = new THREE.Group();
+    const ringP = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.5, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xFFC94E, transparent: true, opacity: 0.65, depthWrite: false }));
+    ringP.position.y = 0.04;
+    const beacon = new THREE.Mesh(new THREE.OctahedronGeometry(0.28),
+      M('#FFD34E', { emissive: '#FFC94E', ei: 0.7 }));
+    beacon.position.y = 1.1;
+    pad.add(ringP, beacon);
+    pad.position.set(cx, 0, cz - 2.5);
+    scene.add(pad);
+    world.anim.islandPads = world.anim.islandPads || [];
+    world.anim.islandPads.push({ ring: ringP, beacon });
+    colC(cx, cz - 2.5, 0.8);
+    grp.position.set(cx, 0, cz);
+    scene.add(grp);
+    world.islands.push({ ...isl, pad: { x: cx, z: cz - 2.5 } });
+  }
+
+  // ---- 小火车站（主岛，去群岛的入口） ----
+  {
+    const st = new THREE.Group();
+    box(st, 2.6, 0.12, 1.4, '#C8A85C', 0, 0.3, 0);                 // 站台
+    for (const sx of [-1, 1]) box(st, 0.1, 0.3, 1.4, '#A8863C', 1.3 * sx, 0.15, 0);
+    for (const sx of [-1, 1]) cyl(st, 0.05, 0.06, 1.3, '#8A6844', 1.15 * sx, 0.85, -0.5);
+    cone(st, 1.7, 0.6, '#D95F4B', 0, 1.75, -0.5, 0, Math.PI / 4, 0, 4); // 尖顶雨棚
+    box(st, 1.4, 0.5, 0.08, '#FFFDF4', 0, 1.35, 0.55);             // 站牌
+    badge(st, '🚂', 1.36, 0.16);
+    st.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    st.position.set(-9, 0, 8);
+    scene.add(st);
+    colR(-10.2, 7.4, -7.8, 8.6);
+    world.gates.station = { group: st, pos: { x: -9, z: 9.6 } };
   }
 
   // ---- 装饰散布 ----

@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { WORDS, WORD_MAP, TOTAL, ZONE_NAMES, CHAPTERS, PER_CHAPTER, chapterIndex } from './words.js';
+import { WORDS, WORD_MAP, TOTAL, ZONE_NAMES, CHAPTERS, PER_CHAPTER, chapterIndex, ISLANDS } from './words.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -447,7 +447,7 @@ export class Game {
     this._updateZoneHint(dt);
     this._updateFx(dt);
     this.eggs.update(dt, t);
-    this.pets.update(dt, t);
+    this.pets.update(dt, t, this.player.position);
     this._updatePrompt();
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
@@ -456,11 +456,18 @@ export class Game {
   // ================= 指引系统 =================
   _zoneAt(p) {
     if (this.onIsle) return 'sky';
+    const isl = this._islandAt(p);
+    if (isl) return isl.key;
     if (p.x > 20.9 && p.x < 27.1 && p.z > 19.3 && p.z < 24.7) return 'barn';
     for (const zr of ZONE_RECTS) {
       if (p.x >= zr.x1 && p.x <= zr.x2 && p.z >= zr.z1 && p.z <= zr.z2) return zr.key;
     }
     return 'meadow';
+  }
+
+  // 玩家脚下是哪块陆地：海岛（含名字）或主岛（null）
+  _islandAt(p) {
+    return ISLANDS.find(isl => Math.hypot(p.x - isl.cx, p.z - isl.cz) <= isl.r + 1) || null;
   }
 
   _reachableZone(zone) {
@@ -469,6 +476,8 @@ export class Game {
     if (zone === 'sky') return save.hasGate('beanstalk');
     if (zone === 'beach') return save.hasGate('sandWall');
     if (zone === 'forest') return save.hasGate('vines');
+    const isl = ISLANDS.find(i => i.key === zone);
+    if (isl) return chapterIndex(save.hatchedCount()) >= isl.startChapter;
     return true;
   }
 
@@ -544,6 +553,20 @@ export class Game {
     const cur = CHAPTERS[chIdx].words;
     const left = cur.filter(id => !save.isHatched(id)).length;
     const e = this._nearestReachableEgg();
+    if (e) {
+      // 蛋在海岛上而人不在岛上：指引去坐小火车 / 回主岛
+      const isl = ISLANDS.find(i => i.key === e.word.zone);
+      const here = this._islandAt(this.player.position);
+      if (isl && (!here || here.key !== isl.key)) {
+        const onMain = !here;
+        return {
+          text: onMain
+            ? `🚂 坐小火车去「${isl.name}」！那里的蛋在等你`
+            : `🚂 先回阳光农场，再坐小火车去「${isl.name}」`,
+          target: onMain ? { x: -9, z: 9.6 } : { x: here.cx, z: here.cz - 2.5 },
+        };
+      }
+    }
     return {
       text: `第 ${chIdx + 1} 关「${CHAPTERS[chIdx].name}」：还剩 ${left} 个单词就通关！（共 ${total}/${TOTAL}）`,
       target: e ? e.group.position : null,
@@ -615,9 +638,14 @@ export class Game {
     const eggs = [...this.eggs.eggs.values()].map(e => ({
       x: e.group.position.x, z: e.group.position.z, golden: e.golden,
     }));
+    const cur = chapterIndex(save.hatchedCount());
+    const islands = ISLANDS.map(isl => ({
+      key: isl.key, name: isl.name, emoji: isl.emoji, cx: isl.cx, cz: isl.cz, r: isl.r,
+      unlocked: cur >= isl.startChapter,
+    }));
     ui.openMap({
       player: { x: this.player.position.x, z: this.player.position.z },
-      zones, eggs,
+      zones, eggs, islands,
       gates: { sandWall: save.hasGate('sandWall'), vines: save.hasGate('vines') },
       chapterLabel: `第${chIdx + 1}关 · ${CHAPTERS[chIdx].name}`,
     });
@@ -750,9 +778,21 @@ export class Game {
   _collide() {
     const p = this.player.position;
     const R = 0.42;
-    // 世界边界：岛边是大海
-    const dc = Math.hypot(p.x, p.z);
-    if (dc > WORLD_R && !this.onIsle) { p.x *= WORLD_R / dc; p.z *= WORLD_R / dc; }
+    // 世界边界：玩家只能待在陆地（主岛或某座海岛）上，海面过不去
+    const isl = this._islandAt(p);
+    if (!this.onIsle) {
+      if (isl) {
+        const dc = Math.hypot(p.x - isl.cx, p.z - isl.cz);
+        if (dc > isl.r - 0.4) {
+          const k = (isl.r - 0.4) / dc;
+          p.x = isl.cx + (p.x - isl.cx) * k;
+          p.z = isl.cz + (p.z - isl.cz) * k;
+        }
+      } else {
+        const dc = Math.hypot(p.x, p.z);
+        if (dc > WORLD_R) { p.x *= WORLD_R / dc; p.z *= WORLD_R / dc; }
+      }
+    }
     // 河流
     if (Math.abs(p.z) < 4.1) {
       const canCross = save.hasGate('boat') && Math.abs(p.x) < 2.0;
@@ -823,6 +863,11 @@ export class Game {
       a.surf.scale.set(s, 1, s);
     }
     for (const f of a.foam || []) f.material.opacity = 0.4 + Math.sin(t * 2.2 + f.position.z) * 0.2;
+    for (const s2 of a.islandSurf || []) s2.material.opacity = 0.28 + Math.sin(t * 1.6 + s2.position.x) * 0.14;
+    for (const pd of a.islandPads || []) {
+      pd.beacon.rotation.y = t * 1.5;
+      pd.beacon.position.y = 1.1 + Math.sin(t * 2.2 + pd.ring.position.x) * 0.15;
+    }
     if (a.petals) {
       const pos = a.petals.points.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
@@ -885,7 +930,7 @@ export class Game {
       const tw = this.tweens[i];
       tw.t += dt;
       const k = Math.min(1, tw.t / tw.dur);
-      tw.onUpdate(tw.ease ? tw.ease(k) : k);
+      tw.onUpdate(tw.ease ? tw.ease(k) : k, dt);
       if (k >= 1) { this.tweens.splice(i, 1); tw.onDone && tw.onDone(); }
     }
     for (let i = this.fx.length - 1; i >= 0; i--) {
@@ -937,6 +982,18 @@ export class Game {
     if (Math.hypot(p.x + 4.6, p.z - 19.5) < 2.6) {
       ui.showPrompt('看看今日任务', this.isTouch ? '👆' : 'E');
       this.promptAction = () => this._openDailyBoard();
+      return;
+    }
+    // 小火车站（主岛）与海岛返回台
+    if (!this._islandAt(p) && Math.hypot(p.x + 9, p.z - 9.6) < 2.8) {
+      ui.showPrompt('坐小火车去群岛', this.isTouch ? '👆' : 'E');
+      this.promptAction = () => this._openStation();
+      return;
+    }
+    const hereIsl = this._islandAt(p);
+    if (hereIsl && Math.hypot(p.x - hereIsl.cx, p.z - (hereIsl.cz - 2.5)) < 2.6) {
+      ui.showPrompt('坐小火车回阳光农场', this.isTouch ? '👆' : 'E');
+      this.promptAction = () => this._rideTrain(null);
       return;
     }
     // 谜题机关：读懂谜面，从召唤盘里挑出对的那只词宠
@@ -1292,7 +1349,7 @@ export class Game {
     gate = gate || this._activeGate();
     const list = this.pets.all().map(p => ({
       id: p.word.id, en: p.word.en, zh: p.word.zh,
-      thumb: petThumbnail(p.word.pet),
+      thumb: () => petThumbnail(p.word.pet),   // 懒生成：召唤盘可能有几百只，列表构建时同步画会卡死
     }));
     if (!list.length) { ui.toast('还没有词宠哦，先去孵化一颗词宠蛋吧！'); return; }
     this.pendingGate = gate;
@@ -1517,6 +1574,63 @@ export class Game {
     });
   }
 
+  // ---------- 小火车站 ----------
+  _openStation() {
+    const cur = chapterIndex(save.hatchedCount());
+    const list = ISLANDS.map(isl => ({
+      key: isl.key, name: isl.name, emoji: isl.emoji,
+      unlocked: cur >= isl.startChapter,
+      need: `第${isl.startChapter + 1}关解锁`,
+    }));
+    ui.openStation(list, key => {
+      const isl = ISLANDS.find(i => i.key === key);
+      if (isl) this._rideTrain(isl);
+    });
+    sfx.pop();
+  }
+
+  // 小火车：跨海飞行（弧线 + 星星尾迹）
+  _rideTrain(isl) {
+    if (this.riding || this.climbing) return;
+    this.riding = true;
+    this._clearMoveTarget();
+    const from = this.player.position.clone();
+    const to = isl
+      ? new THREE.Vector3(isl.cx, 0, isl.cz - 2.5)
+      : new THREE.Vector3(0, 0, 16);
+    const dist = from.distanceTo(to);
+    const dur = THREE.MathUtils.clamp(dist / 22, 1.6, 4);
+    sfx.magic();
+    ui.toast(isl ? `🚂 呜——开往「${isl.name}」的小火车出发啦！` : '🚂 呜——回到阳光农场啦！', 2600);
+    this.addTween(dur, (k, dt) => {
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      this.player.position.lerpVectors(from, to, e);
+      this.player.position.y = Math.sin(e * Math.PI) * Math.min(7, dist * 0.12) + 0.02;
+      this.player.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
+      this.walkT += dt * 14;
+      // 星星尾迹
+      if (Math.random() < 0.5) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: letterTexture('✦', '#FFE24E', '#FFFDF0'), transparent: true, depthWrite: false,
+        }));
+        s.position.copy(this.player.position).add(new THREE.Vector3((Math.random() - 0.5), -0.4, (Math.random() - 0.5)));
+        s.scale.setScalar(0.18);
+        this.scene.add(s);
+        this.fx.push({ obj: s, t: 0, dur: 0.6, update: (t, dt2) => { s.position.y -= dt2; s.material.opacity = 1 - t / 0.6; } });
+      }
+    }, () => {
+      this.riding = false;
+      this.player.position.copy(to);
+      this.player.position.y = 0;
+      this.onGround = true; this.vy = 0;
+      this.lastZone = null;  // 触发新区域提示
+      sfx.good();
+      if (save.addVisited(isl ? isl.key : 'meadow')) {
+        this._refreshDailyBanner && this._refreshDailyBanner();
+      }
+    });
+  }
+
   // ---------- 许愿井商店 ----------
   _openShop() {
     const wear = save.getWear();
@@ -1586,11 +1700,10 @@ export class Game {
       return {
         word: w, hatched,
         hungry: hatched && hungrySet.has(w.id),
-        thumb: hatched ? petThumbnail(w.pet) : null,
       };
     });
     if (hungryFirst) entries.sort((a, b) => (b.hungry ? 1 : 0) - (a.hungry ? 1 : 0));
-    ui.openCatalog(entries);
+    ui.openCatalog(entries, w => petThumbnail(w.pet));
   }
 
   _nearestEggHint() {

@@ -1,6 +1,6 @@
 // 词宠实体：蛋（待孵化）与词宠（已孵化，会溜达、会饿）
 import * as THREE from 'three';
-import { buildPet, addLetterTag, letterTexture, PET_COLORS } from './models.js';
+import { buildPet, addLetterTag, addPhraseTag, letterTexture, PET_COLORS } from './models.js';
 
 const M = (color, o = {}) => new THREE.MeshStandardMaterial({
   color, roughness: 0.75, emissive: o.emissive ?? 0x000000, emissiveIntensity: o.ei ?? 1,
@@ -28,10 +28,10 @@ export class EggManager {
       dot.scale.z = 0.4;
       g.add(dot);
     }
-    // 首字母提示牌
+    // 首字母提示牌（短语改用图标）
     const letter = new THREE.Mesh(
       new THREE.PlaneGeometry(0.3, 0.3),
-      new THREE.MeshBasicMaterial({ map: letterTexture(word.en[0], golden ? '#FFB93C' : '#FF8FB0'), transparent: true, side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ map: letterTexture(word.icon || word.en[0], golden ? '#FFB93C' : '#FF8FB0'), transparent: true, side: THREE.DoubleSide }));
     letter.position.set(0, 0.48, 0.32);
     g.add(letter);
     // 底座光圈
@@ -113,7 +113,8 @@ export class PetManager {
 
   spawn(word) {
     const g = buildPet(word.pet);
-    addLetterTag(g, word.en[0]);
+    if (word.phrase) addPhraseTag(g, word.en, word.icon);
+    else addLetterTag(g, word.en[0]);
     const [x, z] = word.pos;
     const baseY = word.zone === 'sky' ? 14 : 0;
     g.position.set(x, baseY, z);
@@ -192,14 +193,20 @@ export class PetManager {
     };
   }
 
-  update(dt, t) {
+  update(dt, t, playerPos) {
     for (let i = this.hearts.length - 1; i >= 0; i--) {
       const h = this.hearts[i];
       h.t += dt;
       if (h.t > 0) h.update(dt);
       if (h.t >= h.dur) { this.scene.remove(h.s); this.hearts.splice(i, 1); }
     }
+    const CULL_DIST = 70;   // 远处词宠隐藏（全收集后 932 只，不剔除会拖垮手机）
     for (const p of this.pets.values()) {
+      if (playerPos) {
+        const d = Math.hypot(p.group.position.x - playerPos.x, p.group.position.z - playerPos.z);
+        p.group.visible = d < CULL_DIST;
+        if (!p.group.visible) continue;
+      }
       p.t += dt;
       // 召唤飞行优先
       if (p.flying) {
