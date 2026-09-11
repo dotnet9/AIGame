@@ -1055,6 +1055,11 @@ export function openMap(data) {
       txt: zn.name, x: x + w / 2, y: y + h / 2 - 3 * k, col: '#3E6B36',
       font: `bold ${11 * k}px "Microsoft YaHei"`,
     });
+    // 区域唤醒进度：和主题岛一样标 hatched/total，孩子一眼知道哪里还有蛋没孵
+    if (zn.discovered && zn.total) znTexts.push({
+      txt: `${zn.hatched}/${zn.total}`, x: x + w / 2, y: y + h / 2 + 11 * k,
+      col: zn.hatched >= zn.total ? '#D9941E' : '#6E9E5E', font: `${10 * k}px "Microsoft YaHei"`,
+    });
     if (zn.locked) {
       c.font = `${9 * k}px sans-serif`;
       c.fillText('🔒', x + w - 7 * k, y + 9 * k);
