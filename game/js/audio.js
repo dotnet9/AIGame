@@ -205,6 +205,8 @@ function waitCheer(fn) {
 function tone(freq, t0, dur, type = 'sine', gain = 0.16) {
   const a = ctx();
   if (!a) return;
+  // 参数不合法直接忽略：音效只是点缀，绝不能在主循环里抛异常把渲染卡死
+  if (!Number.isFinite(freq + t0 + dur + gain)) return;
   const o = a.createOscillator();
   const g = a.createGain();
   o.type = type;
@@ -225,7 +227,7 @@ export const sfx = {
   crack() { tone(180, 0, 0.1, 'square', 0.08); tone(140, 0.08, 0.12, 'square', 0.06); },
   magic() { [660, 880, 1100, 1320].forEach((f, i) => tone(f, i * 0.07, 0.25, 'sine', 0.09)); },
   // 脚步：很轻的沙沙声，音高带一点随机免得像打拍子
-  step() { tone(140 + Math.random() * 70, 0.05, 'sine', 0.018); },
+  step() { tone(140 + Math.random() * 70, 0, 0.05, 'sine', 0.018); },
 };
 
 // ---------- 轻快背景音乐（WebAudio 程序化作曲，零下载） ----------
