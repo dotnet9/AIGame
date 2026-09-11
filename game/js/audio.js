@@ -291,7 +291,77 @@ const BGM_MOODS = {
 };
 let bgmMood = 'farm';
 // ui/游戏层在玩家跨区时调用；不打断曲子，下一小节起自然过渡
-export function setBgmMood(mood) { if (BGM_MOODS[mood] && mood !== bgmMood) bgmMood = mood; }
+export function setBgmMood(mood) {
+  if (!BGM_MOODS[mood] || mood === bgmMood) return;
+  bgmMood = mood;
+  if (bgmOn) ambientStart(bgmMood);   // 环境音跟着换
+}
+
+// ---------- 环境音景：跟着分区走，全部 WebAudio 合成，零素材 ----------
+// 海滩=海浪（滤过的白噪 + 慢起伏）、农场=偶发鸟鸣、森林=偶发虫鸣；音量都压得很低
+let ambGain = null;
+let ambCleanup = [];
+function ambTone(freq, dur, peak, type = 'sine', slide = 0) {
+  const a = ctx();
+  if (!a || !ambGain) return;
+  const t0 = a.currentTime + Math.random() * 0.05;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(ambGain);
+  o.start(t0);
+  o.stop(t0 + dur + 0.05);
+}
+function ambientStop() {
+  ambCleanup.forEach(f => { try { f(); } catch (e) { /* ignore */ } });
+  ambCleanup = [];
+  if (ambGain && ctx()) ambGain.gain.setTargetAtTime(0.0001, ctx().currentTime, 0.5);
+}
+function ambientStart(mood) {
+  const a = ctx();
+  if (!a) return;
+  ambientStop();
+  if (!ambGain) { ambGain = a.createGain(); ambGain.gain.value = 1; ambGain.connect(a.destination); }
+  ambGain.gain.cancelScheduledValues(a.currentTime);
+  ambGain.gain.setTargetAtTime(1, a.currentTime, 0.8);
+  if (mood === 'beach') {
+    // 海浪：白噪过低通，音量被 0.1Hz 的慢波推着起伏
+    const len = a.sampleRate * 2;
+    const buf = a.createBuffer(1, len, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = a.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const lp = a.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 420;
+    const g = a.createGain(); g.gain.value = 0.022;
+    const lfo = a.createOscillator(), lg = a.createGain();
+    lfo.frequency.value = 0.1; lg.gain.value = 0.016;
+    lfo.connect(lg).connect(g.gain);
+    src.connect(lp).connect(g).connect(ambGain);
+    src.start(); lfo.start();
+    ambCleanup.push(() => { src.stop(); lfo.stop(); src.disconnect(); lfo.disconnect(); });
+  } else if (mood === 'forest') {
+    // 虫鸣：随机间隔的一点高频轻响
+    const tick = () => ambTone(3000 + Math.random() * 800, 0.07, 0.006);
+    const timer = setInterval(() => { if (Math.random() < 0.7) tick(); }, 1600);
+    tick();
+    ambCleanup.push(() => clearInterval(timer));
+  } else {
+    // 农场鸟鸣：两声上扬的短哨
+    const bird = () => {
+      ambTone(2100, 0.09, 0.01, 'triangle', 2600);
+      setTimeout(() => ambTone(2400, 0.11, 0.009, 'triangle', 2900), 140);
+    };
+    const timer = setInterval(() => { if (Math.random() < 0.5) bird(); }, 4200);
+    setTimeout(bird, 800);
+    ambCleanup.push(() => clearInterval(timer));
+  }
+}
 
 function bgmVoice(freq, t0, dur, type, peak) {
   const a = ctx();
@@ -345,12 +415,14 @@ function bgmRefresh() {
     bgmOn = true;
     bgmTimer = setInterval(bgmSchedule, 300);
     bgmSchedule();
+    ambientStart(bgmMood);
     bgmGain.gain.cancelScheduledValues(a.currentTime);
     bgmGain.gain.setTargetAtTime(1, a.currentTime, 0.6);   // 淡入
   } else if (!want && bgmOn) {
     bgmOn = false;
     clearInterval(bgmTimer);
     bgmTimer = null;
+    ambientStop();
     const a = ctx();
     if (a && bgmGain) {
       bgmGain.gain.cancelScheduledValues(a.currentTime);
