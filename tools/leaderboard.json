@@ -28,5 +28,10 @@
     "username": "爱学习",
     "score": 4,
     "gender": "boy"
+  },
+  {
+    "username": "萱子",
+    "score": 23,
+    "gender": "girl"
   }
 ]
