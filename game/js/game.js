@@ -428,6 +428,8 @@ export class Game {
       onMicEnd: () => this._stopVoice(),
       isTouch: this.isTouch,
     });
+    // PERFECT 庆祝的镜头微震（ui 层发事件，这里只管震）
+    addEventListener('wordpet:shake', () => { this.shakeT = 0.3; });
     // 位置存档：每 3 秒 + 离开页面时
     setInterval(() => this._savePosition(), 3000);
     addEventListener('pagehide', () => this._savePosition());
@@ -887,6 +889,13 @@ export class Game {
   }
 
   _updateCamera(dt) {
+    // PERFECT 时的镜头微震：幅度指数衰减，不干扰操作
+    if (this.shakeT > 0) {
+      this.shakeT = Math.max(0, this.shakeT - dt);
+      const k = this.shakeT * this.shakeT * 0.5;
+      this.camera.position.x += (Math.random() - 0.5) * k;
+      this.camera.position.y += (Math.random() - 0.5) * k * 0.6;
+    }
     const target = this.player.position;
     // 复用临时向量：相机每帧跑 60 次，不能每次都 new（GC 卡顿元凶）
     const v = this._cv = this._cv || new THREE.Vector3();
