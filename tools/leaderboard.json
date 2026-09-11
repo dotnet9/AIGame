@@ -1,7 +1,8 @@
 [
   {
     "username": "小雨",
-    "score": 1
+    "score": 2,
+    "gender": "boy"
   },
   {
     "username": "bugcome",
@@ -22,5 +23,10 @@
   {
     "username": "妍子",
     "score": 4
+  },
+  {
+    "username": "爱学习",
+    "score": 4,
+    "gender": "boy"
   }
 ]
