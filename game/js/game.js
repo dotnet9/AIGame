@@ -1169,39 +1169,61 @@ export class Game {
   _doHatch(word, score = 80) {
     setTimeout(() => {
       ui.closeChallenge();
-      save.hatch(word.id);
-      save.addPoint();
-      ui.updatePlayerScore(save.getScore(), save.getSessionScore());
-      // 星星奖励：读得越准赚得越多（95+ 得 2 颗，80+ 得 1 颗）；FEVER 连击期间翻倍
-      const earned = (score >= 95 ? 2 : 1) * (ui.isFever() ? 2 : 1);
-      save.addStars(earned);
-      ui.updateStars(save.getStars());
-      if (save.bumpDaily('hatch2') === 'done') this._afterDaily();
-      if (score >= 95 && save.bumpDaily('goodread') === 'done') this._afterDaily();
-      this.eggs.removeEgg(word.id);
-      const pet = this.pets.spawn(word);
-      pet.group.userData.wordId = word.id;
-      // 弹出动画 + 字母飞舞
-      pet.group.scale.setScalar(0.01);
-      this.addTween(0.9, k => {
-        const s = 1 + Math.sin(k * Math.PI) * 0.35;
-        pet.group.scale.setScalar(0.01 + (s - 0.01) * (1 - Math.pow(1 - k, 3)));
-      }, () => pet.group.scale.setScalar(1));
-      pet.jumping = true; pet.jt = 0;
-      this._letterBurst(pet.group.position.clone().add(new THREE.Vector3(0, 0.8, 0)), word.en);
-      sfx.magic();
-      ui.toast(`🎉 孵化成功！「${word.en}」${word.zh} 加入图鉴啦 +${earned}⭐`, 3400);
-      speak(word.en);
-      this._refreshHungry();
-      this._checkFirstHatchHint();
-      // 每唤醒 6 只词宠 = 通关：庆祝一下，放出下一关的蛋
-      const total = this.hatchedInScope();
-      if (total % PER_CHAPTER === 0 && total < this.total) {
-        setTimeout(() => this._chapterComplete(total / PER_CHAPTER), 1100);
-      } else if (total >= this.total) {
-        setTimeout(() => this._chapterComplete(this.chapters.length), 1100);
+      // 仪式感：蛋先越摇越小幅度地晃三下 → 咔嚓裂开 → 星星彩带庆祝 → 词宠蹦出来
+      const eggObj = this.eggs.eggs && this.eggs.eggs.get(word.id);
+      if (eggObj) {
+        const g = eggObj.group;
+        this.addTween(0.85, k => {
+          const a = Math.sin(k * Math.PI * 9) * (1 - k) * 0.24;
+          g.rotation.z = a;
+          g.rotation.x = a * 0.5;
+        }, () => { g.rotation.z = 0; g.rotation.x = 0; this._hatchReveal(word, score, eggObj); });
+      } else {
+        this._hatchReveal(word, score, null);
       }
     }, 280);
+  }
+
+  _hatchReveal(word, score, eggObj) {
+    save.hatch(word.id);
+    save.addPoint();
+    ui.updatePlayerScore(save.getScore(), save.getSessionScore());
+    // 星星奖励：读得越准赚得越多（95+ 得 2 颗，80+ 得 1 颗）；FEVER 连击期间翻倍
+    const earned = (score >= 95 ? 2 : 1) * (ui.isFever() ? 2 : 1);
+    save.addStars(earned);
+    ui.updateStars(save.getStars());
+    if (save.bumpDaily('hatch2') === 'done') this._afterDaily();
+    if (score >= 95 && save.bumpDaily('goodread') === 'done') this._afterDaily();
+    const golden = !!(eggObj && eggObj.golden);
+    const eggPos = eggObj ? eggObj.group.position.clone() : this.player.position.clone().add(new THREE.Vector3(0, 0.6, 0));
+    this.eggs.removeEgg(word.id);
+    const pet = this.pets.spawn(word);
+    pet.group.userData.wordId = word.id;
+    // 弹出动画 + 字母飞舞
+    pet.group.scale.setScalar(0.01);
+    this.addTween(0.9, k => {
+      const s = 1 + Math.sin(k * Math.PI) * 0.35;
+      pet.group.scale.setScalar(0.01 + (s - 0.01) * (1 - Math.pow(1 - k, 3)));
+    }, () => pet.group.scale.setScalar(1));
+    pet.jumping = true; pet.jt = 0;
+    this._letterBurst(pet.group.position.clone().add(new THREE.Vector3(0, 0.8, 0)), word.en);
+    this._starBurst(eggPos.add(new THREE.Vector3(0, 1.2, 0)), golden ? 10 : 6);
+    sfx.crack();
+    setTimeout(() => sfx.magic(), 180);
+    // 屏幕层庆祝：彩带雨 + 震动，金蛋最华丽
+    ui.confettiBurst(golden ? 110 : 70);
+    ui.vibrate([20, 40, 20, 40, 60]);
+    ui.toast(`🎉 孵化成功！「${word.en}」${word.zh} 加入图鉴啦 +${earned}⭐${golden ? ' ✨金蛋孕育的稀有词宠！' : ''}`, 3400);
+    speak(word.en);
+    this._refreshHungry();
+    this._checkFirstHatchHint();
+    // 每唤醒 6 只词宠 = 通关：庆祝一下，放出下一关的蛋
+    const total = this.hatchedInScope();
+    if (total % PER_CHAPTER === 0 && total < this.total) {
+      setTimeout(() => this._chapterComplete(total / PER_CHAPTER), 1100);
+    } else if (total >= this.total) {
+      setTimeout(() => this._chapterComplete(this.chapters.length), 1100);
+    }
   }
 
   // 通关演出：庆祝 + 星星 + 新一关的蛋登场；本册集齐放烟花
