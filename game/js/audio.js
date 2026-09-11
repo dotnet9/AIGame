@@ -243,18 +243,16 @@ let bgmFever = false;    // FEVER 连击：升调 + 加速，下一小节起生�
 
 export function setBgmFever(on) { bgmFever = !!on; }
 
-// C 大调五声音阶（C D E G A）配 C→G→Am→F 和弦进行，旋律音落在任何和弦上都不刺耳
-const BPM = 96, BEAT = 60 / BPM, BAR = BEAT * 4;
-const N = { F2: 87.31, G2: 98.00, A2: 110.00, C3: 130.81, A3: 220.00, B3: 246.94, F3: 174.61,
-  C4: 261.63, D4: 293.66, E4: 329.63, G4: 392.00, A4: 440.00, C5: 523.25, D5: 587.33, E5: 659.26 };
-const CHORDS = [ // 每小节：低音根音 + 柔和垫音
+// 三种区域情绪：农场明亮轻快 / 海滩舒缓慵懒 / 森林低回神秘；换区在下一小节自然过渡
+const N = { E2: 82.41, F2: 87.31, G2: 98.00, A2: 110.00, C3: 130.81, G3: 196.00, A3: 220.00, B3: 246.94, F3: 174.61,
+  C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, C5: 523.25, D5: 587.33, E5: 659.26 };
+const CHORDS_FARM = [
   { bass: N.C3, pad: [N.C4, N.E4, N.G4] },
   { bass: N.G2, pad: [N.B3, N.D4, N.G4] },
   { bass: N.A2, pad: [N.A3, N.C4, N.E4] },
   { bass: N.F2, pad: [N.A3, N.C4, N.F3] },
 ];
-// 旋律：8 小节两个乐句，[第几拍, 频率, 时值(拍)]，第二句结尾扬上去再收回来
-const MELODY = [
+const MEL_FARM = [
   [[0, N.E4, 1], [1, N.G4, .5], [1.5, N.A4, .5], [2, N.G4, 1], [3, N.E4, 1]],
   [[0, N.D4, 1], [1, N.E4, .5], [1.5, N.D4, .5], [2, N.G4, 1], [3, N.D4, 1]],
   [[0, N.E4, 1], [1, N.G4, .5], [1.5, N.A4, .5], [2, N.C5, 1.5], [3.5, N.A4, .5]],
@@ -264,6 +262,36 @@ const MELODY = [
   [[0, N.C5, 1], [1, N.D5, 1], [2, N.E5, 1.5], [3.5, N.D5, .5]],
   [[0, N.C5, 1.5], [1.5, N.G4, 1], [2.5, N.A4, .5], [3, N.G4, 1]],
 ];
+const CHORDS_BEACH = [
+  { bass: N.F2, pad: [N.F3, N.A3, N.C4] },
+  { bass: N.C3, pad: [N.C4, N.E4, N.G4] },
+];
+const MEL_BEACH = [
+  [[0, N.F4, 1], [1, N.G4, .5], [1.5, N.A4, .5], [2, N.C5, 1.5], [3.5, N.A4, .5]],
+  [[0, N.G4, 1], [1, N.F4, 1], [2, N.C4, 1], [3, N.D4, 1]],
+  [[0, N.F4, .5], [.5, N.A4, .5], [1, N.C5, 1], [2, N.D5, 1], [3, N.C5, 1]],
+  [[0, N.A4, 1], [1, N.G4, 1], [2, N.F4, 2]],
+];
+const CHORDS_FOREST = [
+  { bass: N.A2, pad: [N.A3, N.C4, N.E4] },
+  { bass: N.E2, pad: [N.G3, N.B3, N.E4] },
+  { bass: N.F2, pad: [N.F3, N.A3, N.C4] },
+  { bass: N.A2, pad: [N.A3, N.C4, N.E4] },
+];
+const MEL_FOREST = [
+  [[0, N.A4, 1.5], [1.5, N.G4, .5], [2, N.E4, 2]],
+  [[0, N.E4, 1], [1, N.D4, 1], [2, N.C4, 1.5], [3.5, N.D4, .5]],
+  [[0, N.C4, 1], [1, N.A3, 1.5], [2.5, N.C4, .5], [3, N.D4, 1]],
+  [[0, N.E4, 1], [1, N.G4, 1], [2, N.A4, 2]],
+];
+const BGM_MOODS = {
+  farm:   { bpm: 96, vel: 1,   chords: CHORDS_FARM,   melody: MEL_FARM },
+  beach:  { bpm: 82, vel: .95, chords: CHORDS_BEACH,  melody: MEL_BEACH },
+  forest: { bpm: 70, vel: .8,  chords: CHORDS_FOREST, melody: MEL_FOREST },
+};
+let bgmMood = 'farm';
+// ui/游戏层在玩家跨区时调用；不打断曲子，下一小节起自然过渡
+export function setBgmMood(mood) { if (BGM_MOODS[mood] && mood !== bgmMood) bgmMood = mood; }
 
 function bgmVoice(freq, t0, dur, type, peak) {
   const a = ctx();
@@ -280,16 +308,18 @@ function bgmVoice(freq, t0, dur, type, peak) {
   o.stop(t0 + dur + 0.05);
 }
 
-function bgmScheduleBar(idx, t0) {
+function bgmScheduleBar(mood, idx, t0) {
+  const M = BGM_MOODS[mood];
   // FEVER 时整体升一个大二度、节奏快 8%，曲子瞬间“燃”起来
   const tf = bgmFever ? 1.1225 : 1;
-  const beat = BEAT * (bgmFever ? 0.92 : 1);
-  const chord = CHORDS[idx % CHORDS.length];
-  bgmVoice(chord.bass * tf, t0, beat * 0.95, 'sine', 0.05);            // 低音：第 1 拍
-  bgmVoice(chord.bass * tf, t0 + beat * 2, beat * 0.95, 'sine', 0.04); // 低音：第 3 拍
-  chord.pad.forEach(f => bgmVoice(f * tf, t0, beat * 3.6, 'sine', 0.013)); // 垫音铺满小节
-  for (const [b, freq, dur] of MELODY[idx % MELODY.length]) {
-    bgmVoice(freq * tf, t0 + b * beat, dur * beat * 0.92, 'triangle', 0.055); // 主旋律：三角波像木琴
+  const beat = (60 / M.bpm) * (bgmFever ? 0.92 : 1);
+  const v = M.vel;
+  const chord = M.chords[idx % M.chords.length];
+  bgmVoice(chord.bass * tf, t0, beat * 0.95, 'sine', 0.05 * v);            // 低音：第 1 拍
+  bgmVoice(chord.bass * tf, t0 + beat * 2, beat * 0.95, 'sine', 0.04 * v); // 低音：第 3 拍
+  chord.pad.forEach(f => bgmVoice(f * tf, t0, beat * 3.6, 'sine', 0.013 * v)); // 垫音铺满小节
+  for (const [b, freq, dur] of M.melody[idx % M.melody.length]) {
+    bgmVoice(freq * tf, t0 + b * beat, dur * beat * 0.92, 'triangle', 0.055 * v); // 主旋律：三角波像木琴
   }
 }
 
@@ -297,11 +327,12 @@ function bgmSchedule() {
   const a = ctx();
   if (!a) return;
   if (bgmNextBarTime < a.currentTime) bgmNextBarTime = a.currentTime + 0.1;
-  // 提前 1.2 秒把接下来的小节排进音频时钟，循环无缝
+  // 提前 1.2 秒把接下来的小节排进音频时钟，循环无缝；换区从下一小节生效
   while (bgmNextBarTime - a.currentTime < 1.2) {
-    bgmScheduleBar(bgmBar % MELODY.length, bgmNextBarTime);
+    const M = BGM_MOODS[bgmMood];
+    bgmScheduleBar(bgmMood, bgmBar % M.melody.length, bgmNextBarTime);
     bgmBar++;
-    bgmNextBarTime += BAR;
+    bgmNextBarTime += (60 / M.bpm) * 4;
   }
 }
 

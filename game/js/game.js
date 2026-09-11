@@ -11,7 +11,7 @@ import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
 import { startListening, stopListening, matchAlt, voiceSupported, isVoiceBroken, markVoiceBroken } from './speech.js';
-import { speak, sfx, stopSpeaking } from './audio.js';
+import { speak, sfx, stopSpeaking, setBgmMood } from './audio.js';
 import { ensureWhisper, recognizeBlob, preloadWhisper, loadPercent } from './whisper.js';
 import { CURRICULUM } from './curriculum.js';
 
@@ -642,6 +642,7 @@ export class Game {
     const z = this._zoneAt(this.player.position);
     if (z !== this.lastZone) {
       this.lastZone = z;
+      setBgmMood(z === 'beach' ? 'beach' : z === 'forest' ? 'forest' : 'farm'); // 分区音乐：换区下一小节自然过渡
       if (save.addVisited(z)) {
       const names = {
         meadow: '出生草甸 · 词宠蛋的家', orchard: '阳光果园 · 过河就能摘果子',
