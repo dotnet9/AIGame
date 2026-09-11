@@ -589,7 +589,7 @@ export function showProfile(onDone, profile = {}, options = {}) {
   let submitted = false;
   const busy = () => { start.disabled = true; start.textContent = '稍等…'; };
   const resume = () => { if (!editing) start.textContent = mode === 'login' ? '登录' : '出发去词宠岛'; };
-  const done = (semKey, password) => { ov.classList.add('hidden'); onDone && onDone(input.value.trim(), semKey, gender, password); };
+  const done = (semKey, password, serverScore) => { ov.classList.add('hidden'); onDone && onDone(input.value.trim(), semKey, gender, password, serverScore); };
   const fail = msg => { error.textContent = msg; submitted = false; start.disabled = false; resume(); };
   const submit = async () => {
     if (submitted) return;
@@ -613,18 +613,18 @@ export function showProfile(onDone, profile = {}, options = {}) {
           username: profile.username, password: profile.password,   // 用当前密码验证身份
           newUsername: name, newPassword: password,
         });
-        if (r.ok || noBackend(r)) return done(semKey, password);
+        if (r.ok || noBackend(r)) return done(semKey, password, r.data && r.data.score);
         return fail((r.data && r.data.error) || '保存失败，换个名字试试');
       }
       if (mode === 'register') {
         const r = await apiPost('/api/register', { username: name, password, gender });
-        if (r.ok || noBackend(r)) return done(semKey, password);
+        if (r.ok || noBackend(r)) return done(semKey, password, 0);
         return fail((r.data && r.data.error) || '注册失败，换一个名字试试');
       }
       const r = await apiPost('/api/login', { username: name, password });
       if (r.ok) {
         if (r.data && r.data.gender) gender = r.data.gender === 'girl' ? 'girl' : 'boy';
-        return done(semKey, password);
+        return done(semKey, password, r.data && r.data.score);   // 带回账号里的分数
       }
       if (noBackend(r)) return done(semKey, password);   // 离线也放行，本地存档继续用
       if (r.status === 404) {                            // 没这个名字 → 直接转注册，少点来回

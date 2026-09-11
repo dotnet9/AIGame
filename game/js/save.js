@@ -130,6 +130,13 @@ export function addPlaySeconds(s) { data.playSeconds += s; save(); }
 export function getUsername() { return data.profile.username || ''; }
 export function getScore() { return Number(data.profile.score) || 0; }
 export function getSessionScore() { return Number(data.profile.sessionScore) || 0; }
+// 登录时用服务端分数补上本机（换设备登录时本地是 0，但账号其实有分）；只升不降，避免抹掉离线攒的分
+export function syncScore(serverScore) {
+  const n = Number(serverScore);
+  if (!Number.isFinite(n) || n <= getScore()) return;
+  data.profile.score = Math.floor(n);
+  save();
+}
 export function setUsername(name) {
   data.profile.username = String(name || '').trim().slice(0, 20);
   save();

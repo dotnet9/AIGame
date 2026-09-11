@@ -27,7 +27,7 @@ window.addEventListener('error', e => {
 });
 
 let started = false;
-function begin(name, semKey, gender, password) {
+function begin(name, semKey, gender, password, serverScore) {
   if (started) return;
   started = true;
   try {
@@ -39,6 +39,7 @@ function begin(name, semKey, gender, password) {
       save.setPassword(password || '');   // 密码允许为空
       save.setRegistered(true);
     }
+    if (serverScore != null) save.syncScore(serverScore);   // 换设备登录时补上账号里的分数
     if (semKey) save.setBookSem(semKey);
     if (gender) save.setGender(gender);
     save.resetSessionScore();

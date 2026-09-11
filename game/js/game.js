@@ -400,10 +400,11 @@ export class Game {
       onHungryPill: () => this._openCatalog(true),
       onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
       onAbout: () => ui.showAbout(),
-      onAccount: () => ui.showProfile((name, semKey, gender, password) => {
+      onAccount: () => ui.showProfile((name, semKey, gender, password, serverScore) => {
         save.setUsername(name);
         save.setPassword(password || '');   // 允许清空/修改密码
         save.setRegistered(true);
+        if (serverScore != null) save.syncScore(serverScore);
         save.setBookSem(semKey);
         save.setGender(gender);
         save.resetSessionScore();
