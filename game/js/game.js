@@ -1103,7 +1103,7 @@ export class Game {
     ray.setFromCamera(ndc, this.camera);
     const targets = [];
     for (const eg of this.eggs.eggs.values()) targets.push(eg.group);
-    for (const pt of this.pets.all()) if (save.isHungry(pt.word.id)) targets.push(pt.group);
+    for (const pt of this.pets.all()) targets.push(pt.group);   // 饿的喂食，饱的摸头
     // 河中央的船也可以点：直接坐船过河（但它饿的时候优先喂它）
     const boat = this.pets.get('boat');
     if (boat && save.hasGate('boat') && !save.isHungry('boat')) targets.push(boat.group);
@@ -1119,6 +1119,16 @@ export class Game {
     }
     if (this.eggs.get(id)) { this._clearMoveTarget(); this._openEgg(id); }
     else if (save.isHungry(id)) { this._clearMoveTarget(); this._feedPet(id); }
+    else if (this.pets.get(id)) {
+      // 摸头：点吃饱了的词宠，它开心地跳一下、念出自己的名字（顺手就是一次复习）
+      this._clearMoveTarget();
+      const pet = this.pets.get(id);
+      pet.jumping = true; pet.jt = 0;
+      this._letterBurst(pet.group.position.clone().add(new THREE.Vector3(0, 1, 0)), '💗');
+      sfx.good();
+      const w = pet.word || WORD_MAP[id];
+      if (w) speak(w.en);
+    }
     else this._setMoveTarget(e);   // 点的是空地 → 走过去（手机轻点同理）
   }
 
