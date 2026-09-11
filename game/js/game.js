@@ -1595,6 +1595,20 @@ export class Game {
   _openSummon(gate = null) {
     if (ui.challengeOpen()) return;
     gate = gate || this._activeGate();
+    // 谜底的词宠还没孵出来时，召唤盘里注定没有答案——与其让孩子对着错误选项发呆，
+    // 不如直接告诉他谜底是什么、去哪片区域找蛋
+    if (gate) {
+      const missing = gate.need.filter(id => !save.isHatched(id));
+      if (missing.length) {
+        const names = missing.map(id => {
+          const w = WORD_MAP[id];
+          const where = ZONE_NAMES[w.zone] ? `（${ZONE_NAMES[w.zone]}那边有它的蛋）` : '';
+          return `「${w.en}」${w.zh}${where}`;
+        });
+        ui.toast(`💡 谜底的词宠还没孵出来呢：${names.join('、')}——找到那颗蛋，读出单词唤醒它再来召唤！`, 5600);
+        return;
+      }
+    }
     const list = this.pets.all().map(p => ({
       id: p.word.id, en: p.word.en, zh: p.word.zh,
       thumb: () => petThumbnail(p.word.pet),   // 懒生成：召唤盘可能有几百只，列表构建时同步画会卡死

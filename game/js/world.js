@@ -168,10 +168,15 @@ function glowTexture(inner = 'rgba(255,244,214,1)', outer = 'rgba(255,244,214,0)
 }
 
 export function buildWorld(scene, semIslands = ISLANDS) {
-  const world = { colliders: [], anim: {}, gates: {} };
+  const world = { colliders: [], anim: {}, gates: {}, platforms: [] };
   const C = world.colliders;
+  // 可站立物件：给碰撞体一个“台面高度”，跳得够高就能落上去站着（站得高看得远）
+  const colTop = (x, z, r, top) => {
+    C.push({ t: 'c', x, z, r, top });
+    world.platforms.push({ x, z, r, top });
+  };
   const colC = (x, z, r, top) => C.push(top ? { t: 'c', x, z, r, top } : { t: 'c', x, z, r });
-  const colR = (x1, z1, x2, z2) => C.push({ t: 'r', x1, z1, x2, z2 });
+  const colR = (x1, z1, x2, z2, top) => C.push(top ? { t: 'r', x1, z1, x2, z2, top } : { t: 'r', x1, z1, x2, z2 });
 
   // ---- 天空穹顶（渐变 + 更晴朗的蓝） ----
   const skyCv = document.createElement('canvas');
@@ -288,15 +293,15 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   place(scene, PROPS.dock(), 0, 0);
   for (const z of [5.8, -5.8]) place(scene, PROPS.flowerpatch(), (Math.random() - 0.5) * 6, z * 0.9 + Math.sign(z) * 1.5);
 
-  // ---- 栅栏（河岸两侧，留码头缺口，不可穿越） ----
+  // ---- 栅栏（河岸两侧，留码头缺口）：矮栏杆跳得过去，掉进河堤小条带也能再跳回来 ----
   // 面板必须转 90° 顺着岸线排：不转的话一块块立着像缺口，看着能钻过去其实撞墙
   for (const bank of [1, -1]) {
     for (let x = -34; x <= 34; x += 2.1) {
       if (x > -4.5 && x < 4.5) continue;
       place(scene, PROPS.fence(), x, bank * 6.2, Math.PI / 2);
     }
-    colR(-35, bank * 6.2 - 0.3, -4.5, bank * 6.2 + 0.3);
-    colR(4.5, bank * 6.2 - 0.3, 35, bank * 6.2 + 0.3);
+    colR(-35, bank * 6.2 - 0.3, -4.5, bank * 6.2 + 0.3, 0.8);
+    colR(4.5, bank * 6.2 - 0.3, 35, bank * 6.2 + 0.3, 0.8);
   }
 
   // ---- 树木点缀（草甸 & 果园） ----
@@ -351,7 +356,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     const p = PROPS.pumpkin();
     p.scale.setScalar(s);
     place(scene, p, x, z);
-    colC(x, z, 0.45 * s);
+    colTop(x, z, 0.45 * s, 0.55 * s);
   }
 
   // ---- 魔法菜园（seed+rain 长豆藤） ----
@@ -383,7 +388,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
 
   // ---- 村庄小广场：许愿井 + 任务板 + 向日葵 + 稻草人 + 风车花 ----
   const well = place(scene, PROPS.well(), 4.6, 19.5, -0.5);
-  colC(4.6, 19.5, 0.85);
+  colTop(4.6, 19.5, 0.85, 1.0);
   world.gates.well = well;
   const board = place(scene, PROPS.signboard(), -4.6, 19.5, 0.5);
   colC(-4.6, 19.5, 0.7);
@@ -401,7 +406,6 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     place(scene, PROPS.sunflower(), x, z, Math.random() * 3);
 
   // ---- 跳跳石（草甸东南的空地）：三级石阶跳上高台，台顶的蛋要跳上去才够得着 ----
-  world.platforms = [];
   {
     const perch = { x: 11.5, z: 27.2, r: 1.35, top: 2.75 };
     const steps = [
@@ -417,8 +421,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       stone.castShadow = true;
       stone.receiveShadow = true;
       scene.add(stone);
-      colC(s.x, s.z, s.r, s.top);   // 侧面也挡人，但站到台顶高度后不再挡
-      world.platforms.push(s);
+      colTop(s.x, s.z, s.r, s.top);   // 侧面也挡人，但站到台顶高度后不再挡
     }
     world.perch = perch;   // 每关会有一颗蛋放到台顶（见 game.js _spawnProgress）
   }
@@ -434,12 +437,12 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     colC(x, z, 0.35);
   }
   place(scene, PROPS.sandcastle(1.15), 16, 46.5, 0.5);
-  colC(16, 46.5, 1.15);
+  colTop(16, 46.5, 1.15, 1.5);
   place(scene, PROPS.sandcastle(0.8), -18, 47, 2.2);
-  colC(-18, 47, 0.8);
+  colTop(-18, 47, 0.8, 1.1);
   for (const [x, z, ry] of [[5, 42.5, 0.8], [-12, 49.5, 1.9]]) {
     place(scene, PROPS.log(0.9), x, z, ry);
-    colC(x, z, 0.5);
+    colTop(x, z, 0.5, 0.7);
   }
 
   // ---- 神秘森林（拨开荆棘后）：松树、灌木、蘑菇、萤火虫 ----
@@ -453,14 +456,14 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   }
   for (const [x, z] of [[-44, -2], [-48, 4], [-40, 6], [-46, 10], [-44, 19], [-40, -10]]) {
     place(scene, PROPS.bush(0.8 + Math.random() * 0.5), x, z, Math.random() * 3);
-    colC(x, z, 0.5);
+    colTop(x, z, 0.5, 0.9);
   }
   for (const [x, z, s] of [[-45, -6, 1], [-49, 9, 1.2], [-41, 13, 0.9], [-47, 17, 1.1], [-43, -12, 0.8]]) {
     place(scene, bigMushroom(s), x, z, Math.random() * 3);
-    colC(x, z, 0.28 * s);
+    colTop(x, z, 0.28 * s, 0.9 * s);
   }
   place(scene, PROPS.log(1.1), -45.5, 4.5, 0.4);
-  colC(-45.5, 4.5, 0.55);
+  colTop(-45.5, 4.5, 0.55, 0.8);
   // 萤火虫（神秘森林专属小灯）
   {
     const n = 42;
@@ -667,7 +670,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     st.traverse(o => { if (o.isMesh) o.castShadow = true; });
     st.position.set(-9, 0, 8);
     scene.add(st);
-    colR(-10.2, 7.4, -7.8, 8.6);
+    colR(-10.2, 7.4, -7.8, 8.6, 0.8);
     world.gates.station = { group: st, pos: { x: -9, z: 9.6 } };
   }
 
