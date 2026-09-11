@@ -416,12 +416,13 @@ function showScore(score, heard, opts = {}) {
   else if (score >= 95) msg = '🌟 完美发音！你就是单词小明星！';
   else if (score >= 85) msg = '太棒了！发音非常标准！';
   else if (score >= 80) msg = '合格啦！再练一次会更稳！';
-  else if (score >= 60) msg = '再试一次，达到 80 分就能过关哦！';
+  else if (score >= 70) msg = '过关啦！勇敢开口就是最棒的！';
+  else if (score >= 60) msg = '很接近啦！达到 70 分就能过关哦！';
   else if (heard) msg = `听到的是「${heard}」，勇敢再试一次！`;
   else msg = '没听清呢，大声一点点再试！';
   els.scoreMsg.textContent = msg;
-  els.scoreMsg.className = score >= 80 ? 'good' : 'bad';
-  els.scoreMsg.style.color = score >= 80 ? '#4E9A46' : '#D06A9C';
+  els.scoreMsg.className = score >= 70 ? 'good' : 'bad';
+  els.scoreMsg.style.color = score >= 70 ? '#4E9A46' : '#D06A9C';
   scoreVoice(score);   // 带情绪的英文喝彩（Perfect!/Great!/Cool!/…）
   // 完美时刻的庆祝：PERFECT 彩带雨 + 震动 + 镜头微震，85+ 小彩带；顺路维护 FEVER 连击
   if (score >= 95) { perfectStreak++; confettiBurst(80); vibrate([30, 50, 80]); dispatchEvent(new CustomEvent('wordpet:shake')); }
@@ -432,7 +433,7 @@ function showScore(score, heard, opts = {}) {
   else if (score >= 60) sfx.pop();
   else sfx.miss();
 
-  if (score >= 80) {
+  if (score >= 70) {
     // 过关就要爽快：1.4 秒内自动关卡，不让孩子干等
     setTimeout(() => {
       els.scorePanel.classList.add('hidden');
