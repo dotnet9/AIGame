@@ -1050,7 +1050,9 @@ export class Game {
     }
     // 水面呼吸：河水轻起伏、透明度微变，岛边浪花一圈涨落，海面缓慢升降
     if (a.water) {
-      a.water.position.y = 0.04 + Math.sin(t * 1.1) * 0.012;
+      // 水面波动范围 0.043~0.099：最低点高于地面(y=0)避免与地面深度冲突（闪烁碎块），
+      // 最高点低于码头木板底(0.11)避免浪头穿板
+      a.water.position.y = 0.062 + Math.sin(t * 1.1) * 0.012;
       a.water.material.opacity = 0.84 + Math.sin(t * 0.8 + 1) * 0.06;
     }
     if (a.surf) a.surf.material.opacity = 0.4 + Math.sin(t * 1.4) * 0.12;
@@ -1059,7 +1061,7 @@ export class Game {
       const pos = a.water.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i);
-        pos.setY(i, Math.sin(x * 0.5 + t * 1.6) * 0.055 + Math.cos(pos.getZ(i) * 0.8 + t) * 0.04);
+        pos.setY(i, Math.sin(x * 0.5 + t * 1.6) * 0.016 + Math.cos(pos.getZ(i) * 0.8 + t) * 0.01);
       }
       pos.needsUpdate = true;
     }

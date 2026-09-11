@@ -284,7 +284,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   for (const bank of [1, -1]) {
     const foam = new THREE.Mesh(new THREE.PlaneGeometry(104, 0.26).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.55, depthWrite: false }));
-    foam.position.set(0, 0.055, bank * 3.72);
+    foam.position.set(0, 0.105, bank * 3.72);
     scene.add(foam);
     world.anim.foam.push(foam);
   }
