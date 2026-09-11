@@ -177,7 +177,7 @@ export class Game {
     this._refreshHungry();
   }
 
-  // 关卡制出蛋：已孵化的变词宠；蛋只出“当前关卡的 6 个”+ 剧情还没用掉的钥匙词蛋
+  // 关卡制出蛋：已孵化的变词宠；蛋只出"当前关卡的 6 个"（粉光柱）+ 剧情还没用掉的钥匙词蛋（蓝光柱带 🔑，不算本关进度）
   _spawnProgress() {
     const cur = new Set(this.currentChapter.words);
     for (const w of this.scopeWords) {
@@ -189,8 +189,11 @@ export class Game {
         continue;
       }
       if (this.eggs.get(w.id)) continue;
-      if (cur.has(w.id) || this._pendingGateWord(w.id)) {
+      if (cur.has(w.id)) {
         const egg = this.eggs.spawnEgg(w, w.zone === 'sky');
+        egg.group.userData.wordId = w.id;
+      } else if (this._pendingGateWord(w.id)) {
+        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', true);
         egg.group.userData.wordId = w.id;
       }
     }
@@ -481,8 +484,17 @@ export class Game {
     this.eggs.update(dt, t);
     this.pets.update(dt, t, this.player.position);
     this._updatePrompt();
+    this._placeQuestBubble();
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  // 任务气泡锚在小人头顶：3D 坐标投到屏幕，镜头外就先藏起来
+  _placeQuestBubble() {
+    this._v3 = this._v3 || new THREE.Vector3();
+    this._v3.set(this.player.position.x, this.player.position.y + 1.6, this.player.position.z).project(this.camera);
+    if (this._v3.z < 1) ui.placeQuest((this._v3.x * 0.5 + 0.5) * innerWidth, (-this._v3.y * 0.5 + 0.5) * innerHeight);
+    else ui.placeQuest(null);
   }
 
   // ================= 指引系统 =================
@@ -670,7 +682,7 @@ export class Game {
       locked: !save.hasGate('beanstalk'),
     });
     const eggs = [...this.eggs.eggs.values()].map(e => ({
-      x: e.group.position.x, z: e.group.position.z, golden: e.golden,
+      x: e.group.position.x, z: e.group.position.z, golden: e.golden, key: !!e.key,
     }));
     const islands = this.islands.map(isl => ({
       key: isl.key, name: isl.name, emoji: isl.emoji, cx: isl.cx, cz: isl.cz, r: isl.r,

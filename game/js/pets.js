@@ -13,16 +13,20 @@ export class EggManager {
     this.eggs = new Map(); // wordId -> {group, word}
   }
 
-  spawnEgg(word, golden = false) {
+  // key=true 是剧情钥匙蛋：蓝光柱 + 头顶一把小钥匙，和本关要孵的粉蛋一眼区分开
+  spawnEgg(word, golden = false, key = false) {
     const g = new THREE.Group();
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), M(golden ? '#FFE9A8' : '#FFF6F0', { emissive: golden ? '#FFC94E' : '#FFB7CB', ei: golden ? 0.5 : 0.22 }));
+    const shellC = golden ? '#FFE9A8' : key ? '#EAF6FF' : '#FFF6F0';
+    const dotC = golden ? '#FFD34E' : key ? '#A8D4F5' : '#FFC9DD';
+    const beamC = golden ? 0xFFE08A : key ? 0x8EC9F5 : 0xFFC4DC;
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), M(shellC, { emissive: golden ? '#FFC94E' : key ? '#6FB9EE' : '#FFB7CB', ei: golden ? 0.5 : 0.22 }));
     shell.scale.set(0.85, 1.15, 0.85);
     shell.position.y = 0.4;
     shell.castShadow = true;
     g.add(shell);
     // 蛋壳斑点
     for (let i = 0; i < 4; i++) {
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), M(golden ? '#FFD34E' : '#FFC9DD'));
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), M(dotC));
       const a = Math.PI * 2 * i / 4 + 0.5;
       dot.position.set(Math.cos(a) * 0.24, 0.42 + Math.sin(i * 1.7) * 0.14, Math.sin(a) * 0.24);
       dot.scale.z = 0.4;
@@ -31,11 +35,11 @@ export class EggManager {
     // 首字母提示牌（短语改用图标）
     const letter = new THREE.Mesh(
       new THREE.PlaneGeometry(0.3, 0.3),
-      new THREE.MeshBasicMaterial({ map: letterTexture(word.icon || word.en[0], golden ? '#FFB93C' : '#FF8FB0'), transparent: true, side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ map: letterTexture(word.icon || word.en[0], golden ? '#FFB93C' : key ? '#4A90D9' : '#FF8FB0'), transparent: true, side: THREE.DoubleSide }));
     letter.position.set(0, 0.48, 0.32);
     g.add(letter);
     // 底座光圈
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.035, 8, 24), M(golden ? '#FFD34E' : '#FFB7CB', { emissive: golden ? '#FFC94E' : '#FF9FB6', ei: 0.7 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.035, 8, 24), M(dotC, { emissive: golden ? '#FFC94E' : key ? '#6FB9EE' : '#FF9FB6', ei: 0.7 }));
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.02;
     g.add(ring);
@@ -43,16 +47,26 @@ export class EggManager {
     const beam = new THREE.Mesh(
       new THREE.CylinderGeometry(0.34, 0.5, 4.2, 12, 1, true),
       new THREE.MeshBasicMaterial({
-        color: golden ? 0xFFE08A : 0xFFC4DC, transparent: true, opacity: 0.16,
+        color: beamC, transparent: true, opacity: 0.16,
         side: THREE.DoubleSide, depthWrite: false,
       }));
     beam.position.y = 2.3;
     g.add(beam);
+    // 钥匙蛋头顶挂一把小钥匙，告诉小朋友"这是开剧情的，不算本关进度"
+    let keyTag = null;
+    if (key) {
+      keyTag = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: letterTexture('🔑', '#FFD34E', '#FFFDF4'), transparent: true, depthWrite: false,
+      }));
+      keyTag.scale.setScalar(0.42);
+      keyTag.position.y = 1.15;
+      g.add(keyTag);
+    }
     // 环绕的小星星
     const sparkles = [];
     for (let i = 0; i < 3; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: letterTexture('✦', golden ? '#FFE24E' : '#FFC1DB', '#FFFDF4'), transparent: true, depthWrite: false,
+        map: letterTexture('✦', golden ? '#FFE24E' : key ? '#B5E0FA' : '#FFC1DB', '#FFFDF4'), transparent: true, depthWrite: false,
       }));
       s.scale.setScalar(0.16);
       g.add(s);
@@ -62,7 +76,7 @@ export class EggManager {
     const isSky = word.zone === 'sky';
     g.position.set(x, isSky ? 14 : 0, z);
     this.scene.add(g);
-    const egg = { group: g, word, shell, ring, beam, sparkles, t: Math.random() * 9, golden };
+    const egg = { group: g, word, shell, ring, beam, sparkles, keyTag, t: Math.random() * 9, golden, key };
     this.eggs.set(word.id, egg);
     return egg;
   }
@@ -94,6 +108,7 @@ export class EggManager {
       egg.shell.material.emissiveIntensity = egg.golden ? 0.45 + Math.sin(egg.t * 2.4) * 0.2 : pulse;
       egg.ring.rotation.z = t * 0.8;
       egg.beam.material.opacity = (egg.golden ? 0.2 : 0.13) + Math.sin(egg.t * 2.4) * 0.05;
+      if (egg.keyTag) egg.keyTag.position.y = 1.15 + Math.sin(egg.t * 2) * 0.08;
       egg.sparkles.forEach((s, i) => {
         const a = t * 1.4 + i * Math.PI * 2 / 3;
         s.position.set(Math.cos(a) * 0.55, 0.45 + Math.sin(t * 2 + i * 2.1) * 0.22, Math.sin(a) * 0.55);

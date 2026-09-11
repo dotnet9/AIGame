@@ -26,8 +26,8 @@
   <div class="loading-text">词宠岛正在靠岸…</div>
 </div>
 
-<!-- 任务指引横幅 -->
-<div id="quest">🎯 <span id="quest-text">走近一颗发光的蛋，读出单词！</span></div>
+<!-- 任务气泡：跟着小人走，箭头指向他 -->
+<div id="quest" class="hidden">🎯 <span id="quest-text">走近一颗发光的蛋，读出单词！</span><button id="quest-close" type="button" aria-label="关闭提示">✕</button></div>
 <!-- 每日任务小横幅 -->
 <div id="daily" class="hidden">📌 <span id="daily-text"></span></div>
 
@@ -57,7 +57,7 @@
 
 <!-- 常驻排行榜：让目标始终在眼前 -->
 <aside id="leaderboard-widget" aria-live="polite">
-  <div class="leaderboard-head"><span>🏆 前 5 名</span><button id="leaderboard-refresh" type="button" title="刷新排行榜" aria-label="刷新排行榜">↻</button></div>
+  <div class="leaderboard-head"><span>🏆 排行榜</span><button id="leaderboard-refresh" type="button" title="刷新排行榜" aria-label="刷新排行榜">↻</button></div>
   <div id="leaderboard-list"><div class="rank-loading">正在看看谁是单词小明星…</div></div>
 </aside>
 
@@ -169,7 +169,7 @@
       <button id="map-close" class="round-btn small">✕</button>
     </div>
     <canvas id="map-canvas" width="420" height="420"></canvas>
-    <div id="map-legend">🔵 你在这里 · ⬤ 待孵化的词宠蛋 · 🔒 需要特殊词宠帮忙才能进入</div>
+    <div id="map-legend">🔵 你在这里 · ⬤ 粉点=本关蛋 / 蓝点=🔑钥匙蛋 · 🔒 需要特殊词宠帮忙才能进入</div>
   </div>
 </div>
 

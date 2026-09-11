@@ -6,7 +6,7 @@ import { CURRICULUM, gradeKey } from './curriculum.js';
 const $ = id => document.getElementById(id);
 const els = {};
 for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'star-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
-  'quest', 'quest-text', 'daily', 'daily-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
+  'quest', 'quest-text', 'quest-close', 'daily', 'daily-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
   'mic-label', 'btn-replay', 'voice-feedback', 'score-panel', 'cheer', 'cheer-emoji', 'cheer-word', 'score-ring', 'score-num', 'score-stars', 'score-msg',
   'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
   'btn-skip',
@@ -101,10 +101,28 @@ export function setDaily(text, done = false) {
   if (els.dailyText) els.dailyText.textContent = text || '';
 }
 
-// ---------- 任务横幅 ----------
+// ---------- 任务气泡：跟着小人走，尾巴指向他 ----------
+// 小朋友点 ✅ 关掉后不烦人：同一个目标保持隐藏，换了新目标气泡自动回来
+let questDismissedFor = null;
 export function setQuest(text) {
-  if (els.questText.textContent !== text) els.questText.textContent = text;
+  if (els.questText.textContent !== text) {
+    els.questText.textContent = text;
+    if (questDismissedFor !== null && questDismissedFor !== text) questDismissedFor = null;
+  }
+  els.quest.classList.toggle('hidden', questDismissedFor === text);
 }
+// 每帧由 game.js 传入小人头顶的屏幕坐标；null 表示小人在镜头外，先藏起来
+export function placeQuest(x, y) {
+  if (x == null) { els.quest.style.visibility = 'hidden'; return; }
+  els.quest.style.visibility = 'visible';
+  els.quest.style.left = Math.round(Math.max(125, Math.min(innerWidth - 125, x))) + 'px';
+  els.quest.style.top = Math.round(Math.max(96, Math.min(innerHeight - 24, y))) + 'px';
+}
+els.questClose.addEventListener('click', () => {
+  questDismissedFor = els.questText.textContent;
+  els.quest.classList.add('hidden');
+  sfx.pop();
+});
 
 // ---------- 挑战弹窗 ----------
 const ch = {
@@ -590,7 +608,10 @@ export function showProfile(onDone, profile = {}, options = {}) {
   const busy = () => { start.disabled = true; start.textContent = '稍等…'; };
   const resume = () => { if (!editing) start.textContent = mode === 'login' ? '登录' : '出发去词宠岛'; };
   const done = (semKey, password, serverScore) => { ov.classList.add('hidden'); onDone && onDone(input.value.trim(), semKey, gender, password, serverScore); };
-  const fail = msg => { error.textContent = msg; submitted = false; start.disabled = false; resume(); };
+  const fail = msg => {
+    error.textContent = msg; submitted = false; start.disabled = false; resume();
+    error.classList.remove('shake'); void error.offsetWidth; error.classList.add('shake');   // 轻轻晃一下，更醒目
+  };
   const submit = async () => {
     if (submitted) return;
     const name = input.value.trim();
@@ -786,13 +807,15 @@ export function openStation(list, onPick) {
 // ---------- 农场地图 ----------
 export function openMap(data) {
   const cv = els.mapCanvas, c = cv.getContext('2d');
+  cv.width = cv.height = 840;                  // 2 倍分辨率：小字在高清屏上不发虚（CSS 仍按原尺寸显示）
   const W = cv.width, H = cv.height;
+  const k = W / 420;                           // 固定像素尺寸（字号/圆点/线宽）统一乘 k，保持观感不变
   const scale = W / 420;                       // 世界 ±210 都画进来（主岛 + 内圈主题岛 + 中圈短语岛 + 外圈拓展岛）
   const X = x => W / 2 + x * scale, Z = z => H / 2 + z * scale;
   c.clearRect(0, 0, W, H);
   // 大海
   c.fillStyle = '#8FCDE8';
-  c.beginPath(); c.roundRect(0, 0, W, H, 16); c.fill();
+  c.beginPath(); c.roundRect(0, 0, W, H, 16 * k); c.fill();
   // 主岛
   c.fillStyle = '#BFE8AC';
   c.beginPath(); c.arc(X(0), Z(0), 52 * scale, 0, Math.PI * 2); c.fill();
@@ -824,51 +847,53 @@ export function openMap(data) {
     c.fillStyle = isl.unlocked ? '#D8F0C8' : '#D8DDE4';
     c.beginPath(); c.arc(X(isl.cx), Z(isl.cz), isl.r * scale, 0, Math.PI * 2); c.fill();
     c.strokeStyle = isl.unlocked ? '#5CA85C' : '#B9AC9E';
-    c.lineWidth = 1.5;
+    c.lineWidth = 1.5 * k;
     c.stroke();
-    c.font = '13px sans-serif';
+    c.font = `${13 * k}px sans-serif`;
     c.textAlign = 'center';
-    c.fillText(isl.emoji, X(isl.cx), Z(isl.cz) - isl.r * scale + 14);
+    c.fillText(isl.emoji, X(isl.cx), Z(isl.cz) - isl.r * scale + 14 * k);
     c.fillStyle = isl.unlocked ? '#3E6B36' : '#8C8478';
-    c.font = 'bold 10px "Microsoft YaHei"';
-    c.fillText(isl.name.replace('岛', '').replace('大陆', ''), X(isl.cx), Z(isl.cz) + isl.r * scale - 3);
+    c.font = `bold ${11 * k}px "Microsoft YaHei"`;
+    c.fillText(isl.name.replace('岛', '').replace('大陆', ''), X(isl.cx), Z(isl.cz) + isl.r * scale - 3 * k);
     if (isl.total) {
       c.fillStyle = isl.hatched >= isl.total ? '#D9941E' : '#6E9E5E';
-      c.font = '9px "Microsoft YaHei"';
-      c.fillText(`${isl.hatched}/${isl.total}`, X(isl.cx), Z(isl.cz) + isl.r * scale + 8);
+      c.font = `${10 * k}px "Microsoft YaHei"`;
+      c.fillText(`${isl.hatched}/${isl.total}`, X(isl.cx), Z(isl.cz) + isl.r * scale + 9 * k);
     }
   }
   // 火车站
-  c.font = '12px sans-serif';
-  c.fillText('🚂', X(-9), Z(9.6) + 4);
+  c.font = `${12 * k}px sans-serif`;
+  c.fillText('🚂', X(-9), Z(9.6) + 4 * k);
   // 区域
   for (const zn of data.zones) {
     const x = X(zn.x1), y = Z(zn.z1), w = (zn.x2 - zn.x1) * scale, h = (zn.z2 - zn.z1) * scale;
     c.strokeStyle = zn.discovered ? '#5CA85C' : '#B9AC9E';
-    c.lineWidth = 1.5;
-    c.setLineDash(zn.discovered ? [] : [5, 4]);
+    c.lineWidth = 1.5 * k;
+    c.setLineDash(zn.discovered ? [] : [5 * k, 4 * k]);
     c.fillStyle = zn.discovered ? 'rgba(255,255,255,.32)' : 'rgba(255,255,255,.18)';
-    c.beginPath(); c.roundRect(x, y, w, h, 8); c.fill(); c.stroke();
+    c.beginPath(); c.roundRect(x, y, w, h, 8 * k); c.fill(); c.stroke();
     c.setLineDash([]);
     c.fillStyle = zn.discovered ? '#3E6B36' : '#B9AC9E';
-    c.font = 'bold 11px "Microsoft YaHei"';
+    c.font = `bold ${11 * k}px "Microsoft YaHei"`;
     c.textAlign = 'center';
-    c.fillText((zn.discovered ? zn.name : '？？？') + (zn.locked ? ' 🔒' : ''), x + w / 2, y + h / 2 - 3);
+    // 未发现的区域不再写"？？？"，只留虚线框（+锁），画面更清爽
+    const label = (zn.discovered ? zn.name : '') + (zn.locked ? ' 🔒' : '');
+    if (label) c.fillText(label, x + w / 2, y + h / 2 - 3 * k);
   }
-  // 蛋点
+  // 蛋点（粉=本关词宠蛋，金=天空蛋，蓝=剧情钥匙蛋）
   for (const e of data.eggs) {
     c.beginPath();
-    c.fillStyle = e.golden ? '#FFC94E' : '#FF9FB6';
-    c.arc(X(e.x), Z(e.z), 3, 0, Math.PI * 2);
+    c.fillStyle = e.golden ? '#FFC94E' : e.key ? '#4A90D9' : '#FF9FB6';
+    c.arc(X(e.x), Z(e.z), 3 * k, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = 1 * k; c.stroke();
   }
   // 玩家
   c.beginPath();
   c.fillStyle = '#4A90D9';
-  c.arc(X(data.player.x), Z(data.player.z), 5, 0, Math.PI * 2);
+  c.arc(X(data.player.x), Z(data.player.z), 5 * k, 0, Math.PI * 2);
   c.fill();
-  c.lineWidth = 2.5; c.strokeStyle = '#fff'; c.stroke();
+  c.lineWidth = 2.5 * k; c.strokeStyle = '#fff'; c.stroke();
   // 标题带上当前关卡
   const headSpan = els.mapHead.querySelector('span');
   if (headSpan) headSpan.textContent = '🗺️ 词宠岛地图' + (data.chapterLabel ? ' · ' + data.chapterLabel : '');
@@ -1039,6 +1064,7 @@ export function showHelp() {
       <h3>🌼 怎么玩</h3>
       ${touchLines}
       <div>🥚 走近发光的蛋，点一下唤醒词宠</div>
+      <div>🔑 蓝光蛋是开剧情的钥匙，不算关数</div>
       <div>🎤 点 🎤 大声读，读得准就赚星星</div>
       <div>🗺️ 找不到路？点地图，跟金色箭头走</div>
       <div>🤔 被挡住？召唤对的词宠解谜题</div>
@@ -1092,6 +1118,8 @@ export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, 
   const rankBtn = document.getElementById('btn-rank');
   if (rankBtn) rankBtn.addEventListener('click', onRank);
   if (els.btnAccount) els.btnAccount.addEventListener('click', onAccount);
+  // 左上角头像 pill 本身就写着"学习档案"，点它直接开档案（和菜单里的「我的档案」一样）
+  if (els.userPill) els.userPill.addEventListener('click', onAccount);
   if (els.leaderboardRefresh) els.leaderboardRefresh.addEventListener('click', () => refreshLeaderboard());
   const summonBtn = document.getElementById('btn-summon');
   if (summonBtn) summonBtn.addEventListener('click', onSummon);
