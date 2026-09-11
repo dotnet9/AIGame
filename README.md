@@ -78,7 +78,7 @@ python tools/serve.py 6000     # 等价实现（需 Python 3）
 - **渲染**：Three.js（CDN ES Modules）+ 柔和阴影 + ACES 色调映射 + UnrealBloom 辉光 + 渐变天空 + 花瓣粒子
 - **美术**：全部角色/场景为**代码程序化建模**（`js/models.js`，无外部模型文件），马卡龙低模 + 点睛小表情；单词词宠嵌发光首字母牌，短语词宠顶对话气泡
 - **语音**：Web Speech API 识别（多候选 + 编辑距离模糊匹配，识别到近音词会给音节拆分提示）；TTS 发音示范
-- **标准美音**：单词发音优先采用 Wikimedia Commons 的真人美式录音（`En-us-*.ogg`，维基词典/AHD 录音计划），ffmpeg 变速生成慢速版（保音高），edge-tts 兜底；音标数据由 `tools/gen_ipa.py` 生成
+- **标准美音**：单词发音优先采用 Wikimedia Commons 的真人美式录音（`En-us-*.ogg`，维基词典/AHD 录音计划），ffmpeg 变速生成慢速版（保音高），edge-tts 兜底；音标数据由 `tools/gen_ipa.py` 生成。**932 个词/短语均已预生成发音**（正常速 + 慢速，共 1862 个 mp3，`game/audio/word/`），运行时零延迟、离线可播。新增词可用 `node tools/gen-voice.mjs` 补录（零依赖，直连 Edge 神经语音，不需要 Python/ffmpeg）
 - **关卡制**：`js/words.js` 的 `CHAPTERS` 定义每关 6 词，`game.js` 按存档进度出蛋
 - **存档**：localStorage + 遗忘曲线调度（`js/save.js`）
 - **词库**：`js/words.js` 每词一条数据（单词/中文/音节/谜面/图鉴小故事/位置），加词即加内容
@@ -93,8 +93,9 @@ game/            游戏本体（纯静态，可整目录部署）
   js/            words 词库(52 岛 932 词宠) · pep-extra 教材拓展岛 · models 程序化建模
                  · world 场景 · pets 词宠 · speech 语音识别 · audio TTS/音效
                  · curriculum 课本 8 册课程 · ui 界面 · game 主逻辑 · save 存档
-tools/           gen-extra/gen-curriculum 词库生成 · serve.mjs 本地开发服务器
-                 · make_voice.py 发音生成 · gen_ipa.py 音标 · make_favicon.py 图标
+tools/           gen-extra/gen-curriculum 词库生成 · gen-voice.mjs 语音补录
+                 · serve.mjs 本地开发服务器 · make_voice.py 发音生成
+                 · gen_ipa.py 音标 · make_favicon.py 图标
 logo.*           品牌 logo 原稿
 ```
 
