@@ -224,6 +224,7 @@ export class Game {
       case 'wind': return !save.hasGate('wind');
       case 'seed': return !save.hasGate('planted');
       case 'rain': return save.hasGate('planted') && !save.hasGate('beanstalk');
+      case 'banana': return !save.hasGate('vines');   // 荆棘门的谜底：不补这颗蛋，森林就是死局
       default: return false;
     }
   }
