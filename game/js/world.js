@@ -167,7 +167,7 @@ function glowTexture(inner = 'rgba(255,244,214,1)', outer = 'rgba(255,244,214,0)
   return tex;
 }
 
-export function buildWorld(scene) {
+export function buildWorld(scene, semIslands = ISLANDS) {
   const world = { colliders: [], anim: {}, gates: {} };
   const C = world.colliders;
   const colC = (x, z, r) => C.push({ t: 'c', x, z, r });
@@ -557,9 +557,9 @@ export function buildWorld(scene) {
     }
   }
 
-  // ---- 群岛：52 座海岛（16 座主题岛 + 8 座短语岛 + 28 座教材拓展岛，小火车往返） ----
+  // ---- 群岛：只建当前册的海岛（选了哪一册就只出现哪一册的岛，小火车往返） ----
   world.islands = [];
-  for (const isl of ISLANDS) {
+  for (const isl of semIslands) {
     const { cx, cz, r, color, key } = isl;
     const grp = new THREE.Group();
     // 岛身：草顶 + 岩底

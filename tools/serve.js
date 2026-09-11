@@ -1,14 +1,19 @@
 // 词宠岛后端：静态文件 + 排行榜接口（纯 Node，无需任何依赖）
 // 用法: node tools/serve.js [端口]      端口默认 6000
-// 接口: GET /api/leaderboard   POST /api/score   OPTIONS /api/*
+// 接口: GET /api/leaderboard   POST /api/score   POST /api/register   POST /api/login   POST /api/update   OPTIONS /api/*
+// 账号: 昵称唯一，密码可以为空；设了密码后换账号登录就要验证。服务端 MD5 迭代 3 次（带昵称加盐）后保存，不存明文
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PORT = Number(process.argv[2] || process.env.PORT) || 6000;
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = path.resolve(__dirname, '..');
 const BOARD_FILE = path.join(__dirname, 'leaderboard.json');
+const ACCOUNTS_FILE = path.join(__dirname, 'accounts.json');
+// 老账号（功能上线前就存在排行榜里、没设过密码的）按“空密码”处理
+const LEGACY_PASSWORD = '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -56,6 +61,55 @@ function byRank(a, b) {
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+// ---------- 账号（昵称 + 密码） ----------
+// 密码不存明文：md5(md5(md5(昵称:密码)))，共 3 次转换，昵称当盐避免相同密码哈希一样
+function hashPwd(username, pwd) {
+  let h = String(pwd);
+  const salt = String(username).toLowerCase();
+  for (let i = 0; i < 3; i++) h = crypto.createHash('md5').update(`${salt}:${h}`).digest('hex');
+  return h;
+}
+
+function readAccounts() {
+  try {
+    const obj = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  } catch (e) {
+    return {};   // 文件不存在或损坏时当作还没有账号
+  }
+}
+
+function writeAccounts(obj) {
+  const tmp = ACCOUNTS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), 'utf8');
+  fs.renameSync(tmp, ACCOUNTS_FILE);   // 原子替换
+}
+
+// 老账号：在排行榜里出现过、但还没在账号表里登记过
+function isLegacyName(username) {
+  return readBoard().some(x => x && String(x.username || '') === username);
+}
+
+// 校验昵称 / 密码（密码可以为空，宽松为主）
+function cleanCreds(body) {
+  const username = String((body && body.username) != null ? body.username : '').trim().slice(0, 20);
+  const password = String((body && body.password) != null ? body.password : '');
+  if (!username) return { error: '先写一个名字' };
+  if (/[\u0000-\u001f]/.test(username)) return { error: '名字里有特殊字符' };
+  if (password.length > 64) return { error: '密码最多 64 位' };
+  return { username, password };
+}
+
+function scoreOf(username) {
+  const row = readBoard().find(x => x && String(x.username || '') === username);
+  return row ? Number(row.score) || 0 : 0;
+}
+
+function genderOf(username) {
+  const row = readBoard().find(x => x && String(x.username || '') === username);
+  return row && row.gender === 'girl' ? 'girl' : 'boy';
+}
+
 // ---------- HTTP 小工具 ----------
 function sendJson(res, status, payload) {
   const raw = Buffer.from(JSON.stringify(payload), 'utf8');
@@ -84,6 +138,17 @@ function readBody(req, limit = 4096) {
 
 function log(req, status, note) {
   console.log(`${new Date().toISOString().slice(11, 19)} ${req.method} ${req.url} -> ${status}${note ? ' ' + note : ''}`);
+}
+
+// 解析 JSON 请求体；出错时直接回 400 并返回 null
+async function parseBody(req, res) {
+  try {
+    return JSON.parse((await readBody(req)) || '{}');
+  } catch (e) {
+    sendJson(res, 400, { error: 'invalid json' });
+    log(req, 400, 'invalid json');
+    return null;
+  }
 }
 
 // ---------- 静态文件 ----------
@@ -137,21 +202,119 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (pathname === '/api/score' && req.method === 'POST') {
-      let body;
-      try {
-        body = JSON.parse((await readBody(req)) || '{}');
-      } catch (e) {
-        sendJson(res, 400, { error: 'invalid json' });
-        log(req, 400, 'invalid json');
+    if (pathname === '/api/register' && req.method === 'POST') {
+      const body = await parseBody(req, res); if (!body) return;
+      const creds = cleanCreds(body);
+      if (creds.error) { sendJson(res, 400, { error: creds.error }); log(req, 400, creds.error); return; }
+      const { username, password } = creds;
+      const accounts = readAccounts();
+      // 昵称唯一：已注册的、或老排行榜里已有的名字，都不能再注册，只能登录
+      if (accounts[username] || isLegacyName(username)) {
+        sendJson(res, 409, { error: '这个名字已经有人用了' });
+        log(req, 409, 'name taken');
         return;
       }
+      const gender = body.gender === 'girl' ? 'girl' : 'boy';
+      accounts[username] = { pwd: hashPwd(username, password), gender, createdAt: Date.now() };
+      writeAccounts(accounts);
+      sendJson(res, 201, { username, gender, score: 0 });
+      log(req, 201, 'registered');
+      return;
+    }
+
+    if (pathname === '/api/login' && req.method === 'POST') {
+      const body = await parseBody(req, res); if (!body) return;
+      const creds = cleanCreds(body);
+      if (creds.error) { sendJson(res, 400, { error: creds.error }); log(req, 400, creds.error); return; }
+      const { username, password } = creds;
+      const accounts = readAccounts();
+      let acc = accounts[username];
+      if (!acc) {
+        // 老账号：还没登记过，按空密码处理；登录成功后补登记
+        if (!isLegacyName(username)) {
+          sendJson(res, 404, { error: '还没有这个名字，去注册吧' });
+          log(req, 404, 'no account');
+          return;
+        }
+        if (password !== LEGACY_PASSWORD) {
+          sendJson(res, 401, { error: '密码不对' });
+          log(req, 401, 'bad legacy pwd');
+          return;
+        }
+        acc = { pwd: hashPwd(username, LEGACY_PASSWORD), gender: genderOf(username), createdAt: Date.now() };
+        accounts[username] = acc;
+        writeAccounts(accounts);
+      } else if (acc.pwd !== hashPwd(username, password)) {
+        sendJson(res, 401, { error: '密码不对' });
+        log(req, 401, 'bad pwd');
+        return;
+      }
+      sendJson(res, 200, { username, gender: acc.gender === 'girl' ? 'girl' : genderOf(username), score: scoreOf(username) });
+      log(req, 200, 'login ok');
+      return;
+    }
+
+    // 改档案：改昵称 / 改密码（改完昵称后，密码会按新昵称重新加盐）
+    if (pathname === '/api/update' && req.method === 'POST') {
+      const body = await parseBody(req, res); if (!body) return;
+      const cur = cleanCreds(body);
+      if (cur.error) { sendJson(res, 400, { error: cur.error }); log(req, 400, cur.error); return; }
+      const next = cleanCreds({ username: body.newUsername, password: body.newPassword });
+      if (next.error) { sendJson(res, 400, { error: next.error }); log(req, 400, next.error); return; }
+      const accounts = readAccounts();
+      const acc = accounts[cur.username];
+      // 先验证当前身份；没有账号的老名字按空密码验证；完全没出现过的名字当新注册放行
+      if (acc) {
+        if (acc.pwd !== hashPwd(cur.username, cur.password)) {
+          sendJson(res, 401, { error: '密码不对' });
+          log(req, 401, 'bad pwd (update)');
+          return;
+        }
+      } else if (isLegacyName(cur.username)) {
+        if (cur.password !== LEGACY_PASSWORD) {
+          sendJson(res, 401, { error: '密码不对' });
+          log(req, 401, 'bad legacy pwd (update)');
+          return;
+        }
+      }
+      // 改昵称要保证新名字没被别人占用
+      if (next.username !== cur.username && (accounts[next.username] || isLegacyName(next.username))) {
+        sendJson(res, 409, { error: '这个名字已经有人用了' });
+        log(req, 409, 'name taken (update)');
+        return;
+      }
+      const gender = (acc && acc.gender === 'girl') || genderOf(cur.username) === 'girl' ? 'girl' : 'boy';
+      if (next.username !== cur.username) delete accounts[cur.username];
+      accounts[next.username] = { pwd: hashPwd(next.username, next.password), gender, createdAt: (acc && acc.createdAt) || Date.now() };
+      writeAccounts(accounts);
+      // 排行榜里的分数跟着改名，别丢进度
+      if (next.username !== cur.username) {
+        const rows = readBoard();
+        const row = rows.find(x => x && String(x.username || '') === cur.username);
+        if (row) { row.username = next.username; writeBoard(rows); }
+      }
+      sendJson(res, 200, { username: next.username, gender, score: scoreOf(next.username) });
+      log(req, 200, 'account updated');
+      return;
+    }
+
+    if (pathname === '/api/score' && req.method === 'POST') {
+      const body = await parseBody(req, res); if (!body) return;
       const username = String(body && body.username != null ? body.username : '').trim().slice(0, 20);
       const delta = Math.max(0, Math.min(100, Math.floor(Number(body && body.delta != null ? body.delta : 1)) || 0));
       const gender = body && body.gender === 'girl' ? 'girl' : 'boy';   // 未上报的老数据按男孩处理
       if (!username || !delta) {
         sendJson(res, 400, { error: 'invalid score' });
         log(req, 400, 'invalid score');
+        return;
+      }
+      // 记账必须带对密码，否则别人用同名就能改你的分数
+      const accounts = readAccounts();
+      const acc = accounts[username];
+      const password = String((body && body.password) != null ? body.password : '');
+      if (!acc || acc.pwd !== hashPwd(username, password)) {
+        sendJson(res, 401, { error: '请先登录' });
+        log(req, 401, 'unauthorized score');
         return;
       }
       const rows = readBoard();
@@ -182,7 +345,8 @@ server.listen(PORT, HOST, () => {
   console.log(`词宠岛后端已启动: http://127.0.0.1:${PORT}`);
   console.log(`  静态目录 : ${ROOT}`);
   console.log(`  排行榜   : ${BOARD_FILE}`);
-  console.log('  接口     : GET /api/leaderboard   POST /api/score');
+  console.log(`  账号     : ${ACCOUNTS_FILE}（密码 MD5×3 加盐保存，不存明文）`);
+  console.log('  接口     : GET /api/leaderboard   POST /api/score|register|login|update');
   console.log('  nginx 反代 /api/ 指向本服务即可');
 });
 

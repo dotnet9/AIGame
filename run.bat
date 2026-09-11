@@ -32,7 +32,7 @@ if not defined RUNNER (
 
 for /f "tokens=*" %%v in ('%RUNNER% --version 2^>^&1') do echo 运行时: %%v
 echo 监听端口: %PORT%
-echo 接口: GET /api/leaderboard   POST /api/score
+echo 接口: GET /api/leaderboard   POST /api/score/register/login
 echo 反向代理应指向: http://127.0.0.1:%PORT%
 echo.
 echo 按 Ctrl+C 可停止服务

@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { WORDS, WORD_MAP, TOTAL, ZONE_NAMES, CHAPTERS, PER_CHAPTER, chapterIndex, ISLANDS } from './words.js';
+import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -64,6 +64,13 @@ export class Game {
     this.tweens = [];
     this.fx = [];
     this.clock = new THREE.Clock();
+    // 本册范围：当前选了哪一册，就只关心那一册（序章农场 + 本册课本词/岛）
+    this.sem = save.getBookSem() || '3a';
+    this.scopeWords = allWordsForSem(this.sem);
+    this.chapters = chaptersFor(this.sem);
+    this.islands = islandsForSem(this.sem);
+    this.scopeIds = new Set(this.scopeWords.map(w => w.id));
+    this.total = this.scopeIds.size;
     this.riverHintCd = 0;
     this.preferWhisper = false;   // 在线识别连续失败后，改用自带的本地模型
     this.voiceMiss = 0;
@@ -74,6 +81,19 @@ export class Game {
     this._initInput();
     this._initUI();
   }
+
+  // ================= 本册范围 =================
+  // 章节索引：以本册已唤醒数量折算（只数本册词，别的册不算进度）
+  chapterIndex(hatchedCount) {
+    return Math.min(Math.floor(hatchedCount / PER_CHAPTER), this.chapters.length - 1);
+  }
+  // 本册已唤醒数量
+  hatchedInScope() {
+    let n = 0;
+    for (const w of this.scopeWords) if (save.isHatched(w.id)) n++;
+    return n;
+  }
+  get currentChapter() { return this.chapters[this.chapterIndex(this.hatchedInScope())]; }
 
   // ================= 初始化 =================
   _initRenderer() {
@@ -90,7 +110,7 @@ export class Game {
   _initScene() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 260);
-    this.world = buildWorld(this.scene);
+    this.world = buildWorld(this.scene, this.islands);
     // 辉光后期（失败则退回普通渲染）
     try {
       this.composer = new EffectComposer(this.renderer);
@@ -118,6 +138,12 @@ export class Game {
       if (this.onIsle) this.player.position.y = 14;
     } else {
       this.player.position.set(0, 0, 14);
+    }
+    // 换了册：上次站的岛可能不属于本册了，落回阳光农场出生点，别悬在大海上
+    const p0 = this.player.position;
+    if (Math.hypot(p0.x, p0.z) > WORLD_R + 0.5 && !this._islandAt(p0)) {
+      p0.set(0, 0, 14);
+      this.onIsle = false;
     }
     this.scene.add(this.player);
     this.climbing = false;
@@ -153,8 +179,8 @@ export class Game {
 
   // 关卡制出蛋：已孵化的变词宠；蛋只出“当前关卡的 6 个”+ 剧情还没用掉的钥匙词蛋
   _spawnProgress() {
-    const cur = new Set(CHAPTERS[chapterIndex(save.hatchedCount())].words);
-    for (const w of WORDS) {
+    const cur = new Set(this.currentChapter.words);
+    for (const w of this.scopeWords) {
       if (save.isHatched(w.id)) {
         if (!this.pets.get(w.id)) {
           const pet = this.pets.spawn(w);
@@ -374,13 +400,18 @@ export class Game {
       onHungryPill: () => this._openCatalog(true),
       onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
       onAbout: () => ui.showAbout(),
-      onAccount: () => ui.showProfile((name, semKey, gender) => {
+      onAccount: () => ui.showProfile((name, semKey, gender, password) => {
         save.setUsername(name);
+        save.setPassword(password || '');   // 允许清空/修改密码
+        save.setRegistered(true);
         save.setBookSem(semKey);
         save.setGender(gender);
         save.resetSessionScore();
         location.reload();
-      }, { username: save.getUsername(), semKey: save.getBookSem(), gender: save.getGender() }, {
+      }, {
+        username: save.getUsername(), password: save.getPassword(), registered: save.isRegistered(),
+        semKey: save.getBookSem(), gender: save.getGender(),
+      }, {
         editing: true,
         onLogout: () => {
           if (confirm('退出当前账号并清除本机进度吗？')) {
@@ -423,7 +454,7 @@ export class Game {
     ui.updatePlayerScore(save.getScore(), save.getSessionScore());
     this._refreshDailyBanner();
     if (!save.getIntro()) {
-      setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch), 600);
+      setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch, BOOK_LABEL(this.sem), this.total), 600);
     }
     this._loop();
     setInterval(() => this._refreshHungry(), 1500);
@@ -467,7 +498,7 @@ export class Game {
 
   // 玩家脚下是哪块陆地：海岛（含名字）或主岛（null）
   _islandAt(p) {
-    return ISLANDS.find(isl => Math.hypot(p.x - isl.cx, p.z - isl.cz) <= isl.r + 1) || null;
+    return this.islands.find(isl => Math.hypot(p.x - isl.cx, p.z - isl.cz) <= isl.r + 1) || null;
   }
 
   _reachableZone(zone) {
@@ -476,8 +507,8 @@ export class Game {
     if (zone === 'sky') return save.hasGate('beanstalk');
     if (zone === 'beach') return save.hasGate('sandWall');
     if (zone === 'forest') return save.hasGate('vines');
-    const isl = ISLANDS.find(i => i.key === zone);
-    if (isl) return chapterIndex(save.hatchedCount()) >= isl.startChapter;
+    const isl = this.islands.find(i => i.key === zone);
+    if (isl) return this.chapterIndex(this.hatchedInScope()) >= isl.startChapter;
     return true;
   }
 
@@ -496,14 +527,15 @@ export class Game {
 
   // 当前任务目标（文字 + 指路坐标）：剧情钥匙优先，平时显示本关进度
   _objective() {
-    const total = save.hatchedCount();
-    if (total >= TOTAL) {
+    const total = this.hatchedInScope();
+    const chIdx = this.chapterIndex(total);
+    const chapters = this.chapters;
+    if (total >= this.total) {
       return {
-        text: `🎉 恭喜你集齐词宠岛全部 ${TOTAL} 只词宠！去许愿井换套新装扮吧！`,
+        text: `🎉 本册 ${this.total} 只词宠全部唤醒！去许愿井换套新装扮，或去「课本」换一册接着玩吧`,
         target: null,
       };
     }
-    const chIdx = chapterIndex(total);
     if (!save.hasGate('boat')) {
       const ep = save.isHatched('boat') ? { x: 0, z: 4.6 } : this._eggById('boat');
       return save.isHatched('boat')
@@ -550,12 +582,12 @@ export class Game {
       };
     }
     // 本关进度：唤醒满 6 个就通关开新蛋
-    const cur = CHAPTERS[chIdx].words;
+    const cur = chapters[chIdx].words;
     const left = cur.filter(id => !save.isHatched(id)).length;
     const e = this._nearestReachableEgg();
     if (e) {
       // 蛋在海岛上而人不在岛上：指引去坐小火车 / 回主岛
-      const isl = ISLANDS.find(i => i.key === e.word.zone);
+      const isl = this.islands.find(i => i.key === e.word.zone);
       const here = this._islandAt(this.player.position);
       if (isl && (!here || here.key !== isl.key)) {
         const onMain = !here;
@@ -568,7 +600,7 @@ export class Game {
       }
     }
     return {
-      text: `第 ${chIdx + 1} 关「${CHAPTERS[chIdx].name}」：还剩 ${left} 个单词就通关！（共 ${total}/${TOTAL}）`,
+      text: `第 ${chIdx + 1} 关「${chapters[chIdx].name}」：还剩 ${left} 个单词就通关！（本册 ${total}/${this.total}）`,
       target: e ? e.group.position : null,
     };
   }
@@ -613,11 +645,12 @@ export class Game {
   // 地图
   _openMap() {
     const visited = save.getVisited();
-    const chIdx = chapterIndex(save.hatchedCount());
-    const chWords = new Set(CHAPTERS[chIdx].words);
-    // 统计“当前关卡 + 剧情钥匙蛋”落在该区域的词，和场上真实可见的蛋保持一致
+    const hatched = this.hatchedInScope();
+    const chIdx = this.chapterIndex(hatched);
+    const chWords = new Set(this.chapters[chIdx].words);
+    // 统计“当前关卡 + 剧情钥匙蛋”落在该区域的词，和场上真实可见的蛋保持一致（只看本册）
     const zoneStats = key => {
-      const inZone = WORDS.filter(w => w.zone === key && (chWords.has(w.id) || this._pendingGateWord(w.id)));
+      const inZone = this.scopeWords.filter(w => w.zone === key && (chWords.has(w.id) || this._pendingGateWord(w.id)));
       return { total: inZone.length, hatched: inZone.filter(w => save.isHatched(w.id)).length };
     };
     const zones = ZONE_RECTS.map(zr => {
@@ -638,16 +671,18 @@ export class Game {
     const eggs = [...this.eggs.eggs.values()].map(e => ({
       x: e.group.position.x, z: e.group.position.z, golden: e.golden,
     }));
-    const cur = chapterIndex(save.hatchedCount());
-    const islands = ISLANDS.map(isl => ({
+    const islands = this.islands.map(isl => ({
       key: isl.key, name: isl.name, emoji: isl.emoji, cx: isl.cx, cz: isl.cz, r: isl.r,
-      unlocked: cur >= isl.startChapter,
+      unlocked: chIdx >= isl.startChapter,
+      // 本册进度：岛上有几只已经唤醒
+      total: this.scopeWords.filter(w => w.island === isl.key).length,
+      hatched: this.scopeWords.filter(w => w.island === isl.key && save.isHatched(w.id)).length,
     }));
     ui.openMap({
       player: { x: this.player.position.x, z: this.player.position.z },
       zones, eggs, islands,
       gates: { sandWall: save.hasGate('sandWall'), vines: save.hasGate('vines') },
-      chapterLabel: `第${chIdx + 1}关 · ${CHAPTERS[chIdx].name}`,
+      chapterLabel: `${BOOK_LABEL(this.sem)} · 第${chIdx + 1}关 · ${this.chapters[chIdx].name}`,
     });
   }
 
@@ -1139,16 +1174,16 @@ export class Game {
       this._refreshHungry();
       this._checkFirstHatchHint();
       // 每唤醒 6 只词宠 = 通关：庆祝一下，放出下一关的蛋
-      const total = save.hatchedCount();
-      if (total % PER_CHAPTER === 0 && total < TOTAL) {
+      const total = this.hatchedInScope();
+      if (total % PER_CHAPTER === 0 && total < this.total) {
         setTimeout(() => this._chapterComplete(total / PER_CHAPTER), 1100);
-      } else if (total >= TOTAL) {
-        setTimeout(() => this._chapterComplete(CHAPTERS.length), 1100);
+      } else if (total >= this.total) {
+        setTimeout(() => this._chapterComplete(this.chapters.length), 1100);
       }
     }, 280);
   }
 
-  // 通关演出：庆祝 + 星星 + 新一关的蛋登场；集齐全部词宠放烟花
+  // 通关演出：庆祝 + 星星 + 新一关的蛋登场；本册集齐放烟花
   _chapterComplete(doneCount) {
     sfx.great();
     setTimeout(() => sfx.magic(), 350);
@@ -1157,13 +1192,13 @@ export class Game {
     const p = this.player.position.clone().add(new THREE.Vector3(0, 1.4, 0));
     this._letterBurst(p, '★✨⭐');
     this._starBurst(p, 6);
-    const next = CHAPTERS[doneCount];
+    const next = this.chapters[doneCount];
     this._spawnProgress();
     this._refreshHungry();
     if (next) {
-      ui.toast(`🎊 第 ${doneCount} 关「${CHAPTERS[doneCount - 1].name}」全部唤醒！+3⭐ 第 ${doneCount + 1} 关「${next.name}」的蛋出现啦`, 5000);
+      ui.toast(`🎊 第 ${doneCount} 关「${this.chapters[doneCount - 1].name}」全部唤醒！+3⭐ 第 ${doneCount + 1} 关「${next.name}」的蛋出现啦`, 5000);
     } else {
-      ui.toast(`🎊 全部 ${TOTAL} 只词宠都被你唤醒啦，你就是词宠岛传奇！`, 6000);
+      ui.toast(`🎊 本册 ${this.total} 只词宠全部唤醒！你就是词宠岛传奇！去「课本」换一册还能继续玩～`, 6000);
       this._fireworks();
     }
   }
@@ -1316,10 +1351,10 @@ export class Game {
       this.pets.setHungry(pet.word.id, save.isHungry(pet.word.id));
     }
     // HUD 显示本关进度：第 X 关 · 本关唤醒 n/6
-    const total = save.hatchedCount();
-    const chIdx = chapterIndex(total);
-    const inChapter = CHAPTERS[chIdx].words.filter(id => save.isHatched(id)).length;
-    ui.updateHUD(inChapter, PER_CHAPTER, save.hungryPets().length, `第${chIdx + 1}关`);
+    const total = this.hatchedInScope();
+    const chIdx = this.chapterIndex(total);
+    const inChapter = this.chapters[chIdx].words.filter(id => save.isHatched(id)).length;
+    ui.updateHUD(inChapter, PER_CHAPTER, save.hungryPets().length, `${BOOK_LABEL(this.sem)}·第${chIdx + 1}关`);
   }
 
   // ---------- 召唤解谜 ----------
@@ -1576,14 +1611,15 @@ export class Game {
 
   // ---------- 小火车站 ----------
   _openStation() {
-    const cur = chapterIndex(save.hatchedCount());
-    const list = ISLANDS.map(isl => ({
+    const cur = this.chapterIndex(this.hatchedInScope());
+    // 只列本册的海岛
+    const list = this.islands.map(isl => ({
       key: isl.key, name: isl.name, emoji: isl.emoji,
       unlocked: cur >= isl.startChapter,
       need: `第${isl.startChapter + 1}关解锁`,
     }));
     ui.openStation(list, key => {
-      const isl = ISLANDS.find(i => i.key === key);
+      const isl = this.islands.find(i => i.key === key);
       if (isl) this._rideTrain(isl);
     });
     sfx.pop();
@@ -1692,10 +1728,10 @@ export class Game {
     ui.setDaily(`今日任务：${q.text}（${Math.min(q.n, q.goal)}/${q.goal}）${q.done ? ' ✅' : ''}`, q.done);
   }
 
-  // ---------- 图鉴 ----------
+  // ---------- 图鉴（只看本册：序章 + 本册课本词） ----------
   _openCatalog(hungryFirst = false) {
     const hungrySet = new Set(save.hungryPets());
-    const entries = WORDS.map(w => {
+    const entries = this.scopeWords.map(w => {
       const hatched = save.isHatched(w.id);
       return {
         word: w, hatched,
@@ -1703,7 +1739,7 @@ export class Game {
       };
     });
     if (hungryFirst) entries.sort((a, b) => (b.hungry ? 1 : 0) - (a.hungry ? 1 : 0));
-    ui.openCatalog(entries, w => petThumbnail(w.pet));
+    ui.openCatalog(entries, w => petThumbnail(w.pet), { bookLabel: BOOK_LABEL(this.sem) });
   }
 
   _nearestEggHint() {
@@ -1718,17 +1754,20 @@ export class Game {
 
   // ================= 课本朗读练习 =================
   _openBook(semKey) {
-    if (!semKey) semKey = save.getBookSem() || '3a';
-    save.setBookSem(semKey);
-    const labels = { '3a': '三上', '3b': '三下', '4a': '四上', '4b': '四下', '5a': '五上', '5b': '五下', '6a': '六上', '6b': '六下' };
-    const sems = Object.keys(CURRICULUM).map(k => ({ key: k, label: labels[k] || k, active: k === semKey }));
+    if (!semKey) semKey = save.getBookSem() || this.sem;
+    const sems = Object.keys(CURRICULUM).map(k => ({ key: k, label: BOOK_LABEL(k), active: k === semKey }));
     const units = CURRICULUM[semKey].units.map((u, i) => {
       const res = save.getUnitResult(semKey + '#' + i);
       return { name: u.name, total: u.words.length, scores: res ? res.scores : null };
     });
     ui.showBookPanel({
       sems, units,
-      onSelect: k => this._openBook(k),
+      // 换一册：3D 场景/海岛/关卡整册重建，所以存好后重载一次
+      onSelect: k => {
+        if (k === this.sem) { this._openBook(k); return; }
+        save.setBookSem(k);
+        location.reload();
+      },
       onStart: i => this._startPractice(semKey, i),
       onQuickRound: () => this._startQuickRound(semKey),
     });

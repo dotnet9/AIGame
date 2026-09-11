@@ -27,15 +27,20 @@ window.addEventListener('error', e => {
 });
 
 let started = false;
-function begin(name, semKey, gender) {
+function begin(name, semKey, gender, password) {
   if (started) return;
   started = true;
   try {
     const profile = document.getElementById('profile');
     if (profile) profile.classList.add('hidden');
-    if (name) save.setUsername(name);
+    // 从弹窗提交进来才更新档案；自动续玩时不带参，别覆盖已有资料
+    if (name) {
+      save.setUsername(name);
+      save.setPassword(password || '');   // 密码允许为空
+      save.setRegistered(true);
+    }
     if (semKey) save.setBookSem(semKey);
-    if (gender) save.setGender(gender);   // 只在档案提交时更新；续玩/改档案后的自动重载不带参，别把性别重置
+    if (gender) save.setGender(gender);
     save.resetSessionScore();
     const game = new Game(canvas);
     game.start();
@@ -48,5 +53,9 @@ function begin(name, semKey, gender) {
   }
 }
 
-if (save.getUsername() && CURRICULUM[save.getBookSem()]) begin();
-else ui.showProfile(begin, { username: save.getUsername(), semKey: save.getBookSem() });
+// 建过档案（有昵称、选好课本）就直接续玩；否则弹窗：有昵称的走登录，没有的走注册
+if (save.getUsername() && save.isRegistered() && CURRICULUM[save.getBookSem()]) begin();
+else ui.showProfile(begin, {
+  username: save.getUsername(), password: save.getPassword(), registered: save.isRegistered(),
+  semKey: save.getBookSem(), gender: save.getGender(),
+}, { mode: save.getUsername() ? 'login' : 'register' });

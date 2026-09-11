@@ -432,3 +432,6 @@ FodyWeavers.xsd
 tools/.commons_cache.json
 tools/.commons_done.json
 tools/make_voice_run.log
+# 账号表：含密码哈希与性别，属于运行时数据，不入库
+tools/accounts.json
+tools/accounts.json.tmp

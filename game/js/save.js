@@ -26,7 +26,7 @@ function fresh() {
     book: { sem: null, units: {} }, // 课本：选中学期 + 单元成绩 {'3a#0': {scores:[..], done:true}}
     intro: false,
     playSeconds: 0,
-    profile: { username: '', score: 0, sessionScore: 0, gender: 'boy', stars: 0,
+    profile: { username: '', password: '', registered: false, score: 0, sessionScore: 0, gender: 'boy', stars: 0,
       wear: { hat: '', hatOwned: [], balloon: false, balloonOwned: false, wand: false, wandOwned: false } },
     daily: { day: '', idx: 0, n: 0, done: false },
   };
@@ -49,6 +49,10 @@ function load() {
     merged.profile.wear = Object.assign(fresh().profile.wear, d.profile?.wear || {});
     if (!merged.profile.gender) merged.profile.gender = 'boy'; // 老存档没有性别字段 → 默认男孩
     if (typeof merged.profile.stars !== 'number') merged.profile.stars = 0;
+    // 老存档没有密码字段：留空即可（密码允许为空）
+    if (typeof merged.profile.password !== 'string') merged.profile.password = '';
+    // 是否已建过档案（用来决定是否直接续玩）；老存档默认 false，下次填一次名字即可
+    if (typeof merged.profile.registered !== 'boolean') merged.profile.registered = false;
     merged.daily = Object.assign({ day: '', idx: 0, n: 0, done: false }, d.daily || {});
     if (!merged.player) merged.player = null;
     return merged;
@@ -135,6 +139,10 @@ export function setGender(g) {
   data.profile.gender = g === 'girl' ? 'girl' : 'boy';
   save();
 }
+export function getPassword() { return data.profile.password || ''; }
+export function setPassword(pwd) { data.profile.password = String(pwd || ''); save(); }
+export function isRegistered() { return !!data.profile.registered; }
+export function setRegistered(v) { data.profile.registered = !!v; save(); }
 
 // 每完成一个学习挑战加 1 分；本地先记账，联网时再同步到排行榜服务。
 export function addPoint() {
@@ -142,7 +150,11 @@ export function addPoint() {
   data.profile.score = getScore() + 1;
   data.profile.sessionScore = getSessionScore() + 1;
   save();
-  const body = JSON.stringify({ username: data.profile.username, delta: 1, gender: getGender() });
+  // 还没建档案就只记本地分；有档案（哪怕密码为空）才同步给排行榜
+  if (!data.profile.registered) return;
+  const body = JSON.stringify({
+    username: data.profile.username, password: data.profile.password, delta: 1, gender: getGender(),
+  });
   try {
     fetch('/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
   } catch (e) { /* 静态站点或离线时保留本地积分 */ }

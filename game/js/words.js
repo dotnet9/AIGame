@@ -3,9 +3,11 @@
 //   WORDS     前 60 条为手写老词（农场/海滩/森林）；其余按 52 座海岛自动展开
 //   ISLANDS   海岛定义：key/name/emoji/主题色/圆心/半径 + rows=[en, zh, hint, spec]
 //             spec 是参数化词宠工厂的配方（models.js 的 autoPet 解析）
-//   CHAPTERS  每关 6 词自动切分；海岛按顺序解锁（火车站按关开放）
+//   分册       每个海岛词都标注 vol（3a…6b 哪一册）；按册切关、按册开图，不把所有册揉在一起
+//   chaptersFor(sem)  当前册的关卡：固定的序章（农场/海滩/森林 60 词）+ 本册课本词
 // 单词与短语都进 3D 场景：含空格的条目视为短语（短语岛 + 对话气泡标识牌）
 import { EXTRA_ISLANDS } from './pep-extra.js';
+import { CURRICULUM } from './curriculum.js';
 
 // WORDS = 全部词宠（老词 + 海岛词）。前 60 条为手写老词（农场/海滩/森林），其余按 52 座海岛自动展开
 const BASE_WORDS = [
@@ -686,14 +688,38 @@ for (const isl of ISLANDS) {
   });
 }
 
+// ================= 分册（年级·上下册）归类 =================
+// 每个海岛词标注它出自哪一册（来自 curriculum.js 的课本单元），
+// 每座海岛标注它覆盖的册；这样选了三上就只看三上，不会把八册揉到一起。
+const BOOK_LABELS = { '3a': '三上', '3b': '三下', '4a': '四上', '4b': '四下', '5a': '五上', '5b': '五下', '6a': '六上', '6b': '六下' };
+const en2sem = new Map();
+for (const [sem, book] of Object.entries(CURRICULUM))
+  for (const unit of book.units)
+    for (const item of unit.words) {
+      const en = item.split('|')[0].toLowerCase();
+      if (!en2sem.has(en)) en2sem.set(en, []);
+      if (!en2sem.get(en).includes(sem)) en2sem.get(en).push(sem);
+    }
+const volsOf = en => en2sem.get(en.toLowerCase()) || [];
+
+// 老词（农场/海滩/森林）作为固定序章永远保留；顺带记下它属于哪几册（可能为空）
+for (const w of BASE_WORDS) { w.vols = volsOf(w.en); w.story = true; }
+for (const w of islandWords) w.vols = volsOf(w.en);
+for (const isl of ISLANDS) isl.vols = [...new Set(isl.rows.flatMap(r => volsOf(r[0])))];
+
 // 对外导出完整词表（老词 + 海岛词）
 export const WORDS = [...BASE_WORDS, ...islandWords];
 const ALL_WORDS = WORDS;
 export const WORD_MAP = Object.fromEntries(ALL_WORDS.map(w => [w.id, w]));
 export const TOTAL = ALL_WORDS.length;
 
-// 关卡：每 6 词一关，海岛词接在老词后面顺序切分
+// 关卡：每 6 词一关
 export const PER_CHAPTER = 6;
+// 序章：农场/海滩/森林 60 词（含 boat/light/wind/seed/rain 剧情钥匙），每册都从它开始
+export const PROLOGUE = BASE_WORDS;
+export const PROLOGUE_CHAPTERS = Math.ceil(BASE_WORDS.length / PER_CHAPTER);
+export const SEM_KEYS = Object.keys(CURRICULUM);
+export const BOOK_LABEL = sem => BOOK_LABELS[sem] || sem;
 // 区域中文名（主岛 + 海岛一起查）
 export const ZONE_NAMES = {
   meadow: '出生草甸', orchard: '阳光果园', windmill: '风车田',
@@ -701,11 +727,6 @@ export const ZONE_NAMES = {
   beach: '阳光海滩', forest: '神秘森林',
   ...Object.fromEntries(ISLANDS.map(i => [i.key, i.name])),
 };
-const TOTAL_CHAPTERS = Math.ceil(ALL_WORDS.length / PER_CHAPTER);
-export const CHAPTERS = Array.from({ length: TOTAL_CHAPTERS }, (_, i) => {
-  const words = ALL_WORDS.slice(i * PER_CHAPTER, (i + 1) * PER_CHAPTER).map(w => w.id);
-  return { name: wordsZoneName(words), words };
-});
 // 关卡名：整关在同一岛就叫岛名，跨岛用前一个词所在区域名
 function wordsZoneName(ids) {
   const w = WORD_MAP[ids[0]];
@@ -713,15 +734,32 @@ function wordsZoneName(ids) {
   return ZONE_NAMES[w.zone] || w.zone;
 }
 
+// 本册海岛词（按词表顺序，一个词出现在多册就多册都算）
+export function wordsForSem(sem) { return islandWords.filter(w => w.vols.includes(sem)); }
+// 本册可玩词表 = 固定序章 + 本册课本词
+export function allWordsForSem(sem) { return [...BASE_WORDS, ...wordsForSem(sem)]; }
+// 本册关卡（每 6 词一关，序章在最前）
+export function chaptersFor(sem) {
+  const ws = allWordsForSem(sem);
+  return Array.from({ length: Math.ceil(ws.length / PER_CHAPTER) }, (_, i) => {
+    const words = ws.slice(i * PER_CHAPTER, (i + 1) * PER_CHAPTER).map(w => w.id);
+    return { name: wordsZoneName(words), words };
+  });
+}
+// 本册海岛（带 startChapter：序章占掉前面的关，之后按本册词序解锁）
+export function islandsForSem(sem) {
+  const ws = wordsForSem(sem);
+  const pos = new Map(ws.map((w, i) => [w.id, i]));
+  const wid = en => (isPhrase(en) ? 'ph-' : '') + idOf(en);
+  return ISLANDS.filter(isl => isl.vols.includes(sem)).map(isl => {
+    const first = isl.rows.map(r => wid(r[0])).find(id => pos.has(id));
+    const p = first != null ? pos.get(first) : 0;
+    return { ...isl, startChapter: PROLOGUE_CHAPTERS + Math.floor(p / PER_CHAPTER) };
+  });
+}
+
 // 岛上词宠的参数化模型配方（models.js 的 buildPet 读取）
 export const AUTO_SPECS = Object.fromEntries(islandWords.map(w => [w.id, w.spec]));
-
-// 岛的起始关卡（index，从 0 数）：岛上第一个词所在的关
-// 短语岛排在单词岛之后，所以会随进度自然解锁（先集齐单词，再玩短语）
-for (const isl of ISLANDS) isl.startChapter = Math.floor(isl.startIndex / PER_CHAPTER);
-
-export const chapterIndex = hatchedCount => Math.min(Math.floor(hatchedCount / PER_CHAPTER), CHAPTERS.length - 1);
-export const chapterWordIds = idx => CHAPTERS[idx].words;
 
 // 单词当前的岛（主岛词返回 null）
 export function islandOfZone(zone) {

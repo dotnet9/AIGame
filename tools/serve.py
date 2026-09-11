@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""开发服务器：禁用缓存，避免改代码后浏览器用旧文件"""
+"""开发服务器：禁用缓存，避免改代码后浏览器用旧文件
+
+接口: GET /api/leaderboard   POST /api/score   POST /api/register   POST /api/login
+账号: 昵称唯一，密码至少 1 位；服务端用 MD5 迭代 3 次（带昵称加盐）后保存，不存明文。
+"""
 import http.server
 import sys
 import json
 import os
 import threading
+import hashlib
 from urllib.parse import urlparse
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8931
 BOARD_FILE = os.path.join(os.path.dirname(__file__), "leaderboard.json")
+ACCOUNTS_FILE = os.path.join(os.path.dirname(__file__), "accounts.json")
+LEGACY_PASSWORD = ""   # 老账号（上线前只在排行榜里的名字）按空密码处理
 BOARD_LOCK = threading.Lock()
 
 def read_board():
@@ -24,6 +31,50 @@ def write_board(rows):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False, indent=2)
     os.replace(tmp, BOARD_FILE)
+
+def read_accounts():
+    try:
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+def write_accounts(obj):
+    tmp = ACCOUNTS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, ACCOUNTS_FILE)
+
+def hash_pwd(username, pwd):
+    """md5(md5(md5(昵称:密码)))，昵称当盐，迭代 3 次"""
+    h = str(pwd)
+    salt = str(username).lower()
+    for _ in range(3):
+        h = hashlib.md5(f"{salt}:{h}".encode("utf-8")).hexdigest()
+    return h
+
+def is_legacy_name(username, rows):
+    return any(str(x.get("username", "")) == username for x in rows)
+
+def score_of(username, rows):
+    row = next((x for x in rows if str(x.get("username", "")) == username), None)
+    return int(row.get("score", 0)) if row else 0
+
+def gender_of(username, rows):
+    row = next((x for x in rows if str(x.get("username", "")) == username), None)
+    return "girl" if row and row.get("gender") == "girl" else "boy"
+
+def clean_creds(body):
+    username = str(body.get("username") or "").strip()[:20]
+    password = str(body.get("password") or "")
+    if not username:
+        return None, "先写一个名字"
+    if any(ord(c) < 32 for c in username):
+        return None, "名字里有特殊字符"
+    if len(password) > 64:
+        return None, "密码最多 64 位"
+    return (username, password), None
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
@@ -44,7 +95,14 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/score":
+        path = urlparse(self.path).path
+        if path == "/api/register":
+            return self._register()
+        if path == "/api/login":
+            return self._login()
+        if path == "/api/update":
+            return self._update()
+        if path != "/api/score":
             return self._json(404, {"error": "not found"})
         try:
             length = min(int(self.headers.get("Content-Length", "0")), 4096)
@@ -52,11 +110,17 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             username = str(body.get("username", "")).strip()[:20]
             delta = max(0, min(100, int(body.get("delta", 1))))
             gender = "girl" if body.get("gender") == "girl" else "boy"  # 未上报的老数据默认男孩
+            password = str(body.get("password") or "")
             if not username or not delta:
                 return self._json(400, {"error": "invalid score"})
         except (ValueError, TypeError, json.JSONDecodeError):
             return self._json(400, {"error": "invalid json"})
         with BOARD_LOCK:
+            # 记账必须带对密码，否则别人用同名就能改你的分数
+            accounts = read_accounts()
+            acc = accounts.get(username)
+            if not acc or acc.get("pwd") != hash_pwd(username, password):
+                return self._json(401, {"error": "请先登录"})
             rows = read_board()
             row = next((x for x in rows if x.get("username") == username), None)
             if row is None:
@@ -66,6 +130,99 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             row["gender"] = gender
             write_board(rows)
         return self._json(200, row)
+
+    def _read_json_body(self):
+        length = min(int(self.headers.get("Content-Length", "0")), 4096)
+        return json.loads(self.rfile.read(length) or b"{}")
+
+    def _register(self):
+        try:
+            body = self._read_json_body()
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "invalid json"})
+        creds, err = clean_creds(body)
+        if err:
+            return self._json(400, {"error": err})
+        username, password = creds
+        with BOARD_LOCK:
+            accounts = read_accounts()
+            # 昵称唯一：已注册的、或老排行榜里已有的名字，都不能再注册，只能登录
+            if username in accounts or is_legacy_name(username, read_board()):
+                return self._json(409, {"error": "这个名字已经有人用了"})
+            gender = "girl" if body.get("gender") == "girl" else "boy"
+            accounts[username] = {"pwd": hash_pwd(username, password), "gender": gender}
+            write_accounts(accounts)
+        return self._json(201, {"username": username, "gender": gender, "score": 0})
+
+    def _login(self):
+        try:
+            body = self._read_json_body()
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "invalid json"})
+        creds, err = clean_creds(body)
+        if err:
+            return self._json(400, {"error": err})
+        username, password = creds
+        with BOARD_LOCK:
+            accounts = read_accounts()
+            rows = read_board()
+            acc = accounts.get(username)
+            if not acc:
+                # 老账号：还没登记过密码，默认密码 000000；登录成功后补登记
+                if not is_legacy_name(username, rows):
+                    return self._json(404, {"error": "还没有这个名字，去注册吧"})
+                if password != LEGACY_PASSWORD:
+                    return self._json(401, {"error": "密码不对"})
+                acc = {"pwd": hash_pwd(username, LEGACY_PASSWORD), "gender": gender_of(username, rows)}
+                accounts[username] = acc
+                write_accounts(accounts)
+            elif acc.get("pwd") != hash_pwd(username, password):
+                return self._json(401, {"error": "密码不对"})
+            gender = "girl" if acc.get("gender") == "girl" else gender_of(username, rows)
+            score = score_of(username, rows)
+        return self._json(200, {"username": username, "gender": gender, "score": score})
+
+    def _update(self):
+        """改档案：改昵称 / 改密码（改完昵称后密码按新昵称重新加盐）"""
+        try:
+            body = self._read_json_body()
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "invalid json"})
+        cur, err = clean_creds(body)
+        if err:
+            return self._json(400, {"error": err})
+        nxt, err = clean_creds({"username": body.get("newUsername"), "password": body.get("newPassword")})
+        if err:
+            return self._json(400, {"error": err})
+        cur_name, cur_pwd = cur
+        new_name, new_pwd = nxt
+        with BOARD_LOCK:
+            accounts = read_accounts()
+            rows = read_board()
+            acc = accounts.get(cur_name)
+            # 先验证当前身份；老名字（没登记过）按空密码验证；没出现过的名字当新注册放行
+            if acc:
+                if acc.get("pwd") != hash_pwd(cur_name, cur_pwd):
+                    return self._json(401, {"error": "密码不对"})
+            elif is_legacy_name(cur_name, rows):
+                if cur_pwd != LEGACY_PASSWORD:
+                    return self._json(401, {"error": "密码不对"})
+            # 改昵称要保证新名字没被别人占用
+            if new_name != cur_name and (new_name in accounts or is_legacy_name(new_name, rows)):
+                return self._json(409, {"error": "这个名字已经有人用了"})
+            gender = "girl" if (acc and acc.get("gender") == "girl") or gender_of(cur_name, rows) == "girl" else "boy"
+            if new_name != cur_name:
+                accounts.pop(cur_name, None)
+            accounts[new_name] = {"pwd": hash_pwd(new_name, new_pwd), "gender": gender}
+            write_accounts(accounts)
+            # 排行榜里的分数跟着改名，别丢进度
+            if new_name != cur_name:
+                row = next((x for x in rows if str(x.get("username", "")) == cur_name), None)
+                if row:
+                    row["username"] = new_name
+                    write_board(rows)
+            score = score_of(new_name, read_board())
+        return self._json(200, {"username": new_name, "gender": gender, "score": score})
 
     def do_OPTIONS(self):
         self.send_response(204)

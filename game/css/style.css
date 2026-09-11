@@ -262,6 +262,12 @@ body {
 #profile-card p { color: #8A7664; font-size: 14px; line-height: 1.6; }
 #profile-name { width: 100%; margin: 18px 0 12px; border: 2px solid #FFD3E0; border-radius: 999px; padding: 12px 16px; font: inherit; text-align: center; outline: none; }
 #profile-name:focus { border-color: #FF8FB0; box-shadow: 0 0 0 3px rgba(255,143,176,.18); }
+#profile-name[readonly] { background: #F7F2EC; color: #A09084; }
+#profile-password {
+  width: 100%; margin: 0 0 12px; border: 2px solid #FFD3E0; border-radius: 999px;
+  padding: 12px 16px; font: inherit; text-align: center; outline: none;
+}
+#profile-password:focus { border-color: #FF8FB0; box-shadow: 0 0 0 3px rgba(255,143,176,.18); }
 /* 性别选择 */
 #profile-gender { display: flex; gap: 10px; margin-bottom: 12px; }
 .gender-btn {
@@ -275,6 +281,12 @@ body {
 #profile-card select { flex: 1; border: 2px solid #D5EDC5; border-radius: 999px; background: #F3FAEC; color: #4E7A46; padding: 10px 12px; font: inherit; text-align: center; outline: none; }
 #profile-card .profile-tip { color: #C4A78F; font-size: 12px; margin-bottom: 14px; }
 #profile-start { border: none; background: #FF8FB0; color: #fff; font: inherit; font-weight: bold; padding: 12px 28px; border-radius: 999px; cursor: pointer; box-shadow: 0 4px 0 #E0678D; }
+#profile-start:disabled { opacity: .6; cursor: default; }
+.profile-switch {
+  display: block; margin: 12px auto 0; border: 0; background: transparent; color: #6E9E5E;
+  font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline;
+}
+.profile-switch.hidden { display: none; }
 #profile-logout {
   display: block; margin: 14px auto 0; border: 0; background: transparent; color: #B47514;
   font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline;

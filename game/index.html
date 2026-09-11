@@ -69,6 +69,7 @@
     <h2>开始前先设置学习档案</h2>
     <p>先选好年级，之后的单词和短语会跟着你的课本走。</p>
     <input id="profile-name" maxlength="20" autocomplete="nickname" aria-label="用户名" placeholder="例如：小雨" />
+    <input id="profile-password" maxlength="64" type="password" autocomplete="current-password" aria-label="密码" placeholder="设置密码（至少 1 位）" />
     <div id="profile-gender" role="radiogroup" aria-label="性别">
       <button type="button" id="gender-boy" class="gender-btn">👦 男孩</button>
       <button type="button" id="gender-girl" class="gender-btn">👧 女孩</button>
@@ -79,6 +80,7 @@
     </div>
     <div class="profile-tip">完成一个挑战得 1 分，和同学比比谁的词宠最多！</div>
     <button id="profile-start">出发去词宠岛</button>
+    <button id="profile-switch" class="profile-switch" type="button">我已有账号，去登录</button>
     <button id="profile-logout" class="profile-logout hidden" type="button">退出当前账号</button>
     <div id="profile-error" role="alert"></div>
   </div>

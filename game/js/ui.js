@@ -519,17 +519,35 @@ export function setLeaderboardPlayer(current = {}) {
   refreshLeaderboard();
 }
 
+// 调账号接口。返回 { ok, status, data }；网络不可用（离线/没后端）时抛出，交给调用方走本地兜底。
+async function apiPost(path, payload) {
+  const res = await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* 后端没返回 JSON */ }
+  return { ok: res.ok, status: res.status, data };
+}
+// 后端不存在时（静态站点 404 'not found'、405、501）当作可离线继续
+const noBackend = r => !r || r.status === 405 || r.status === 501 || (r.status === 404 && (!r.data || r.data.error === 'not found'));
+
+// 档案弹窗：第一次用 → 注册（昵称 + 密码）；老同学 → 登录；已登录改档案 → editing
 export function showProfile(onDone, profile = {}, options = {}) {
   const ov = document.getElementById('profile');
   const input = document.getElementById('profile-name');
+  const pwd = document.getElementById('profile-password');
   const grade = document.getElementById('profile-grade');
   const term = document.getElementById('profile-term');
   const error = document.getElementById('profile-error');
   const title = ov.querySelector('h2');
   const intro = ov.querySelector('p');
   const start = document.getElementById('profile-start');
+  const switchBtn = document.getElementById('profile-switch');
   const close = document.getElementById('profile-close');
   const logout = document.getElementById('profile-logout');
+  const genderRow = document.getElementById('profile-gender');
+  const selects = ov.querySelector('.profile-selects');
+  const tip = ov.querySelector('.profile-tip');
   const boyBtn = document.getElementById('gender-boy');
   const girlBtn = document.getElementById('gender-girl');
   const editing = !!options.editing;
@@ -543,36 +561,95 @@ export function showProfile(onDone, profile = {}, options = {}) {
   girlBtn.onclick = () => { gender = 'girl'; sfx.pop(); paintGender(); };
   paintGender();
   input.value = profile.username || '';
-  title.textContent = editing ? '学习档案' : '开始前先设置学习档案';
-  intro.textContent = editing ? '可以换个名字、形象或年级，保存后会重新进入词宠岛。' : '先选好年级和你的小形象，单词会跟着你的课本走。';
-  start.textContent = editing ? '保存并继续' : '出发去词宠岛';
-  close.classList.toggle('hidden', !editing);
-  logout.classList.toggle('hidden', !editing);
-  error.textContent = '';
+  pwd.value = editing ? (profile.password || '') : '';   // 改档案时把当前密码填出来，可直接改
+  // 已登录改档案 / 新同学注册 / 老同学登录
+  let mode = editing ? 'edit' : (options.mode === 'login' || (profile.username && !profile.registered) ? 'login' : 'register');
   if (CURRICULUM[profile.semKey]) {
     grade.value = profile.semKey[0];
     term.value = profile.semKey[1] === 'a' ? 'up' : 'down';
   }
+  const paint = () => {
+    error.textContent = '';
+    title.textContent = editing ? '我的档案' : (mode === 'login' ? '欢迎回来' : '开始前先设置学习档案');
+    intro.textContent = editing
+      ? '可以改昵称、密码、形象和课本，保存后重新进入词宠岛。'
+      : (mode === 'login' ? '填昵称和密码就能接着玩，密码可以留空。' : '起个名字就能玩，密码可以留空。');
+    start.textContent = editing ? '保存' : (mode === 'login' ? '登录' : '出发去词宠岛');
+    pwd.placeholder = '密码（可以留空）';
+    switchBtn.classList.toggle('hidden', editing);
+    switchBtn.textContent = mode === 'login' ? '我是新同学，去注册' : '我已有账号，去登录';
+    genderRow.classList.toggle('hidden', mode === 'login');   // 登录时性别由服务端定
+    selects.classList.toggle('hidden', mode === 'login');     // 登录只要昵称+密码，课本沿用上次（或默认三上）
+    tip.textContent = editing ? '完成一个挑战得 1 分，和同学比比谁的词宠最多！'
+      : (mode === 'login' ? '忘了密码？换个名字重新注册一个就行。' : '同一个名字就是同一份学习记录哦。');
+    close.classList.toggle('hidden', !editing);
+    logout.classList.toggle('hidden', !editing);
+  };
+  paint();
   let submitted = false;
-  ov.classList.remove('hidden'); input.focus();
-  const submit = () => {
+  const busy = () => { start.disabled = true; start.textContent = '稍等…'; };
+  const resume = () => { if (!editing) start.textContent = mode === 'login' ? '登录' : '出发去词宠岛'; };
+  const done = (semKey, password) => { ov.classList.add('hidden'); onDone && onDone(input.value.trim(), semKey, gender, password); };
+  const fail = msg => { error.textContent = msg; submitted = false; start.disabled = false; resume(); };
+  const submit = async () => {
     if (submitted) return;
     const name = input.value.trim();
-    if (!name) { error.textContent = '先写一个名字再出发哦～'; input.focus(); return; }
-    if (!grade.value) { error.textContent = '请选择你的年级'; grade.focus(); return; }
-    if (!term.value) { error.textContent = '请选择上册或下册'; term.focus(); return; }
-    const semKey = gradeKey(grade.value, term.value);
-    if (!CURRICULUM[semKey]) return;
-    submitted = true;
-    ov.classList.add('hidden');
-    onDone && onDone(name, semKey, gender);
+    const password = pwd.value;
+    if (!name) { error.textContent = '先写一个名字哦～'; input.focus(); return; }
+    // 登录只要昵称+密码，课本沿用上次选的（没有就默认三上）；注册/改档案要选课本
+    let semKey = '';
+    if (mode !== 'login') {
+      if (!grade.value) { error.textContent = '请选择你的年级'; grade.focus(); return; }
+      if (!term.value) { error.textContent = '请选择上册或下册'; term.focus(); return; }
+      semKey = gradeKey(grade.value, term.value);
+      if (!CURRICULUM[semKey]) return;
+    } else {
+      semKey = CURRICULUM[profile.semKey] ? profile.semKey : '3a';
+    }
+    submitted = true; busy();
+    try {
+      if (editing) {
+        const r = await apiPost('/api/update', {
+          username: profile.username, password: profile.password,   // 用当前密码验证身份
+          newUsername: name, newPassword: password,
+        });
+        if (r.ok || noBackend(r)) return done(semKey, password);
+        return fail((r.data && r.data.error) || '保存失败，换个名字试试');
+      }
+      if (mode === 'register') {
+        const r = await apiPost('/api/register', { username: name, password, gender });
+        if (r.ok || noBackend(r)) return done(semKey, password);
+        return fail((r.data && r.data.error) || '注册失败，换一个名字试试');
+      }
+      const r = await apiPost('/api/login', { username: name, password });
+      if (r.ok) {
+        if (r.data && r.data.gender) gender = r.data.gender === 'girl' ? 'girl' : 'boy';
+        return done(semKey, password);
+      }
+      if (noBackend(r)) return done(semKey, password);   // 离线也放行，本地存档继续用
+      if (r.status === 404) {                            // 没这个名字 → 直接转注册，少点来回
+        mode = 'register'; submitted = false; start.disabled = false;
+        paint(); error.textContent = '这个名字还没注册过，点「出发去词宠岛」就能建好啦';
+        return;
+      }
+      return fail((r.data && r.data.error) || '登录失败，检查一下昵称和密码');
+    } catch (e) {
+      done(semKey, password);   // 完全连不上后端：本地存档模式继续，不耽误小朋友玩
+    }
   };
   start.onclick = submit;
-  logout.onclick = () => {
-    if (options.onLogout) options.onLogout();
+  start.disabled = false;
+  switchBtn.onclick = () => {
+    mode = mode === 'login' ? 'register' : 'login';
+    if (mode === 'register' && !input.value.trim()) pwd.value = '';
+    paint(); (mode === 'login' ? pwd : input).focus();
   };
+  logout.onclick = () => { if (options.onLogout) options.onLogout(); };
   close.onclick = () => ov.classList.add('hidden');
-  input.onkeydown = e => { if (e.key === 'Enter') submit(); };
+  input.onkeydown = e => { if (e.key === 'Enter') { if (pwd.classList.contains('hidden')) submit(); else pwd.focus(); } };
+  pwd.onkeydown = e => { if (e.key === 'Enter') submit(); };
+  ov.classList.remove('hidden');
+  (editing || profile.username ? pwd : input).focus();
 }
 
 export async function showLeaderboard(current = {}) {
@@ -633,10 +710,17 @@ export function openPicker(list, onPick, onClose, opts = {}) {
 }
 els.pickerClose.addEventListener('click', () => els.picker.classList.add('hidden'));
 
-// ---------- 图鉴 ----------
-export function openCatalog(entries, getThumb) {
+// ---------- 图鉴（只看当前册：标题带上册名与本册进度） ----------
+export function openCatalog(entries, getThumb, meta = {}) {
   els.catalogGrid.innerHTML = '';
-  const lazyThumbs = [];   // 缩略图分帧生成：全收集 932 只，一次全画会把页面卡死
+  const head = els.catalog ? els.catalog.querySelector('#catalog-head span') : null;
+  if (head) {
+    const opened = entries.filter(e => e.hatched).length;
+    head.textContent = meta.bookLabel
+      ? `📖 ${meta.bookLabel}图鉴 ${opened}/${entries.length}`
+      : `📖 词宠图鉴`;
+  }
+  const lazyThumbs = [];   // 缩略图分帧生成，一次全画会把页面卡死
   for (const e of entries) {
     const d = document.createElement('div');
     d.className = 'cat-item ' + (e.hatched ? 'open' : 'locked') + (e.hungry ? ' hungry' : '');
@@ -735,7 +819,7 @@ export function openMap(data) {
     c.fillRect(X(-38.8), Z(4.5), 1.6 * scale, 29 * scale);
     c.fillRect(X(-38.8), Z(-33.5), 1.6 * scale, 29 * scale);
   }
-  // 群岛
+  // 群岛（只画当前册的岛）
   for (const isl of data.islands || []) {
     c.fillStyle = isl.unlocked ? '#D8F0C8' : '#D8DDE4';
     c.beginPath(); c.arc(X(isl.cx), Z(isl.cz), isl.r * scale, 0, Math.PI * 2); c.fill();
@@ -748,6 +832,11 @@ export function openMap(data) {
     c.fillStyle = isl.unlocked ? '#3E6B36' : '#8C8478';
     c.font = 'bold 10px "Microsoft YaHei"';
     c.fillText(isl.name.replace('岛', '').replace('大陆', ''), X(isl.cx), Z(isl.cz) + isl.r * scale - 3);
+    if (isl.total) {
+      c.fillStyle = isl.hatched >= isl.total ? '#D9941E' : '#6E9E5E';
+      c.font = '9px "Microsoft YaHei"';
+      c.fillText(`${isl.hatched}/${isl.total}`, X(isl.cx), Z(isl.cz) + isl.r * scale + 8);
+    }
   }
   // 火车站
   c.font = '12px sans-serif';
@@ -819,7 +908,7 @@ export function showBookPanel(data) {
       <div id="book-sems">${chips}</div>
       <button id="book-quick" class="book-go">🎯 本学期 3 分钟挑战 · 随机 5 题</button>
       <div id="book-units">${rows}</div>
-      <div id="book-tip">选择单元 → 听发音 → 点麦克风跟读 → 得分！短语和单词都支持哦</div>
+      <div id="book-tip">选单元 → 听发音 → 点麦克风跟读 → 得分！<br>点上面的册名可以<b>换一册</b>，小岛会跟着换新词哦</div>
     </div>`;
   bookOv.classList.remove('hidden');
   bookOv.querySelectorAll('.book-chip').forEach(b =>
@@ -906,18 +995,18 @@ export function showDailyBoard({ quest, stars }) {
 }
 
 // ---------- 开场引导 ----------
-export function playIntro(onDone, isTouch = false) {
+export function playIntro(onDone, isTouch = false, bookLabel = '', total = 0) {
   const move = isTouch
     ? '用左下角<b>摇杆</b>走路，<b>跳</b>按钮蹦一蹦，<br>屏幕上拖动转视角，双指缩放。'
     : '用 <b>W A S D</b> 或方向键走路，按<b>空格</b>跳一跳，<br>方向键+空格能向前跳，右键拖动转视角。';
   const steps = [
-    ['🌼', '欢迎来到 <b>词宠岛</b>！<br>这座岛上住着 <b>60</b> 只词宠，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。'],
+    ['🌼', `欢迎来到 <b>词宠岛</b>！<br>现在玩的是 <b>${bookLabel || '你的课本'}</b>，<br>这里住着 <b>${total || '好多'}</b> 只词宠，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。`],
     ['🎮', move],
     ['🥚', isTouch
       ? '走近<b>发光的蛋</b>，点一点它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分，还能赚 <b>⭐星星</b>！'
       : '走近<b>发光的蛋</b>，按 <b>E</b> 打开它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分，还能赚 <b>⭐星星</b>！'],
     ['🤔', '被沙墙、荆棘挡路时会有<b>谜题</b>：<br>读懂谜面，<b>召唤对的那只词宠</b>来帮忙！<br>一次答对奖励 3⭐，攒够星星去<b>许愿井</b>换装扮～'],
-    ['🐾', '词宠饿了还会找你<b>复习</b>，<br>农场的南边有<b>海滩</b>、西边有<b>森林</b>…<br>出发吧，小小词宠训练家！'],
+    ['🐾', '词宠饿了还会找你<b>复习</b>，<br>农场的南边有<b>海滩</b>、西边有<b>森林</b>…<br>想玩别的年级？点「课本」换一册就行！'],
   ];
   let i = 0;
   const show = () => {
@@ -942,26 +1031,19 @@ export function showHelp() {
   const ov = document.createElement('div');
   ov.className = 'overlay';
   const touchLines = matchMedia('(pointer: coarse)').matches
-    ? `<div>🕹️ 左下摇杆走路 · <b>跳</b>按钮蹦一蹦 · 拖动屏幕转视角 · 双指缩放</div>
-       <div>👆 走近蛋/词宠时，点屏幕下方的提示条互动</div>`
-    : `<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键走路 · 鼠标右键拖动转视角 · 滚轮缩放</div>
-       <div><kbd>空格</kbd> 跳一跳（按住方向键再按空格 = 向前跳）</div>
-       <div><kbd>E</kbd> 或点击：打开词宠蛋 / 和词宠互动 / 坐船过河</div>
-       <div><kbd>Tab</kbd> 或点 🪄：召唤词宠帮忙</div>`;
+    ? `<div>🕹️ 摇杆走路 · <b>跳</b>按钮蹦一蹦 · 手指转视角</div>`
+    : `<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走路 · 鼠标右键转视角</div>
+       <div><kbd>空格</kbd> 跳一跳 · <kbd>E</kbd> 或点一下：互动</div>`;
   ov.innerHTML = `
     <div id="help-card">
       <h3>🌼 怎么玩</h3>
       ${touchLines}
-      <div>🎤 点 🎤 开口读，10 秒内读完自动打分，还能 🎧 回放自己的读音</div>
-      <div>⭐ 读得越准赚越多星星！95 分以上有 2 颗哦</div>
-      <div>🧩 不会读？换成字母块拼一拼！</div>
-      <div>🗺️ 不知道去哪？点左上角地图，跟着头顶的金色箭头走</div>
-      <div>🤔 被挡路时会有<b>谜题</b>：读懂谜面，召唤对的那只词宠来帮忙，一次答对奖 3⭐</div>
-      <div>⛲ 星星攒够了去许愿井换魔法帽、气球和魔法棒！</div>
-      <div>📌 每天来任务板做一个今日任务，拿 5⭐</div>
-      <div>🍖 词宠饿了会想你，回去喊它的名字喂它（复习）</div>
-      <div>💾 进度自动保存，下次打开网址继续玩</div>
-      <div style="margin-top:10px;color:#C4A78F;font-size:13px">词宠岛 · 农场/海滩/森林三大场景，60 个单词等你收集</div>
+      <div>🥚 走近发光的蛋，点一下唤醒词宠</div>
+      <div>🎤 点 🎤 大声读，读得准就赚星星</div>
+      <div>🗺️ 找不到路？点地图，跟金色箭头走</div>
+      <div>🤔 被挡住？召唤对的词宠解谜题</div>
+      <div>🍖 词宠饿了会想你，回去喂喂它</div>
+      <div>⛲ 星星能换帽子和魔法棒</div>
       <button id="help-close" class="round-btn small" style="position:absolute;top:14px;right:14px">✕</button>
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'help-close') ov.remove(); });
