@@ -71,6 +71,7 @@ function ensureRec() {
 }
 
 // target: 单词或短语；返回 { ok, close, heard, score }  score: 0-100 发音评分
+// 评分原则：孩子的发音只要“听起来像”就给鼓励分，识别岔了不让小朋友背锅
 export function matchAlt(alts, target) {
   const tol = target.length <= 3 ? 0 : target.length <= 5 ? 1 : 2;
   const tNoSp = target.replace(/ /g, '');
@@ -79,7 +80,7 @@ export function matchAlt(alts, target) {
     const isObj = a && typeof a === 'object';
     const raw = isObj ? a.transcript : a;
     if (!raw) continue;
-    const conf = Math.min(1, Math.max(0.3, isObj ? (a.confidence || 0.6) : 0.6));
+    const conf = Math.min(1, Math.max(0.5, isObj ? (a.confidence || 0.7) : 0.7));
     const heard = raw.toLowerCase().replace(/[^a-z ]/g, ' ').trim();
     if (!heard) continue;
     const tokens = heard.split(/\s+/);
@@ -87,22 +88,33 @@ export function matchAlt(alts, target) {
     let s = null, ok = false, close = false;
     if (tokens.includes(target) || joined === tNoSp || heard === target) {
       ok = true;
-      s = Math.round(85 + 15 * conf);                       // 完全命中：85-100
+      s = Math.round(88 + 12 * conf);                       // 完全命中：88-100
     } else {
       let d = Math.min(...tokens.map(t => lev(t, target)), lev(joined, tNoSp));
       if (target.includes(' ')) d = Math.min(d, lev(heard.replace(/ /g, ''), tNoSp));
-      if (d === 0) { ok = true; s = Math.round(78 + 16 * conf); }        // 连读命中：78-94
-      else if (d <= tol) { close = true; s = Math.round(63 + (tol - d) * 7 + 12 * conf); } // 接近：63-82
-      else if (d <= tol + 1) { close = true; s = Math.round(46 + 16 * conf); }             // 勉强接近：46-62
+      if (d === 0) { ok = true; s = Math.round(82 + 14 * conf); }        // 连读命中：82-96
+      else if (d <= tol) { close = true; s = Math.round(68 + (tol - d) * 8 + 12 * conf); } // 接近：68-88
+      else if (d <= tol + 2) { close = true; s = Math.round(50 + (tol + 2 - d) * 7 + 10 * conf); } // 勉强接近：50-80
       else {
-        const firstOk = tokens.some(t => t[0] === target[0]);
-        s = firstOk ? Math.round(24 + 16 * conf) : Math.round(8 + 16 * conf);              // 鼓励分
+        // 相似度兜底：编辑距离太远时按字符重合度给分，识别岔了也不至于 2、30 分
+        const sim = 1 - d / Math.max(target.length, joined.length, 1);
+        const phonetic = lev(soundex(target), soundex(joined)) <= 1;   // 听感骨架相似
+        if (phonetic) { close = true; s = Math.round(62 + 12 * conf); }
+        else if (sim >= 0.5) { close = true; s = Math.round(46 + 22 * sim); }
+        else s = Math.round(30 + 14 * sim);                            // 确实没听清：30 分上下
       }
     }
     s = Math.max(0, Math.min(100, s));
     if (s > best.score) best = { ok, close, heard, score: s };
   }
   return best;
+}
+
+// 粗略音素骨架：去掉元音差异与重复字母，只留辅音框架（cat/can/kat 听感接近）
+function soundex(w) {
+  return String(w).replace(/ /g, '')
+    .replace(/([bcdfgklmnprstvz])\1+/g, '$1')
+    .replace(/[aeiouy]/g, '');
 }
 
 function lev(a, b) {

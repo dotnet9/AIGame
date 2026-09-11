@@ -12,7 +12,7 @@ import * as save from './save.js';
 import * as ui from './ui.js';
 import { startListening, stopListening, matchAlt, voiceSupported, isVoiceBroken, markVoiceBroken } from './speech.js';
 import { speak, sfx, stopSpeaking } from './audio.js';
-import { ensureWhisper, recognizeBlob } from './whisper.js';
+import { ensureWhisper, recognizeBlob, preloadWhisper, loadPercent } from './whisper.js';
 import { CURRICULUM } from './curriculum.js';
 
 const PLAYER_SPEED = 4.4;
@@ -373,6 +373,7 @@ export class Game {
       onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
       onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
+      onAbout: () => ui.showAbout(),
       onAccount: () => ui.showProfile((name, semKey, gender) => {
         save.setUsername(name);
         save.setBookSem(semKey);
@@ -1044,6 +1045,7 @@ export class Game {
   _openEgg(id) {
     const word = WORD_MAP[id];
     this.currentWord = word;
+    this._maybePreloadWhisper();
     ui.openChallenge({
       word, mode: 'hatch',
       onSuccess: res => this._doHatch(word, res && res.score),
@@ -1229,6 +1231,7 @@ export class Game {
   _feedPet(id) {
     const word = WORD_MAP[id];
     this.currentWord = word;
+    this._maybePreloadWhisper();
     ui.openChallenge({
       word, mode: 'feed',
       onSuccess: () => {
@@ -1657,6 +1660,7 @@ export class Game {
     }
     const w = p.list[p.idx];
     this.currentWord = w;
+    this._maybePreloadWhisper();
     ui.openChallenge({
       word: { en: w.en, zh: w.zh, syl: [w.en], hint: `第 ${p.idx + 1}/${p.list.length} 个 · 大声读给词宠听` },
       mode: 'practice',
@@ -1685,6 +1689,18 @@ export class Game {
     return this._startWhisper();
   }
 
+  // 打开挑战卡时悄悄预热本地识别引擎：手机上 Web Speech 多半不可用，
+  // 等孩子听完示范发音、开口录音时，40MB 模型基本已在后台下好了
+  _maybePreloadWhisper() {
+    if (this._whisperPreloaded) return;
+    const canRecord = typeof MediaRecorder !== 'undefined'
+      && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    const webSpeechOk = voiceSupported && !isVoiceBroken();
+    if (!canRecord || webSpeechOk) return;   // 桌面浏览器走即时识别，不必提前下 40MB
+    this._whisperPreloaded = true;
+    preloadWhisper();
+  }
+
   _startWhisper() {
     const word = this.currentWord;
     if (!word) return false;
@@ -1693,8 +1709,14 @@ export class Game {
     }
     this.voiceCancelled = false;
     // 在线识别不可用/不好用时使用本地模型；模型只在需要时加载。
-    ui.voiceStatus('第一次用本地识别，稍等一下下…');
-    ensureWhisper().then(() => {
+    // 首次下载有实时进度提示，孩子和家长知道在等什么、要等多久。
+    ui.voiceStatus('正在准备语音引擎…');
+    clearInterval(this._loadTick);
+    this._loadTick = setInterval(() => {
+      const pct = loadPercent();
+      if (pct > 0) ui.voiceStatus(`正在下载语音引擎 ${pct}%（约 40MB，只需下载一次）…`);
+    }, 400);
+    ensureWhisper().finally(() => clearInterval(this._loadTick)).then(() => {
       if (!this.currentWord) return;
       return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
         if (this.voiceCancelled || this.currentWord !== word) {

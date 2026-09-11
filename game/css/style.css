@@ -486,6 +486,25 @@ body {
 #daily-progress { color: #B47514; font-weight: bold; font-size: 14px; }
 #daily-tip { color: #C4A78F; font-size: 12px; margin-top: 10px; }
 
+/* ---------- 关于 ---------- */
+#about-card {
+  width: min(400px, 90vw); background: #FFFDF8; border-radius: 26px; border: 3px solid #FFE0B8;
+  box-shadow: 0 18px 50px rgba(150,90,60,.25); padding: 24px; text-align: center; position: relative;
+  animation: popIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+#about-card .about-emoji { font-size: 46px; }
+#about-card h3 { color: #C4788F; margin: 6px 0 2px; }
+#about-card .about-sub { color: #B9AC9E; font-size: 13px; margin-bottom: 14px; }
+#about-card .about-rows { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+#about-card .about-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #FFF7EA; border: 2px solid #FFE0B8; border-radius: 13px; padding: 10px 14px;
+  color: #6B5844; font-size: 14px; font-weight: bold;
+}
+#about-card .about-row b { color: #C4788F; }
+.about-link { color: #2E6E8E; text-decoration: underline; word-break: break-all; }
+#about-card .about-tip { color: #C4A78F; font-size: 12px; margin-top: 14px; }
+
 /* ---------- 手机小屏适配 ---------- */
 @media (max-width: 640px) {
   .pill { font-size: 12px; padding: 5px 10px; background: rgba(255,255,255,.62); border-color: rgba(255,211,224,.72); box-shadow: 0 2px 8px rgba(120,100,100,.1); }

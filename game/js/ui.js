@@ -917,11 +917,37 @@ export function toggleHudMenu(show) {
   if (els.btnMenu) els.btnMenu.textContent = open ? '✕' : '☰';
 }
 
+// ---------- 关于 ----------
+export function showAbout() {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  const link = (href, label) => `<a class="about-link" href="${href}" target="_blank" rel="noopener">${label}</a>`;
+  ov.innerHTML = `
+    <div id="about-card">
+      <button class="round-btn small" id="about-close" style="position:absolute;top:14px;right:14px">✕</button>
+      <div class="about-emoji">🥚</div>
+      <h3>词宠岛 WordPet Island</h3>
+      <div class="about-sub">在玩中学会开口说英文 · 永无失败惩罚</div>
+      <div class="about-rows">
+        <div class="about-row"><span>🎮 游戏地址</span>${link('https://qtzu.com/', 'qtzu.com')}</div>
+        <div class="about-row"><span>🧩 开源仓库</span>${link('https://github.com/dotnet9/AIGame', 'github.com/dotnet9/AIGame')}</div>
+        <div class="about-row"><span>✍️ 作者</span><b>沙漠尽头的狼</b></div>
+        <div class="about-row"><span>🌏 官方网站</span>${link('https://codewf.com/zh-CN', 'codewf.com')}</div>
+      </div>
+      <div class="about-tip">词宠岛 · 农场/海滩/森林与群岛，在玩中学会小学英语单词</div>
+    </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'about-close') ov.remove(); });
+  document.body.appendChild(ov);
+  sfx.pop();
+}
+
 // ---------- 绑定 HUD 按钮 ----------
-export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, onAccount, isTouch }) {
+export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, onAccount, onAbout, isTouch }) {
   isTouchMode = !!isTouch;
   els.btnCatalog.addEventListener('click', onCatalog);
   els.btnHelp.addEventListener('click', showHelp);
+  const aboutBtn = document.getElementById('btn-about');
+  if (aboutBtn) aboutBtn.addEventListener('click', onAbout);
   const rankBtn = document.getElementById('btn-rank');
   if (rankBtn) rankBtn.addEventListener('click', onRank);
   if (els.btnAccount) els.btnAccount.addEventListener('click', onAccount);

@@ -25,6 +25,11 @@ export function ensureWhisper() {
   return pipePromise;
 }
 
+// 后台预下载（打开挑战卡时就悄悄开始，孩子开口时基本已就绪；失败静默，录音时再正式加载）
+export function preloadWhisper() {
+  ensureWhisper().catch(() => { /* 静默 */ });
+}
+
 // 录音 blob → 16kHz 单声道 Float32
 async function blobToAudio16k(blob) {
   const AC = window.AudioContext || window.webkitAudioContext;
