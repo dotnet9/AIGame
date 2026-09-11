@@ -37,6 +37,10 @@ body {
 .pill.warn { border-color: #FFC46B; color: #B47514; cursor: pointer; animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.06) } }
 #user-pill { max-width: 150px; }
+/* 星星 pill：拿到星星时蹦一下 */
+.pill.star-pill { border-color: #FFE08A; color: #B47514; background: rgba(255,249,225,.7); }
+.pill.star-pill.star-pop-anim { animation: starPopAnim .5s cubic-bezier(.34,1.56,.64,1); }
+@keyframes starPopAnim { 0% { transform: scale(1) } 40% { transform: scale(1.28) rotate(-4deg) } 100% { transform: scale(1) } }
 .round-btn {
   pointer-events: auto; cursor: pointer; flex: none;
   width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,211,224,.72);
@@ -111,30 +115,49 @@ body {
 }
 @keyframes floaty { 0%,100% { transform: translateX(-50%) translateY(0) } 50% { transform: translateX(-50%) translateY(-4px) } }
 
+/* ---------- 每日任务横幅 ---------- */
+#daily {
+  position: fixed; top: 112px; left: 50%; transform: translateX(-50%); z-index: 16;
+  background: rgba(238,250,255,.66); border: 2px solid rgba(168,216,240,.75);
+  border-radius: 999px; padding: 5px 16px; font-size: 13px; font-weight: bold; color: #2E6E8E;
+  box-shadow: 0 3px 12px rgba(60,140,180,.14); max-width: 86vw; text-align: center;
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+#daily.done { background: rgba(232,247,217,.8); border-color: rgba(124,201,111,.8); color: #3E6B36; }
+
+/* 画面暗角：让视线聚在中间，画面更"有戏" */
+#vignette {
+  position: fixed; inset: 0; z-index: 5; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(70,40,80,.16) 100%);
+}
+
 /* ---------- 发音评分 ---------- */
 #score-panel {
   position: relative;
   margin: 10px auto 4px; text-align: center; animation: popIn .35s cubic-bezier(.34,1.56,.64,1);
 }
-/* 劲舞团式喝彩词：向上飘起并渐隐 */
-#score-float {
-  position: absolute; left: 50%; top: 26px; z-index: 2;
-  font-size: 34px; font-weight: 900; font-style: italic; letter-spacing: 3px;
-  pointer-events: none; opacity: 0; white-space: nowrap;
+/* 喝彩大字：浮在弹窗之上的屏幕层，跳出来往上飘、渐渐消失 */
+#cheer {
+  position: fixed; left: 50%; top: 22%; z-index: 60;
+  pointer-events: none; opacity: 0; text-align: center; white-space: nowrap;
+  transform: translateX(-50%);
+  font-size: clamp(46px, 9vw, 96px); font-weight: 900; font-style: italic; letter-spacing: 5px;
 }
-#score-float.float-run { animation: floatUp 1.3s cubic-bezier(.2,.7,.4,1) forwards; }
-@keyframes floatUp {
-  0%   { opacity: 0; transform: translate(-50%, 18px) scale(.5); }
-  18%  { opacity: 1; transform: translate(-50%, 0) scale(1.18); }
-  35%  { transform: translate(-50%, -8px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -70px) scale(1); }
+#cheer #cheer-emoji { font-style: normal; margin-right: 12px; }
+#cheer.cheer-run { animation: cheerUp 1.5s cubic-bezier(.2,.75,.35,1) forwards; }
+@keyframes cheerUp {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(52px) scale(.35) rotate(-5deg); }
+  16%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.22) rotate(2deg); }
+  32%  { transform: translateX(-50%) translateY(-8px) scale(1) rotate(0deg); }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-120px) scale(1.06); }
 }
-#score-float.c-perfect { color: #FFAA00; text-shadow: 0 0 14px #FFE24E, 0 2px 0 #E08900; }
-#score-float.c-great   { color: #FF5E9C; text-shadow: 0 0 12px #FFC1DB, 0 2px 0 #E04481; }
-#score-float.c-cool    { color: #31A8FF; text-shadow: 0 0 12px #B5E3FF, 0 2px 0 #1B82D4; }
-#score-float.c-nice    { color: #7CC96F; text-shadow: 0 0 10px #D8F0CE, 0 2px 0 #57A04A; }
-#score-float.c-bad     { color: #B08BBF; text-shadow: 0 1px 0 #8A6A9C; }
-#score-float.c-miss    { color: #9C8C7A; text-shadow: 0 1px 0 #7A6C5E; }
+#cheer.c-perfect { color: #FFAA00; text-shadow: 0 0 28px #FFE24E, 0 5px 0 #E08900, 0 10px 26px rgba(255,180,0,.45); }
+#cheer.c-great   { color: #FF5E9C; text-shadow: 0 0 24px #FFC1DB, 0 4px 0 #E04481, 0 9px 24px rgba(255,94,156,.4); }
+#cheer.c-cool    { color: #31A8FF; text-shadow: 0 0 24px #B5E3FF, 0 4px 0 #1B82D4, 0 9px 24px rgba(49,168,255,.38); }
+#cheer.c-nice    { color: #58B84E; text-shadow: 0 0 18px #D8F0CE, 0 4px 0 #3E8F36, 0 8px 20px rgba(88,184,78,.35); }
+#cheer.c-bad     { color: #B08BBF; text-shadow: 0 3px 0 #8A6A9C; }
+#cheer.c-miss    { color: #9C8C7A; text-shadow: 0 3px 0 #7A6C5E; }
 #score-ring {
   width: 92px; height: 92px; margin: 0 auto; border-radius: 50%;
   background: conic-gradient(#7CC96F var(--deg, 270deg), #EFE9DC 0deg);
@@ -325,6 +348,7 @@ body {
   font-size: 26px; font-weight: 900; color: #5A4632;
 }
 .slot.filled { border-style: solid; border-color: #FFB1CC; background: #FFF0F5; }
+.slot.space { border: none; background: none; width: 18px; }
 .tile {
   width: 46px; height: 52px; border-radius: 12px; border: 2px solid #BDE3F0;
   background: #EAF7FC; color: #2E6E8E; font-size: 26px; font-weight: 900; cursor: pointer;
@@ -416,6 +440,52 @@ body {
   font-family: inherit; font-weight: bold; color: #3E6B36; margin: 0 2px;
 }
 
+/* ---------- 许愿井星星商店 ---------- */
+#shop-card {
+  width: min(440px, 92vw); background: #FFFDF8; border-radius: 26px; border: 3px solid #FFE0B8;
+  box-shadow: 0 18px 50px rgba(150,110,60,.28); padding: 18px 18px 14px; position: relative;
+  animation: popIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+#shop-head { display: flex; align-items: center; gap: 10px; color: #B47514; font-weight: bold; font-size: 17px; }
+#shop-head span:first-child { flex: 1; }
+#shop-stars { background: #FFF3D6; border: 2px solid #FFE0A8; border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+.shop-tip { color: #C4A78F; font-size: 12px; margin: 8px 0 10px; text-align: center; }
+#shop-list { display: flex; flex-direction: column; gap: 9px; max-height: 52vh; overflow-y: auto; }
+.shop-row {
+  display: flex; align-items: center; gap: 12px;
+  background: #FFF7EA; border: 2px solid #FFE0B8; border-radius: 16px; padding: 10px 12px;
+}
+.shop-row.owned { background: #F3FAEC; border-color: #CDEBC8; }
+.shop-emoji { font-size: 34px; width: 44px; text-align: center; }
+.shop-info { flex: 1; min-width: 0; }
+.shop-name { color: #5A4632; font-weight: bold; font-size: 15px; }
+.shop-desc { color: #B9AC9E; font-size: 12px; margin-top: 2px; }
+.shop-buy {
+  border: none; background: #FFB93C; color: #fff; font: inherit; font-weight: bold; font-size: 14px;
+  padding: 9px 16px; border-radius: 999px; cursor: pointer; box-shadow: 0 3px 0 #D99A2F; white-space: nowrap;
+}
+.shop-buy:active { transform: translateY(2px); box-shadow: 0 1px 0 #D99A2F; }
+.shop-wear {
+  border: 2px solid #CDEBC8; background: #fff; color: #7A9C6E; font: inherit; font-weight: bold; font-size: 13px;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.shop-wear.on { background: #7CC96F; border-color: #7CC96F; color: #fff; box-shadow: 0 3px 0 #5CA85C; }
+
+/* ---------- 每日任务板 ---------- */
+#daily-card {
+  width: min(380px, 90vw); background: #FFFDF8; border-radius: 26px; border: 3px solid #BDE3F0;
+  box-shadow: 0 18px 50px rgba(60,110,150,.25); padding: 20px; position: relative; text-align: center;
+  animation: popIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+#daily-head { display: flex; align-items: center; gap: 10px; color: #2E6E8E; font-weight: bold; font-size: 17px; margin-bottom: 14px; }
+#daily-head span:first-child { flex: 1; text-align: left; }
+#daily-stars { background: #FFF3D6; border: 2px solid #FFE0A8; border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+#daily-quest-text { color: #3E6B36; font-size: 19px; font-weight: 900; line-height: 1.5; }
+#daily-bar { height: 16px; background: #EAF3F7; border-radius: 999px; margin: 14px 8px 8px; overflow: hidden; border: 2px solid #D5E8F0; }
+#daily-bar-fill { height: 100%; background: linear-gradient(90deg, #7EC4F2, #4A9ED9); border-radius: 999px; transition: width .5s cubic-bezier(.34,1.3,.64,1); }
+#daily-progress { color: #B47514; font-weight: bold; font-size: 14px; }
+#daily-tip { color: #C4A78F; font-size: 12px; margin-top: 10px; }
+
 /* ---------- 手机小屏适配 ---------- */
 @media (max-width: 640px) {
   .pill { font-size: 12px; padding: 5px 10px; background: rgba(255,255,255,.62); border-color: rgba(255,211,224,.72); box-shadow: 0 2px 8px rgba(120,100,100,.1); }
@@ -426,6 +496,8 @@ body {
   /* 饥饿提醒出现时让出分数条的位置，避免横向挤爆 */
   body.has-hungry #score-pill { display: none; }
   #quest { top: 54px; font-size: 13px; padding: 6px 14px; background: rgba(255,249,232,.68); border-color: rgba(255,224,168,.72); box-shadow: 0 3px 10px rgba(120,100,70,.12); backdrop-filter: blur(2px); }
+  #daily { top: 96px; font-size: 12px; padding: 4px 12px; }
+  #cheer { top: 18%; }
   #word-en { font-size: 38px; }
   #modal-card { padding: 16px 14px 12px; }
   #btn-play { font-size: 15px; padding: 11px 16px; }

@@ -18,6 +18,7 @@
 </head>
 <body>
 <canvas id="scene"></canvas>
+<div id="vignette"></div>
 
 <!-- 加载屏 -->
 <div id="loading">
@@ -27,6 +28,8 @@
 
 <!-- 任务指引横幅 -->
 <div id="quest">🎯 <span id="quest-text">走近一颗发光的蛋，读出单词！</span></div>
+<!-- 每日任务小横幅 -->
+<div id="daily" class="hidden">📌 <span id="daily-text"></span></div>
 
 <!-- HUD -->
 <div id="hud">
@@ -34,6 +37,7 @@
     <div id="user-pill" class="pill hidden">👤</div>
     <div id="pet-count" class="pill">🐾 第1关 · 词宠 0/6</div>
     <div id="score-pill" class="pill">🏆 0 分</div>
+    <div id="star-pill" class="pill star-pill">⭐ 0</div>
     <div id="hungry-pill" class="pill warn hidden">🍖 有词宠想你啦</div>
   </div>
   <div id="hud-right">
@@ -114,7 +118,6 @@
     </div>
     <!-- 发音评分 -->
     <div id="score-panel" class="hidden">
-      <div id="score-float"></div>
       <div id="score-ring"><div id="score-num">0</div><div id="score-unit">分</div></div>
       <div id="score-stars"></div>
       <div id="score-msg"></div>
@@ -162,7 +165,7 @@
       <span>🗺️ 词宠岛地图</span>
       <button id="map-close" class="round-btn small">✕</button>
     </div>
-    <canvas id="map-canvas" width="340" height="340"></canvas>
+    <canvas id="map-canvas" width="420" height="420"></canvas>
     <div id="map-legend">🔵 你在这里 · ⬤ 待孵化的词宠蛋 · 🔒 需要特殊词宠帮忙才能进入</div>
   </div>
 </div>
@@ -178,6 +181,9 @@
 
 <!-- 提示气泡 -->
 <div id="toast" class="hidden"></div>
+
+<!-- 喝彩大字：弹窗之外的屏幕层，飘起后消失 -->
+<div id="cheer"><span id="cheer-emoji">🌟</span><span id="cheer-word">PERFECT!</span></div>
 
 <script type="module" src="js/main.js"></script>
 </body>

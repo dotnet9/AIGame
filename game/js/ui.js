@@ -5,12 +5,12 @@ import { CURRICULUM, gradeKey } from './curriculum.js';
 
 const $ = id => document.getElementById(id);
 const els = {};
-for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
-  'quest', 'quest-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
-  'mic-label', 'btn-replay', 'voice-feedback', 'score-panel', 'score-float', 'score-ring', 'score-num', 'score-stars', 'score-msg',
+for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'star-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
+  'quest', 'quest-text', 'daily', 'daily-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
+  'mic-label', 'btn-replay', 'voice-feedback', 'score-panel', 'cheer', 'cheer-emoji', 'cheer-word', 'score-ring', 'score-num', 'score-stars', 'score-msg',
   'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
   'btn-skip',
-  'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-grid', 'picker-close',
+  'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-title', 'picker-grid', 'picker-close',
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-head', 'map-canvas', 'map-close',
   'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh',
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
@@ -52,14 +52,14 @@ export function updateUser(name) {
   els.userPill.title = n ? `${n} 的学习档案` : '';
 }
 
-// 劲舞团式喝彩分级：分数 → (大字, 样式)
+// 劲舞团式喝彩分级：分数 → (大字, 样式, 配套表情)
 const SCORE_LEVELS = [
-  [95, 'PERFECT!', 'perfect'],
-  [85, 'GREAT!', 'great'],
-  [75, 'COOL!', 'cool'],
-  [60, 'NICE!', 'nice'],
-  [40, 'BAD...', 'bad'],
-  [0, 'MISS...', 'miss'],
+  [95, 'PERFECT!', 'perfect', '🌟'],
+  [85, 'GREAT!', 'great', '🎉'],
+  [75, 'COOL!', 'cool', '😎'],
+  [60, 'NICE!', 'nice', '😊'],
+  [40, 'BAD...', 'bad', '😬'],
+  [0, 'MISS...', 'miss', '🙈'],
 ];
 
 export function updateHUD(count, total, hungryCount, chapterText = '') {
@@ -76,6 +76,29 @@ export function updateHUD(count, total, hungryCount, chapterText = '') {
 export function hideLoading() {
   els.loading.classList.add('done');
   setTimeout(() => els.loading.classList.add('hidden'), 700);
+}
+
+// 星星栏：数值变化时蹦一下
+let lastStars = null;
+export function updateStars(n) {
+  if (!els.starPill) return;
+  n = Number(n) || 0;
+  if (n !== lastStars && lastStars !== null) {
+    els.starPill.classList.remove('star-pop-anim');
+    void els.starPill.offsetWidth;
+    els.starPill.classList.add('star-pop-anim');
+  }
+  lastStars = n;
+  els.starPill.textContent = `⭐ ${n}`;
+  els.starPill.title = '星星：读单词、喂词宠、解谜题都能赚，去许愿井换装扮！';
+}
+
+// 每日任务横幅（进度或完成状态）
+export function setDaily(text, done = false) {
+  if (!els.daily) return;
+  els.daily.classList.toggle('hidden', !text);
+  els.daily.classList.toggle('done', !!done);
+  if (els.dailyText) els.dailyText.textContent = text || '';
 }
 
 // ---------- 任务横幅 ----------
@@ -252,17 +275,18 @@ els.btnReplay.addEventListener('click', () => {
   playRecording(ch.replayUrl);
 });
 
-// 评分演出：喝彩飘字 + 带情绪语音 + 数字滚动 + 星级，≥80 分过关；opts.msg 可自定义评语
+// 评分演出：喝彩大字弹在弹窗之外的屏幕层（飘升消失）+ 带情绪语音 + 数字滚动 + 星级，≥80 分过关
 function showScore(score, heard, opts = {}) {
   ch.busy = true;
   els.voiceFeedback.textContent = '';   // 分数都打出来了，“识别中…”别再挂着
   els.voiceFeedback.className = '';
-  // 喝彩大字：像游戏加分一样往上飘、渐渐消失
+  // 喝彩大字：屏幕层大字 + 配套表情，跳出来往上飘、渐渐消失（弹窗关了它还在飘）
   const lv = SCORE_LEVELS.find(l => score >= l[0]);
-  els.scoreFloat.className = '';
-  els.scoreFloat.textContent = lv[1];
-  void els.scoreFloat.offsetWidth;      // 重启动画
-  els.scoreFloat.className = 'float-run c-' + lv[2];
+  els.cheer.className = '';
+  void els.cheer.offsetWidth;           // 重启动画
+  els.cheerEmoji.textContent = lv[3];
+  els.cheerWord.textContent = lv[1];
+  els.cheer.className = 'cheer-run c-' + lv[2];
   els.scorePanel.classList.remove('hidden');
   els.scoreRing.style.setProperty('--deg', '0deg');
   // 数字 + 进度环滚动
@@ -372,13 +396,15 @@ function shuffle(a) {
 function buildSpell() {
   const w = ch.word.en;
   ch.slots = w.split('');
-  ch.filled = w.split('').map(() => null);
-  ch.tiles = shuffle(w.split(''));
+  // 空格自动补好（短语如 ice cream / good morning），只拼字母
+  ch.filled = w.split('').map(c => (c === ' ' ? ' ' : null));
+  ch.tiles = shuffle(w.split('').filter(c => c !== ' '));
   els.spellSlots.innerHTML = '';
   els.spellTiles.innerHTML = '';
-  ch.slots.forEach(() => {
+  ch.slots.forEach(c => {
     const d = document.createElement('div');
-    d.className = 'slot';
+    d.className = 'slot' + (c === ' ' ? ' space filled' : '');
+    if (c === ' ') d.textContent = '·';
     els.spellSlots.appendChild(d);
   });
   ch.tiles.forEach((letter, idx) => {
@@ -392,9 +418,9 @@ function buildSpell() {
 
 function tileClick(idx, btn) {
   if (!ch.open || ch.busy) return;
-  const need = ch.word.en[ch.filled.findIndex(x => x === null)];
+  const slotIdx = ch.filled.findIndex(x => x === null);
+  const need = ch.word.en[slotIdx];
   if (ch.tiles[idx] === need) {
-    const slotIdx = ch.filled.findIndex(x => x === null);
     ch.filled[slotIdx] = ch.tiles[idx];
     els.spellSlots.children[slotIdx].textContent = ch.tiles[idx];
     els.spellSlots.children[slotIdx].classList.add('filled');
@@ -573,7 +599,8 @@ els.btnShowHelpWord.addEventListener('click', () => {
 els.modalClose.addEventListener('click', () => { sfx.pop(); closeChallenge(); });
 
 // ---------- 召唤面板 ----------
-export function openPicker(list, onPick, onClose) {
+export function openPicker(list, onPick, onClose, opts = {}) {
+  els.pickerTitle.textContent = opts.title || '召唤一只词宠来帮忙：';
   els.pickerGrid.innerHTML = '';
   for (const p of list) {
     const chip = document.createElement('div');
@@ -622,15 +649,42 @@ els.catalogClose.addEventListener('click', () => els.catalog.classList.add('hidd
 export function openMap(data) {
   const cv = els.mapCanvas, c = cv.getContext('2d');
   const W = cv.width, H = cv.height;
-  const scale = W / 84;
+  const scale = W / 128;                       // 世界 ±64 都画进来（含海滩与森林）
   const X = x => W / 2 + x * scale, Z = z => H / 2 + z * scale;
   c.clearRect(0, 0, W, H);
-  // 草地底
-  c.fillStyle = '#BFE8AC';
+  // 大海
+  c.fillStyle = '#8FCDE8';
   c.beginPath(); c.roundRect(0, 0, W, H, 16); c.fill();
+  // 岛屿
+  c.fillStyle = '#BFE8AC';
+  c.beginPath(); c.arc(X(0), Z(0), 52 * scale, 0, Math.PI * 2); c.fill();
+  // 海滩沙子（南）
+  c.fillStyle = '#EFDCA8';
+  c.beginPath();
+  c.moveTo(X(-34), Z(35.5));
+  c.quadraticCurveTo(X(0), Z(33.5), X(34), Z(35.5));
+  c.arc(X(0), Z(0), 52 * scale, Math.PI * 0.22, Math.PI * 0.78);
+  c.closePath(); c.fill();
+  // 森林深绿（西）
+  c.fillStyle = 'rgba(78,142,78,.55)';
+  c.beginPath(); c.ellipse(X(-45), Z(3), 9 * scale, 15 * scale, 0, 0, Math.PI * 2); c.fill();
   // 河流
   c.fillStyle = '#8FD0E8';
-  c.fillRect(0, Z(-3.5), W, 7 * scale);
+  c.fillRect(X(-52), Z(-3.5), 104 * scale, 7 * scale);
+  // 机关墙标记
+  if (!data.gates || !data.gates.sandWall) {
+    c.fillStyle = '#C9A46B';
+    c.fillRect(X(-32), Z(37.6), 64 * scale, 1.6 * scale);
+    c.font = '13px sans-serif'; c.textAlign = 'center';
+    c.fillText('🧱', X(0), Z(38.6) + 4);
+  }
+  if (!data.gates || !data.gates.vines) {
+    c.fillStyle = '#3E7A44';
+    c.fillRect(X(-38.8), Z(4.5), 1.6 * scale, 29 * scale);
+    c.fillRect(X(-38.8), Z(-33.5), 1.6 * scale, 29 * scale);
+    c.font = '13px sans-serif'; c.textAlign = 'center';
+    c.fillText('🌿', X(-38), Z(12) + 4);
+  }
   // 区域
   for (const zn of data.zones) {
     const x = X(zn.x1), y = Z(zn.z1), w = (zn.x2 - zn.x1) * scale, h = (zn.z2 - zn.z1) * scale;
@@ -721,18 +775,90 @@ export function showBookPanel(data) {
 }
 export function closeBookPanel() { if (bookOv) bookOv.classList.add('hidden'); }
 
+// ---------- 许愿井星星商店 ----------
+let shopOv = null;
+export function showShop({ stars, items, onBuy, onToggle }) {
+  if (!shopOv) {
+    shopOv = document.createElement('div');
+    shopOv.className = 'overlay';
+    shopOv.id = 'shop';
+    document.body.appendChild(shopOv);
+    shopOv.addEventListener('click', e => { if (e.target === shopOv) shopOv.classList.add('hidden'); });
+  }
+  const rows = items.map(it => {
+    const state = !it.owned
+      ? `<button class="shop-buy" data-id="${it.id}">⭐ ${it.price} 换</button>`
+      : it.on
+        ? `<button class="shop-wear on" data-id="${it.id}">穿着中</button>`
+        : `<button class="shop-wear" data-id="${it.id}">穿上</button>`;
+    return `<div class="shop-row${it.owned ? ' owned' : ''}">
+      <div class="shop-emoji">${it.emoji}</div>
+      <div class="shop-info"><div class="shop-name">${it.name}</div><div class="shop-desc">${it.desc}</div></div>
+      ${state}
+    </div>`;
+  }).join('');
+  shopOv.innerHTML = `
+    <div id="shop-card">
+      <div id="shop-head">
+        <span>⛲ 许愿井 · 星星商店</span>
+        <span id="shop-stars">⭐ ${stars}</span>
+        <button id="shop-close" class="round-btn small">✕</button>
+      </div>
+      <div class="shop-tip">读单词、喂词宠、解谜题都能赚星星！</div>
+      <div id="shop-list">${rows}</div>
+    </div>`;
+  shopOv.classList.remove('hidden');
+  shopOv.querySelector('#shop-close').onclick = () => shopOv.classList.add('hidden');
+  shopOv.querySelectorAll('.shop-buy').forEach(b => b.addEventListener('click', () => {
+    const it = items.find(i => i.id === b.dataset.id);
+    sfx.pop(); onBuy && onBuy(it);
+  }));
+  shopOv.querySelectorAll('.shop-wear').forEach(b => b.addEventListener('click', () => {
+    const it = items.find(i => i.id === b.dataset.id);
+    sfx.pop(); onToggle && onToggle(it);
+  }));
+}
+
+// ---------- 每日任务板 ----------
+let dailyOv = null;
+export function showDailyBoard({ quest, stars }) {
+  if (!dailyOv) {
+    dailyOv = document.createElement('div');
+    dailyOv.className = 'overlay';
+    dailyOv.id = 'daily-board';
+    document.body.appendChild(dailyOv);
+    dailyOv.addEventListener('click', e => { if (e.target === dailyOv) dailyOv.classList.add('hidden'); });
+  }
+  const pct = Math.min(100, Math.round(quest.n / quest.goal * 100));
+  dailyOv.innerHTML = `
+    <div id="daily-card">
+      <div id="daily-head">
+        <span>📌 今日任务</span>
+        <span id="daily-stars">⭐ ${stars}</span>
+        <button id="daily-close" class="round-btn small">✕</button>
+      </div>
+      <div id="daily-quest-text">${quest.text}</div>
+      <div id="daily-bar"><div id="daily-bar-fill" style="width:${pct}%"></div></div>
+      <div id="daily-progress">${quest.done ? '🎉 已完成！奖励已到手' : `进度 ${Math.min(quest.n, quest.goal)}/${quest.goal} · 完成奖 ⭐5`}</div>
+      <div id="daily-tip">每天来任务板看看，任务会换新的哦～</div>
+    </div>`;
+  dailyOv.classList.remove('hidden');
+  dailyOv.querySelector('#daily-close').onclick = () => dailyOv.classList.add('hidden');
+}
+
 // ---------- 开场引导 ----------
 export function playIntro(onDone, isTouch = false) {
   const move = isTouch
     ? '用左下角<b>摇杆</b>走路，<b>跳</b>按钮蹦一蹦，<br>屏幕上拖动转视角，双指缩放。'
     : '用 <b>W A S D</b> 或方向键走路，按<b>空格</b>跳一跳，<br>方向键+空格能向前跳，右键拖动转视角。';
   const steps = [
-    ['🌼', '欢迎来到 <b>词宠岛</b>！<br>这座农场里住着好多词宠蛋，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。'],
+    ['🌼', '欢迎来到 <b>词宠岛</b>！<br>这座岛上住着 <b>60</b> 只词宠，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。'],
     ['🎮', move],
     ['🥚', isTouch
-      ? '走近<b>发光的蛋</b>，点一点它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分！'
-      : '走近<b>发光的蛋</b>，按 <b>E</b> 打开它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分！'],
-    ['🐾', '孵出来的词宠会成为你的伙伴：<br><b>召唤</b>它们帮你过河、照亮谷仓，<br>它们饿了还会找你<b>复习</b>呢！'],
+      ? '走近<b>发光的蛋</b>，点一点它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分，还能赚 <b>⭐星星</b>！'
+      : '走近<b>发光的蛋</b>，按 <b>E</b> 打开它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分，还能赚 <b>⭐星星</b>！'],
+    ['🤔', '被沙墙、荆棘挡路时会有<b>谜题</b>：<br>读懂谜面，<b>召唤对的那只词宠</b>来帮忙！<br>一次答对奖励 3⭐，攒够星星去<b>许愿井</b>换装扮～'],
+    ['🐾', '词宠饿了还会找你<b>复习</b>，<br>农场的南边有<b>海滩</b>、西边有<b>森林</b>…<br>出发吧，小小词宠训练家！'],
   ];
   let i = 0;
   const show = () => {
@@ -768,12 +894,15 @@ export function showHelp() {
       <h3>🌼 怎么玩</h3>
       ${touchLines}
       <div>🎤 点 🎤 开口读，10 秒内读完自动打分，还能 🎧 回放自己的读音</div>
+      <div>⭐ 读得越准赚越多星星！95 分以上有 2 颗哦</div>
       <div>🧩 不会读？换成字母块拼一拼！</div>
       <div>🗺️ 不知道去哪？点左上角地图，跟着头顶的金色箭头走</div>
-      <div>✨ 被挡路时，点 🪄 召唤词宠来帮忙</div>
+      <div>🤔 被挡路时会有<b>谜题</b>：读懂谜面，召唤对的那只词宠来帮忙，一次答对奖 3⭐</div>
+      <div>⛲ 星星攒够了去许愿井换魔法帽、气球和魔法棒！</div>
+      <div>📌 每天来任务板做一个今日任务，拿 5⭐</div>
       <div>🍖 词宠饿了会想你，回去喊它的名字喂它（复习）</div>
       <div>💾 进度自动保存，下次打开网址继续玩</div>
-      <div style="margin-top:10px;color:#C4A78F;font-size:13px">词宠岛 · 在玩中学会 36 个农场单词</div>
+      <div style="margin-top:10px;color:#C4A78F;font-size:13px">词宠岛 · 农场/海滩/森林三大场景，60 个单词等你收集</div>
       <button id="help-close" class="round-btn small" style="position:absolute;top:14px;right:14px">✕</button>
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'help-close') ov.remove(); });

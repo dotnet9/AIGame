@@ -39,11 +39,30 @@ export class EggManager {
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.02;
     g.add(ring);
+    // 天空投下的光柱（远远就能看见）
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.5, 4.2, 12, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: golden ? 0xFFE08A : 0xFFC4DC, transparent: true, opacity: 0.16,
+        side: THREE.DoubleSide, depthWrite: false,
+      }));
+    beam.position.y = 2.3;
+    g.add(beam);
+    // 环绕的小星星
+    const sparkles = [];
+    for (let i = 0; i < 3; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: letterTexture('✦', golden ? '#FFE24E' : '#FFC1DB', '#FFFDF4'), transparent: true, depthWrite: false,
+      }));
+      s.scale.setScalar(0.16);
+      g.add(s);
+      sparkles.push(s);
+    }
     const [x, z] = word.pos;
     const isSky = word.zone === 'sky';
     g.position.set(x, isSky ? 14 : 0, z);
     this.scene.add(g);
-    const egg = { group: g, word, shell, ring, t: Math.random() * 9, golden };
+    const egg = { group: g, word, shell, ring, beam, sparkles, t: Math.random() * 9, golden };
     this.eggs.set(word.id, egg);
     return egg;
   }
@@ -74,6 +93,12 @@ export class EggManager {
       const pulse = 0.18 + Math.sin(egg.t * 2.4) * 0.1;
       egg.shell.material.emissiveIntensity = egg.golden ? 0.45 + Math.sin(egg.t * 2.4) * 0.2 : pulse;
       egg.ring.rotation.z = t * 0.8;
+      egg.beam.material.opacity = (egg.golden ? 0.2 : 0.13) + Math.sin(egg.t * 2.4) * 0.05;
+      egg.sparkles.forEach((s, i) => {
+        const a = t * 1.4 + i * Math.PI * 2 / 3;
+        s.position.set(Math.cos(a) * 0.55, 0.45 + Math.sin(t * 2 + i * 2.1) * 0.22, Math.sin(a) * 0.55);
+        s.material.opacity = 0.55 + Math.sin(t * 3 + i) * 0.35;
+      });
     }
   }
 }
@@ -83,6 +108,7 @@ export class PetManager {
   constructor(scene) {
     this.scene = scene;
     this.pets = new Map();
+    this.hearts = [];   // 飘起的爱心特效
   }
 
   spawn(word) {
@@ -132,10 +158,28 @@ export class PetManager {
     }
   }
 
-  celebrate(id) { // 喂饱后的开心跳
+  celebrate(id) { // 喂饱后的开心跳 + 爱心
     const p = this.pets.get(id);
     if (!p) return;
     p.jumping = true; p.jt = 0;
+    const pos = p.group.position.clone().add(new THREE.Vector3(0, 0.9, 0));
+    for (let i = 0; i < 5; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: letterTexture('❤', ['#FF6B6B', '#FF8FB0', '#FF5E9C'][i % 3], '#FFF'), transparent: true, depthWrite: false,
+      }));
+      s.position.copy(pos);
+      s.scale.setScalar(0.22);
+      this.scene.add(s);
+      const vx = (Math.random() - 0.5) * 1.2, vz = (Math.random() - 0.5) * 1.2, delay = i * 0.16;
+      this.hearts.push({
+        s, t: -delay, dur: 1.1,
+        update: dt => {
+          s.position.y += dt * 1.1;
+          s.position.x += vx * dt; s.position.z += vz * dt;
+          s.material.opacity = Math.max(0, 1 - Math.max(0, s.t) / 1.1);
+        },
+      });
+    }
   }
 
   flyTo(id, target, duration, onDone) { // 召唤飞行
@@ -149,6 +193,12 @@ export class PetManager {
   }
 
   update(dt, t) {
+    for (let i = this.hearts.length - 1; i >= 0; i--) {
+      const h = this.hearts[i];
+      h.t += dt;
+      if (h.t > 0) h.update(dt);
+      if (h.t >= h.dur) { this.scene.remove(h.s); this.hearts.splice(i, 1); }
+    }
     for (const p of this.pets.values()) {
       p.t += dt;
       // 召唤飞行优先

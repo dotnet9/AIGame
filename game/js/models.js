@@ -44,6 +44,11 @@ export const PET_COLORS = {
   hen: '#FFF0DC', milk: '#FFFFFF', bread: '#D9A05B', egg: '#FFF8EE', cake: '#FFB7CB',
   tractor: '#6FA854', rain: '#BDE3F0', tree: '#6FBF73', sun: '#FFC94E', star: '#FFE24E',
   moon: '#F5E6A8',
+  fish: '#FF8A5C', whale: '#7EB8E0', crab: '#F0604A', shell: '#FFC9D6', starfish: '#FF9A5C',
+  ship: '#E86A4A', ball: '#FFF6EC', kite: '#FF8FB0', sand: '#F0D9A0', wave: '#8FD0E8',
+  sea: '#4A9ED9', icecream: '#FFB7CB', bear: '#A9744F', fox: '#F0864A', owl: '#B08860',
+  monkey: '#A8825B', squirrel: '#D98A4A', panda: '#FFF6EC', deer: '#C99A5F', mushroom: '#E86A5A',
+  leaf: '#8FD08F', stone: '#B0B0BC', nest: '#C9A46B', wood: '#A87551',
 };
 
 // ================= 四足兽基础 =================
@@ -464,6 +469,347 @@ PETS.moon = () => {
   return g;
 };
 
+// ================= 海滩词宠 =================
+PETS.fish = () => {
+  const g = G(), c = PET_COLORS.fish;
+  sph(g, 0.16, c, 0, 0.2, 0, 1, 0.95, 1.25);
+  cone(g, 0.1, 0.18, '#FFA066', 0, 0.2, -0.22, -Math.PI / 2).scale.set(1.4, 1, 0.3); // 尾鳍
+  cone(g, 0.06, 0.11, '#FFA066', 0, 0.37, 0.02, 0, 0, 0.2).scale.set(1, 1, 0.35);    // 背鳍
+  for (const sx of [-1, 1]) sph(g, 0.06, '#FFA066', 0.13 * sx, 0.16, 0.02, 0.5, 1, 0.9); // 侧鳍
+  sph(g, 0.05, '#FFF6EC', 0, 0.24, 0.12, 0.9, 0.7, 0.6); // 小肚皮
+  face(g, { dx: 0.06, y: 0.24, z: 0.15 });
+  return g;
+};
+
+PETS.whale = () => {
+  const g = G(), c = PET_COLORS.whale;
+  sph(g, 0.22, c, 0, 0.22, -0.02, 1, 0.85, 1.3);
+  sph(g, 0.18, '#EAF7FC', 0, 0.13, 0.07, 0.9, 0.55, 1.1); // 白肚皮
+  sph(g, 0.09, c, 0, 0.34, -0.26, 0.7, 1.1, 0.5);          // 尾巴根
+  sph(g, 0.08, c, 0, 0.4, -0.34, 1.3, 0.4, 0.5);
+  for (const sx of [-1, 1]) sph(g, 0.06, c, 0.14 * sx, 0.16, 0.08, 0.6, 0.35, 1.1); // 侧鳍
+  for (let i = 0; i < 3; i++) sph(g, 0.035 - i * 0.008, '#BDE3F0', (i - 1) * 0.05, 0.5 + i * 0.06, -0.06, 1, 1.3, 1, 0, 0, 0, { alpha: 0.85 }); // 喷水
+  face(g, { dx: 0.08, y: 0.27, z: 0.2 });
+  return g;
+};
+
+PETS.crab = () => {
+  const g = G(), c = PET_COLORS.crab;
+  sph(g, 0.16, c, 0, 0.14, 0, 1.2, 0.8, 1);
+  for (const sx of [-1, 1]) {
+    // 眼睛立在杆子上
+    cyl(g, 0.012, 0.012, 0.1, c, 0.06 * sx, 0.26, 0.06);
+    sph(g, 0.045, '#FFFFFF', 0.06 * sx, 0.33, 0.06);
+    sph(g, 0.02, '#4A4046', 0.06 * sx, 0.335, 0.098);
+    // 大钳子
+    sph(g, 0.07, c, 0.19 * sx, 0.12, 0.1);
+    cone(g, 0.035, 0.08, c, 0.19 * sx, 0.16, 0.15, 0.9 * sx, 0, 0);
+    // 小腿
+    for (let i = 0; i < 3; i++) cyl(g, 0.012, 0.012, 0.09, '#D14B3A', 0.16 * sx, 0.05, -0.08 + i * 0.08, 0, 0, sx * 0.9);
+  }
+  tor(g, 0.03, 0.008, '#C24232', 0, 0.1, 0.155, 0.4); // 微笑嘴
+  for (const sx of [-1, 1]) sph(g, 0.03, '#FFB3C1', 0.09 * sx, 0.09, 0.12, 1, 0.7, 0.4); // 腮红
+  return g;
+};
+
+PETS.shell = () => {
+  const g = G(), c = PET_COLORS.shell;
+  cyl(g, 0.17, 0.19, 0.08, '#FFB1C8', 0, 0.05, 0, 0, 0, 0, 18); // 底座
+  const fan = cone(g, 0.19, 0.26, c, 0, 0.2, 0);
+  fan.scale.set(1, 1, 0.55);
+  for (let i = -1; i <= 1; i++) box(g, 0.02, 0.24, 0.02, '#F09CB8', i * 0.09, 0.2, 0.028 * (1 - Math.abs(i)), 0, 0, -i * 0.35); // 扇棱
+  sph(g, 0.045, '#FFF6EC', 0, 0.06, 0.1, 1, 0.7, 0.8);
+  face(g, { dx: 0.055, y: 0.1, z: 0.12, s: 0.8 });
+  // 里面探出一只小珍珠眼角？珍珠宝宝
+  sph(g, 0.05, '#FFFDF4', 0.11, 0.1, 0.13, 1, 0.85, 1);
+  return g;
+};
+
+PETS.starfish = () => {
+  const g = G(), c = PET_COLORS.starfish;
+  sph(g, 0.11, c, 0, 0.08, 0, 1, 0.55, 1);
+  const arms = G();
+  for (let i = 0; i < 5; i++) {
+    const arm = G();
+    const a = cone(arm, 0.05, 0.17, i % 2 ? '#FFA76B' : c, 0.11, 0, 0, 0, 0, -Math.PI / 2);
+    a.scale.set(1, 1, 0.5);
+    arm.position.y = 0.07;
+    arm.rotation.y = Math.PI * 2 * i / 5;
+    arms.add(arm);
+  }
+  g.add(arms);
+  for (let i = 0; i < 6; i++) sph(g, 0.012, '#FFE0C4', Math.cos(i * 2.2) * 0.06, 0.13, Math.sin(i * 2.2) * 0.06);
+  face(g, { dx: 0.04, y: 0.11, z: 0.1, s: 0.7 });
+  return g;
+};
+
+PETS.ship = () => {
+  const g = G(), c = PET_COLORS.ship;
+  box(g, 0.46, 0.15, 0.9, c, 0, 0.15, 0);                       // 船身
+  box(g, 0.5, 0.04, 0.94, '#FFF6EC', 0, 0.24, 0);               // 白色船舷
+  box(g, 0.28, 0.18, 0.34, '#FFF6EC', 0, 0.35, -0.08);          // 客舱
+  box(g, 0.3, 0.05, 0.36, '#FF8FB0', 0, 0.46, -0.08);           // 粉屋顶
+  cyl(g, 0.045, 0.055, 0.22, '#4A4046', 0.05, 0.55, 0.08);      // 烟囱
+  sph(g, 0.06, '#D9D9E0', 0.05, 0.72, 0.08, 1, 0.8, 1, 0, 0, 0, { alpha: 0.8 }); // 烟
+  sph(g, 0.08, '#E4E4EA', 0.08, 0.82, 0.1, 1, 0.8, 1, 0, 0, 0, { alpha: 0.55 });
+  cyl(g, 0.008, 0.008, 0.14, '#8A6844', -0.08, 0.55, -0.2);     // 旗杆
+  box(g, 0.09, 0.05, 0.012, '#FFC94E', -0.045, 0.59, -0.2);     // 小黄旗
+  face(g, { dx: 0.1, y: 0.2, z: 0.44 });
+  return g;
+};
+
+PETS.ball = () => {
+  const g = G();
+  sph(g, 0.18, '#FFF6EC', 0, 0.2, 0);
+  tor(g, 0.172, 0.05, '#FF6B6B', 0, 0.2, 0);                    // 赤道红环
+  tor(g, 0.172, 0.05, '#4A90D9', 0, 0.2, 0, Math.PI / 2);       // 蓝环
+  sph(g, 0.05, '#FFC94E', 0, 0.37, 0);                          // 顶点黄帽
+  sph(g, 0.05, '#FFC94E', 0, 0.03, 0);
+  face(g, { dx: 0.07, y: 0.22, z: 0.16 });
+  return g;
+};
+
+PETS.kite = () => {
+  const g = G(), c = PET_COLORS.kite;
+  const k = G();
+  cone(k, 0.17, 0.3, c, 0, 0.15, 0);                            // 上半菱形
+  cone(k, 0.17, 0.36, '#FFA5C2', 0, -0.18, 0, Math.PI);         // 下半
+  k.scale.set(1, 1, 0.32);
+  g.add(k);
+  box(g, 0.03, 0.66, 0.03, '#8A6844', 0, 0.32, 0.03);           // 骨架竖
+  box(g, 0.34, 0.03, 0.03, '#8A6844', 0, 0.3, 0.03);            // 骨架横
+  for (let i = 0; i < 3; i++) {                                  // 蝴蝶结尾巴
+    const y = -0.16 - i * 0.16;
+    sph(g, 0.032, ['#FFE24E', '#7EC4F2', '#FFC94E'][i], 0.02 * i, y, 0.04, 1.6, 0.7, 0.5);
+  }
+  face(g, { dx: 0.05, y: 0.34, z: 0.075, s: 0.8 });
+  return g;
+};
+
+PETS.sand = () => {
+  const g = G(), c = PET_COLORS.sand;
+  sph(g, 0.19, c, 0, 0.1, 0, 1.2, 0.6, 1.2);                    // 沙堆
+  sph(g, 0.1, '#EBCE93', 0.06, 0.2, -0.04, 1, 0.5, 1);
+  cyl(g, 0.075, 0.055, 0.13, '#FF8FB0', -0.1, 0.2, 0.06);       // 小桶
+  cyl(g, 0.078, 0.078, 0.02, '#E0678D', -0.1, 0.27, 0.06);
+  tor(g, 0.05, 0.008, '#E0678D', -0.1, 0.3, 0.06, 0, 0, 0, Math.PI);
+  sph(g, 0.035, '#FF9A5C', 0.13, 0.12, 0.1, 1, 0.5, 1);         // 小海星点缀
+  face(g, { dx: 0.06, y: 0.12, z: 0.17, s: 0.85 });
+  return g;
+};
+
+PETS.wave = () => {
+  const g = G(), c = PET_COLORS.wave;
+  tor(g, 0.15, 0.07, c, 0, 0.2, 0, 0, 0, Math.PI * 0.75, Math.PI * 1.5); // 卷起来的浪
+  sph(g, 0.05, '#FFFFFF', 0.15, 0.34, 0);                       // 浪尖白沫
+  sph(g, 0.035, '#FFFFFF', 0.06, 0.4, 0.02);
+  for (const [dx, dz] of [[-0.12, 0.06], [0.05, 0.1], [-0.02, -0.08]])
+    sph(g, 0.05, '#A8DCF0', dx, 0.06, dz, 1.2, 0.5, 1.2);       // 底部水花
+  face(g, { dx: 0.045, y: 0.2, z: 0.16, s: 0.8 });
+  return g;
+};
+
+PETS.sea = () => {
+  const g = G(), c = PET_COLORS.sea;
+  sph(g, 0.2, c, 0, 0.19, 0, 1.05, 0.9, 1.05);
+  sph(g, 0.14, '#7EC4F2', 0, 0.28, -0.02, 0.9, 0.6, 0.9);       // 浪头高光
+  tor(g, 0.19, 0.035, '#FFFFFF', 0, 0.07, 0, Math.PI / 2).scale.set(1.05, 1, 0.4); // 岸边白沫
+  sph(g, 0.03, '#FFFFFF', 0.12, 0.34, 0.06);
+  face(g, { dx: 0.07, y: 0.2, z: 0.18 });
+  return g;
+};
+
+PETS.icecream = () => {
+  const g = G();
+  cone(g, 0.12, 0.24, '#E8B23C', 0, 0.12, 0, Math.PI);          // 蛋筒（尖朝下）
+  for (let i = 0; i < 4; i++)                                   // 蛋筒格纹
+    box(g, 0.016, 0.2, 0.016, '#C9952F', Math.cos(i * 1.57) * 0.05, 0.1, Math.sin(i * 1.57) * 0.05, 0, -i * 0.78, 0.5);
+  sph(g, 0.125, PET_COLORS.icecream, 0, 0.32, 0, 1, 0.92, 1);   // 草莓球
+  sph(g, 0.07, '#FFF6EC', 0.07, 0.4, -0.02, 1, 0.8, 1);         // 奶油尖
+  sph(g, 0.03, '#E84B4B', -0.04, 0.44, 0.02);                   // 樱桃
+  face(g, { dx: 0.05, y: 0.33, z: 0.11, s: 0.75 });
+  return g;
+};
+
+// ================= 森林词宠 =================
+PETS.bear = () => {
+  const g = G(), c = PET_COLORS.bear;
+  const head = quadBody(g, { bc: c, bodyR: 0.19, headR: 0.21 });
+  sph(head, 0.21, c);
+  for (const sx of [-1, 1]) {
+    sph(head, 0.075, c, 0.14 * sx, 0.17, 0);                    // 圆耳朵
+    sph(head, 0.04, '#C99A6B', 0.14 * sx, 0.17, 0.045);
+  }
+  sph(head, 0.08, '#E8CFA8', 0, -0.05, 0.17, 1, 0.85, 0.8);     // 浅色口鼻
+  sph(head, 0.022, '#4A4046', 0, -0.02, 0.24);                  // 鼻子
+  face(head, { y: 0.05, z: 0.175 });
+  sph(g, 0.1, '#E8CFA8', 0, 0.32, 0.12, 1, 1.2, 0.6);           // 浅肚皮
+  return g;
+};
+
+PETS.fox = () => {
+  const g = G(), c = PET_COLORS.fox;
+  const head = quadBody(g, { bc: c, bodyR: 0.16, legC: '#4A4046', headR: 0.19, headZ: 0.22 });
+  sph(head, 0.19, c);
+  sph(head, 0.07, '#FFF6EC', 0, -0.06, 0.16, 0.9, 0.75, 0.8);   // 白口鼻
+  sph(head, 0.018, '#4A4046', 0, -0.03, 0.23);
+  for (const sx of [-1, 1]) {
+    cone(head, 0.06, 0.14, c, 0.1 * sx, 0.2, 0, 0, 0, -0.35 * sx); // 尖耳
+    cone(head, 0.03, 0.06, '#4A4046', 0.1 * sx, 0.27, -0.005, 0, 0, -0.35 * sx); // 耳尖
+  }
+  face(head, { y: 0.03, z: 0.165 });
+  cap(g, 0.06, 0.2, c, 0, 0.36, -0.24, -Math.PI / 2.6).scale.set(1, 1, 0.7); // 大尾巴
+  sph(g, 0.075, '#FFF6EC', 0, 0.44, -0.36, 1, 1, 0.8);          // 尾巴尖
+  sph(g, 0.09, '#FFF6EC', 0, 0.26, 0.14, 1, 1.3, 0.55);         // 白胸
+  return g;
+};
+
+PETS.owl = () => {
+  const g = G(), c = PET_COLORS.owl;
+  sph(g, 0.18, c, 0, 0.24, 0, 0.95, 1.15, 0.95);                // 蛋形身子
+  sph(g, 0.13, '#D9BC94', 0, 0.19, 0.09, 0.8, 0.9, 0.6);        // 浅肚
+  for (const sx of [-1, 1]) {
+    cone(g, 0.045, 0.09, c, 0.08 * sx, 0.42, -0.02, 0, 0, -0.3 * sx); // 耳羽
+    sph(g, 0.075, '#FFF6EC', 0.072 * sx, 0.3, 0.115, 1, 1, 0.45);     // 大眼盘
+    sph(g, 0.035, '#4A4046', 0.072 * sx, 0.3, 0.15);
+    sph(g, 0.012, '#FFFFFF', 0.082 * sx, 0.315, 0.175);
+    sph(g, 0.07, '#8A6844', 0.15 * sx, 0.24, -0.02, 0.45, 0.8, 1.1);  // 收拢的翅膀
+  }
+  cone(g, 0.032, 0.07, '#FF9A3C', 0, 0.24, 0.16, Math.PI / 2);  // 小喙
+  for (const sx of [-1, 1]) cyl(g, 0.012, 0.012, 0.06, '#FF9A3C', 0.05 * sx, 0.03, 0.02);
+  return g;
+};
+
+PETS.monkey = () => {
+  const g = G(), c = PET_COLORS.monkey;
+  const head = quadBody(g, { bc: c, bodyR: 0.16, headR: 0.19, headZ: 0.2 });
+  sph(head, 0.19, c);
+  sph(head, 0.11, '#EBD6B3', 0, -0.02, 0.1, 0.9, 0.8, 0.65);    // 浅色脸盘
+  sph(head, 0.05, '#EBD6B3', 0, 0.02, 0.17, 0.8, 0.55, 0.5);    // 口鼻
+  sph(head, 0.012, '#4A4046', 0, -0.005, 0.215);
+  for (const sx of [-1, 1]) {
+    sph(head, 0.06, c, 0.17 * sx, 0.04, 0, 1, 1, 0.5);          // 圆耳朵
+    sph(head, 0.032, '#EBD6B3', 0.175 * sx, 0.04, 0.03, 1, 1, 0.35);
+  }
+  face(head, { dx: 0.05, y: 0.05, z: 0.16, s: 0.8, blush: 0.1 });
+  tor(g, 0.11, 0.022, c, 0, 0.32, -0.18, 0.5, 0.6, 0.4, Math.PI * 1.5); // 卷尾巴
+  sph(g, 0.07, '#EBD6B3', 0, 0.3, 0.1, 1, 1.2, 0.6);            // 浅肚皮
+  return g;
+};
+
+PETS.squirrel = () => {
+  const g = G(), c = PET_COLORS.squirrel;
+  sph(g, 0.15, c, 0, 0.17, -0.03, 1, 1.1, 1.2);
+  sph(g, 0.09, '#FFE8D0', 0, 0.14, 0.06, 0.9, 1, 0.7);          // 白肚
+  const head = G(); head.position.set(0, 0.38, 0.08); g.add(head);
+  sph(head, 0.13, c);
+  sph(head, 0.06, '#FFE8D0', 0, -0.03, 0.1, 0.85, 0.7, 0.7);
+  for (const sx of [-1, 1]) {
+    cone(head, 0.045, 0.09, c, 0.08 * sx, 0.14, -0.01, 0, 0, -0.3 * sx); // 小尖耳
+    sph(head, 0.012, '#4A4046', 0, -0.01, 0.125);
+  }
+  face(head, { dx: 0.05, y: 0.02, z: 0.115, s: 0.85 });
+  for (let i = 0; i < 3; i++)                                   // 招牌大尾巴
+    sph(g, 0.085 + i * 0.012, i % 2 ? '#C97A3A' : c, 0.02 + i * 0.02, 0.24 + i * 0.13, -0.2 - i * 0.03, 1, 1, 0.7);
+  return g;
+};
+
+PETS.panda = () => {
+  const g = G(), c = PET_COLORS.panda;
+  const head = quadBody(g, { bc: c, bodyR: 0.19, legC: '#4A4046', headR: 0.21 });
+  sph(head, 0.21, c);
+  sph(g, 0.12, '#4A4046', 0, 0.42, -0.04, 1.2, 0.7, 1.1);       // 黑肩带
+  for (const sx of [-1, 1]) {
+    sph(head, 0.06, '#4A4046', 0.15 * sx, 0.18, -0.02);         // 黑耳
+    sph(head, 0.055, '#4A4046', 0.075 * sx, 0.04, 0.155, 1, 1.15, 0.4); // 黑眼圈
+  }
+  sph(head, 0.045, '#FFFFFF', 0, -0.05, 0.19, 1, 0.8, 0.8);     // 白口鼻
+  sph(head, 0.016, '#4A4046', 0, -0.03, 0.245);
+  face(head, { dx: 0.038, y: 0.055, z: 0.185, s: 0.85 });
+  cyl(g, 0.03, 0.03, 0.24, '#8FBF6F', 0.2, 0.35, 0.12, 0, 0, -0.7); // 抱着竹子
+  sph(g, 0.05, '#7CC96F', 0.26, 0.48, 0.12, 1.4, 0.35, 0.8);
+  return g;
+};
+
+PETS.deer = () => {
+  const g = G(), c = PET_COLORS.deer;
+  const head = quadBody(g, { bc: c, bodyR: 0.16, headR: 0.17, headZ: 0.22 });
+  sph(head, 0.17, c);
+  sph(head, 0.055, '#E8D4B0', 0, -0.05, 0.15, 0.9, 0.75, 0.8);  // 口鼻
+  sph(head, 0.016, '#4A4046', 0, -0.02, 0.21);
+  for (const sx of [-1, 1]) {
+    cyl(head, 0.014, 0.014, 0.14, '#A8825B', 0.08 * sx, 0.22, -0.02, 0, 0, -0.4 * sx);   // 角主干
+    cyl(head, 0.011, 0.011, 0.08, '#A8825B', 0.12 * sx, 0.26, -0.02, 0, 0, 0.9);          // 角分叉
+    sph(head, 0.045, c, 0.12 * sx, 0.06, 0.04, 1, 1.3, 0.5);                              // 耳朵
+  }
+  face(head, { y: 0.03, z: 0.15 });
+  for (let i = 0; i < 5; i++)                                   // 背上白斑点
+    sph(g, 0.028, '#FFF6EC', (i % 2 ? 0.07 : -0.07), 0.36, 0.1 - Math.floor(i / 2) * 0.12, 1, 0.6, 1.2);
+  sph(g, 0.045, '#FFF6EC', 0, 0.18, -0.26, 0.7, 1.2, 0.5);      // 小圆尾
+  return g;
+};
+
+PETS.mushroom = () => {
+  const g = G(), c = PET_COLORS.mushroom;
+  cyl(g, 0.07, 0.09, 0.22, '#FFF0DC', 0, 0.11, 0);              // 菌柄
+  sph(g, 0.17, c, 0, 0.26, 0, 1, 0.62, 1);                      // 红伞帽
+  cyl(g, 0.13, 0.16, 0.03, '#FFF0DC', 0, 0.24, 0, 0, 0, 0, 18); // 帽沿
+  for (const [dx, dz] of [[-0.08, 0.04], [0.07, -0.05], [0.02, 0.1], [-0.04, -0.09]])
+    sph(g, 0.028, '#FFF6EC', dx, 0.33, dz, 1, 0.5, 1);          // 白点
+  face(g, { dx: 0.04, y: 0.12, z: 0.09, s: 0.75 });
+  for (const [dx, dz] of [[-0.12, 0.08], [0.13, -0.03]])
+    cone(g, 0.025, 0.09, '#8FD08F', dx, 0.03, dz);              // 脚边小草
+  return g;
+};
+
+PETS.leaf = () => {
+  const g = G(), c = PET_COLORS.leaf;
+  sph(g, 0.15, c, 0, 0.2, 0, 1.15, 0.35, 1.5);                  // 叶身
+  sph(g, 0.1, '#A5DCA0', 0, 0.21, -0.03, 0.8, 0.3, 1.1);
+  cap(g, 0.014, 0.1, '#66BB6A', 0, 0.13, 0.2, Math.PI / 2.2);   // 叶柄
+  box(g, 0.012, 0.012, 0.42, '#66BB6A', 0, 0.235, -0.02);       // 主叶脉
+  for (const sx of [-1, 1]) for (let i = 0; i < 3; i++)
+    box(g, 0.008, 0.008, 0.1, '#7CC96F', 0.035 * sx, 0.225, 0.08 - i * 0.1, 0, sx * 0.5, 0);
+  face(g, { dx: 0.05, y: 0.24, z: 0.1, s: 0.75 });
+  return g;
+};
+
+PETS.stone = () => {
+  const g = G(), c = PET_COLORS.stone;
+  sph(g, 0.17, c, 0, 0.13, 0, 1.25, 0.85, 1);
+  sph(g, 0.1, '#C4C4CE', 0.1, 0.1, 0.08);
+  sph(g, 0.09, '#8FD08F', -0.06, 0.24, -0.02, 1.1, 0.35, 1);    // 头顶苔藓
+  sph(g, 0.045, '#7CC96F', 0.02, 0.26, 0.07, 1, 0.4, 1);
+  face(g, { dx: 0.06, y: 0.14, z: 0.15, s: 0.85 });
+  return g;
+};
+
+PETS.nest = () => {
+  const g = G(), c = PET_COLORS.nest;
+  tor(g, 0.15, 0.055, c, 0, 0.12, 0, Math.PI / 2).scale.set(1, 1, 1.15);       // 窝沿
+  cyl(g, 0.12, 0.09, 0.1, '#B08D58', 0, 0.07, 0, 0, 0, 0, 14);                 // 窝身
+  for (let i = 0; i < 5; i++) {                                                 // 交叉树枝
+    const a = Math.PI * 2 * i / 5;
+    box(g, 0.16, 0.014, 0.014, '#8A6844', Math.cos(a) * 0.12, 0.15, Math.sin(a) * 0.12, 0, -a, 0.3);
+  }
+  for (const [dx, dz] of [[-0.04, 0.03], [0.06, -0.02]])
+    sph(g, 0.045, '#FFF6F0', dx, 0.16, dz, 0.85, 1.1, 0.85);                    // 两颗小鸟蛋
+  face(g, { dx: 0.05, y: 0.16, z: 0.15, s: 0.75 });
+  return g;
+};
+
+PETS.wood = () => {
+  const g = G(), c = PET_COLORS.wood;
+  cyl(g, 0.12, 0.13, 0.5, c, 0, 0.14, 0, 0, 0, Math.PI / 2);                   // 横放的原木
+  cyl(g, 0.105, 0.105, 0.02, '#E8CFA8', 0.25, 0.14, 0, 0, 0, Math.PI / 2);     // 年轮切面
+  tor(g, 0.06, 0.008, '#C9A46B', 0.262, 0.14, 0, 0, Math.PI / 2);
+  for (const [z, len] of [[-0.12, 0.2], [0.06, 0.26]])
+    box(g, 0.015, 0.015, len, '#8A6844', 0, 0.24, z);                           // 树皮纹
+  cyl(g, 0.03, 0.035, 0.12, c, -0.1, 0.28, -0.05, 0, 0, 0.4);                  // 小树杈
+  face(g, { dx: 0.055, y: 0.16, z: 0.13, s: 0.85 });
+  return g;
+};
+
 // ================= 字母挂牌 =================
 export function letterTexture(letter, bg = '#FF8FB0', fg = '#FFFFFF') {
   const cv = document.createElement('canvas');
@@ -503,8 +849,9 @@ function tagDepth(g, h) {
   return Math.min(0.3, (c.z - box.min.z) + (box.max.z - box.min.z) * 0.3 + 0.05);
 }
 
-// ================= 玩家（小花匠：男孩 草帽+背带裤 / 女孩 双马尾+粉裙） =================
-export function buildPlayer(gender = 'boy') {
+// ================= 玩家（小花匠：男孩 草帽+背带裤 / 女孩 双马尾+粉裙）
+// wear: { hat: ''|'wizard'|'flower', balloon: bool, wand: bool } —— 许愿井换的装扮 */
+export function buildPlayer(gender = 'boy', wear = {}) {
   const g = G();
   const girl = gender === 'girl';
   const skin = '#FFE0CC';
@@ -553,18 +900,70 @@ export function buildPlayer(gender = 'boy') {
     }
     sph(head, 0.05, '#FF5E9C', 0.09, 0.155, 0.12, 1, 0.75, 1);
     sph(head, 0.035, '#FF5E9C', -0.095, 0.15, 0.13, 1, 0.75, 1);
-  } else {
-    // 草帽（蓝色帽带）
+  } else if (!wear.hat) {
+    // 草帽（蓝色帽带）：戴了商店帽就摘下
     cyl(head, 0.13, 0.26, 0.04, '#F5D76E', 0, 0.155, 0, 0, 0, 0, 18);
     sph(head, 0.13, '#F5D76E', 0, 0.17, 0, 1, 0.7, 1);
     cyl(head, 0.145, 0.148, 0.035, '#7EC4F2', 0, 0.175, 0, 0, 0, 0, 18);
+  }
+  // ---- 商店装扮：帽子 ----
+  if (wear.hat === 'wizard') {
+    cyl(head, 0.24, 0.28, 0.035, '#8A6AC4', 0, 0.15, 0, 0, 0, 0, 18);   // 帽檐
+    cyl(head, 0.02, 0.15, 0.3, '#8A6AC4', 0, 0.3, 0, 0, 0, 0, 14);      // 帽身
+    cyl(head, 0.15, 0.16, 0.045, '#FFD34E', 0, 0.165, 0, 0, 0, 0, 18);  // 金帽带
+    cone(head, 0.02, 0.14, '#8A6AC4', 0, 0.5, 0, 0, 0, -0.35);          // 帽尖
+    sph(head, 0.028, '#FFE24E', 0, 0.56, 0.02, 1, 1, 1, 0, 0, 0, { emissive: '#FFD34E', ei: 0.7 });
+    for (const [sx, y] of [[-1, 0.3], [1, 0.22]])
+      sph(head, 0.014, '#FFE24E', 0.05 * sx, y, 0.13, 1, 1.3, 0.5, 0, 0, sx * 0.5, { emissive: '#FFD34E', ei: 0.6 });
+  } else if (wear.hat === 'flower') {
+    tor(head, 0.16, 0.022, '#66BB6A', 0, 0.15, 0, Math.PI / 2);         // 花环底
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI * 2 * i / 6 + 0.3;
+      const fx = Math.cos(a) * 0.16, fz = Math.sin(a) * 0.16;
+      const col = ['#FF8FB0', '#FFE24E', '#FFF6EC', '#B28FF5', '#FF8FB0', '#FFE24E'][i];
+      for (let p = 0; p < 4; p++) {
+        const pa = Math.PI * 2 * p / 4 + a;
+        sph(head, 0.028, col, fx + Math.cos(pa) * 0.03, 0.15, fz + Math.sin(pa) * 0.03);
+      }
+      sph(head, 0.02, '#FFC94E', fx, 0.15, fz);
+    }
+  }
+  // ---- 商店装扮：气球（拴在右手，走路一颠一颠） ----
+  let balloon = null;
+  if (wear.balloon) {
+    balloon = G();
+    cyl(balloon, 0.004, 0.004, 0.5, '#D9D9E0', 0, 0.25, 0);             // 线
+    sph(balloon, 0.11, '#FF8FB0', 0, 0.6, 0, 1, 1.15, 1, 0, 0, 0, { rough: 0.4 });
+    cone(balloon, 0.02, 0.04, '#E0678D', 0, 0.48, 0);
+    balloon.position.set(0, -0.17, 0);
+    armR.add(balloon);
+  }
+  // ---- 商店装扮：星星魔法棒（走路撒星星） ----
+  let wandTip = null;
+  if (wear.wand) {
+    cyl(armR, 0.011, 0.013, 0.34, '#B08860', 0, -0.16, 0.1, 0.35, 0, 0); // 棒身
+    const tip = new THREE.Object3D();
+    tip.position.set(0, -0.02, 0.16);
+    armR.add(tip);
+    const starM = o => new THREE.MeshStandardMaterial({ color: '#FFE24E', emissive: '#FFD34E', emissiveIntensity: o, roughness: 0.5 });
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + Math.PI * 2 * i / 5;
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.05, 6), starM(0.9));
+      sp.position.set(Math.cos(a) * 0.032, tip.position.y + Math.sin(a) * 0.032, tip.position.z);
+      sp.rotation.z = a + Math.PI / 2;
+      armR.add(sp);
+    }
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), starM(1.2));
+    core.position.copy(tip.position);
+    armR.add(core);
+    wandTip = tip;
   }
   for (const sx of [-1, 1]) {
     sph(head, 0.03, '#4A4046', 0.068 * sx, 0.012, 0.158, 1, 1.35, 0.55);
     sph(head, 0.01, '#FFFFFF', 0.079 * sx, 0.044, 0.172);
     sph(head, 0.036, '#FFB3C1', 0.118 * sx, -0.048, 0.138, 1, 0.7, 0.4);
   }
-  return { group: g, parts: { legL, legR, armL, armR, body, head } };
+  return { group: g, parts: { legL, legR, armL, armR, body, head, balloon, wandTip } };
 }
 
 // ================= 场景物 =================
@@ -712,6 +1111,230 @@ PROPS.beanstalk = () => {
   }
   g.add(stalk);
   g.userData.stalk = stalk;
+  return g;
+};
+
+// ---- 海滩 & 森林 & 村庄新道具 ----
+PROPS.palm = () => {
+  const g = G();
+  const segs = [[0, 0.31, 0, 0.1, 0.13], [0.1, 0.92, 0.02, 0.085, 0.1], [0.22, 1.5, 0.05, 0.07, 0.085]];
+  for (const [x, y, z, rt, rb] of segs) {
+    const m = cyl(g, rt, rb, 0.66, '#B08D58', x, y, z, 0, 0, -0.16);
+    m.rotation.z = -0.16;
+  }
+  const top = G(); top.position.set(0.3, 1.9, 0.08); g.add(top);
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI * 2 * i / 6;
+    const leaf = sph(top, 0.36, i % 2 ? '#5CA85C' : '#6FBF73', Math.cos(a) * 0.3, -0.06, Math.sin(a) * 0.3, 1.35, 0.1, 0.5);
+    leaf.rotation.y = -a;
+  }
+  sph(top, 0.13, '#6FBF73', 0, 0.02, 0);
+  for (const [dx, dz] of [[-0.1, 0.13], [0.13, -0.07]]) sph(top, 0.06, '#8A6844', dx, -0.12, dz); // 椰子
+  return g;
+};
+
+PROPS.umbrella = () => {
+  const g = G();
+  cyl(g, 0.028, 0.028, 1.9, '#C9A46B', 0.12, 0.95, 0, 0, 0, 0.14);
+  cone(g, 1.05, 0.5, '#FF8A7A', 0.25, 1.95, 0, 0, 0, 0.14, 9);      // 伞面
+  cone(g, 1.02, 0.18, '#FFF6EC', 0.25, 1.9, 0, 0, 0, 0.14, 9, { alpha: 0.35 }); // 白边
+  sph(g, 0.05, '#FFF6EC', 0.36, 2.24, 0);
+  return g;
+};
+
+PROPS.sandcastle = (s = 1) => {
+  const g = G();
+  const S = '#EFD9A8', S2 = '#E2C88E';
+  box(g, 1.5, 0.5, 1.2, S2, 0, 0.25, 0);                            // 基座
+  for (const [dx, dz] of [[-0.62, -0.45], [0.62, -0.45], [-0.62, 0.45], [0.62, 0.45]]) {
+    cyl(g, 0.2, 0.24, 0.7, S, dx, 0.85, dz);
+    cone(g, 0.26, 0.32, S2, dx, 1.36, dz, 0, Math.PI / 4, 0, 4);
+  }
+  cyl(g, 0.3, 0.34, 0.9, S, 0, 0.95, 0);                            // 主塔
+  cone(g, 0.36, 0.4, S2, 0, 1.6, 0);
+  cyl(g, 0.008, 0.008, 0.34, '#8A6844', 0, 1.95, 0);
+  box(g, 0.2, 0.11, 0.012, '#FF6B6B', 0.1, 2.06, 0);                // 小红旗
+  g.scale.setScalar(s);
+  return g;
+};
+
+PROPS.pine = (s = 1) => {
+  const g = G();
+  cyl(g, 0.09, 0.14, 0.7, '#8A6844', 0, 0.35, 0, 0, 0, 0, 8);
+  for (let i = 0; i < 3; i++)
+    cone(g, 0.78 - i * 0.19, 0.95, i % 2 ? '#4E9152' : '#5CA85C', 0, 1.05 + i * 0.62, 0, 0, 0, 0, 9);
+  g.scale.setScalar(s);
+  return g;
+};
+
+PROPS.bush = (s = 1) => {
+  const g = G();
+  sph(g, 0.4, '#4E9152', 0, 0.3, 0, 1.2, 0.85, 1);
+  sph(g, 0.3, '#5CA85C', 0.3, 0.24, 0.1);
+  sph(g, 0.26, '#57A24F', -0.28, 0.22, -0.06);
+  g.scale.setScalar(s);
+  return g;
+};
+
+PROPS.log = (s = 1) => {
+  const g = G();
+  cyl(g, 0.16, 0.18, 1.3, '#A87551', 0, 0.18, 0, 0, 0, Math.PI / 2, 12);
+  cyl(g, 0.14, 0.14, 0.03, '#E8CFA8', 0.65, 0.18, 0, 0, 0, Math.PI / 2, 12);
+  tor(g, 0.08, 0.015, '#C9A46B', 0.66, 0.18, 0, 0, Math.PI / 2);
+  sph(g, 0.07, '#8FD08F', -0.3, 0.32, 0.05, 1, 0.4, 1);
+  g.scale.setScalar(s);
+  return g;
+};
+
+PROPS.lilyPad = () => {
+  const g = G();
+  cyl(g, 0.26, 0.3, 0.035, '#4E9152', 0, 0.02, 0, 0, 0, 0, 12);
+  sph(g, 0.05, '#7CC96F', 0.1, 0.05, 0.06, 1, 0.5, 1);
+  return g;
+};
+
+PROPS.grassTuft = () => {
+  const g = G();
+  for (let i = 0; i < 5; i++) {
+    const a = Math.PI * 2 * i / 5 + Math.random();
+    cone(g, 0.028, 0.16 + Math.random() * 0.12, ['#7CC96F', '#8FD08F', '#6FBF73'][i % 3],
+      Math.cos(a) * 0.05, 0.08, Math.sin(a) * 0.05, 0.2 * Math.sin(a), 0, -0.2 * Math.cos(a), 5);
+  }
+  return g;
+};
+
+PROPS.sunflower = () => {
+  const g = G();
+  cyl(g, 0.02, 0.026, 0.75, '#5CA85C', 0, 0.37, 0);
+  sph(g, 0.06, '#5CA85C', 0.08, 0.3, 0, 1.5, 0.35, 0.8);
+  sph(g, 0.05, '#5CA85C', -0.07, 0.45, 0, 1.5, 0.35, 0.8);
+  const head = G(); head.position.set(0, 0.82, 0); g.add(head);
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI * 2 * i / 10;
+    sph(head, 0.06, '#FFC94E', Math.cos(a) * 0.13, Math.sin(a) * 0.13, 0, 1, 1, 0.4);
+  }
+  sph(head, 0.1, '#8A5A2C', 0, 0, 0.015, 1, 1, 0.55);
+  return g;
+};
+
+PROPS.scarecrow = () => {
+  const g = G();
+  cyl(g, 0.045, 0.05, 1.6, '#A87551', 0, 0.8, 0);
+  box(g, 1, 0.07, 0.07, '#A87551', 0, 1.15, 0);                     // 横杆
+  box(g, 0.42, 0.5, 0.24, '#E8836F', 0, 1, 0);                      // 衣服
+  box(g, 0.16, 0.3, 0.05, '#5C8F46', 0.14, 0.42, 0);                // 补丁
+  sph(g, 0.16, '#FFE0C4', 0, 1.45, 0);                              // 头
+  cyl(g, 0.2, 0.34, 0.04, '#F5D76E', 0, 1.58, 0, 0, 0, 0, 14);      // 草帽
+  sph(g, 0.17, '#F5D76E', 0, 1.6, 0, 1, 0.6, 1);
+  for (const sx of [-1, 1]) sph(g, 0.022, '#4A4046', 0.055 * sx, 1.47, 0.14, 1, 1.3, 0.5);
+  sph(g, 0.02, '#E0678D', 0, 1.42, 0.15);
+  for (const sx of [-1, 1]) cap(g, 0.02, 0.3, '#E8C87E', 0.5 * sx, 1.12, 0).scale.set(1, 1, 0.5); // 手臂稻草
+  return g;
+};
+
+PROPS.pinwheel = () => {
+  const g = G();
+  cyl(g, 0.02, 0.025, 0.9, '#B08D58', 0, 0.45, 0);
+  const blades = G(); blades.position.set(0, 0.92, 0.05);
+  const cols = ['#FF6B6B', '#FFC94E', '#7EC4F2', '#8FD08F'];
+  for (let i = 0; i < 4; i++) {
+    const b = sph(blades, 0.09, cols[i], 0.11, 0, 0, 1.6, 0.55, 0.25);
+    const holder = G();
+    holder.rotation.z = Math.PI / 2 * i;
+    holder.add(b);
+    b.position.set(0.12, 0, 0);
+    blades.add(holder);
+  }
+  sph(blades, 0.035, '#FFF6EC', 0, 0, 0.02);
+  g.add(blades);
+  g.userData.blades = blades;
+  return g;
+};
+
+PROPS.well = () => {
+  const g = G();
+  cyl(g, 0.52, 0.6, 0.72, '#B8B8C4', 0, 0.36, 0, 0, 0, 0, 14);      // 石井身
+  for (let i = 0; i < 5; i++) {
+    const a = Math.PI * 2 * i / 5 + 0.4;
+    box(g, 0.22, 0.14, 0.08, '#A5A5B4', Math.cos(a) * 0.52, 0.2, Math.sin(a) * 0.52, 0, -a, 0);
+  }
+  tor(g, 0.53, 0.06, '#C9C9D6', 0, 0.74, 0, Math.PI / 2);           // 井沿
+  cyl(g, 0.45, 0.5, 0.05, '#2E5E8E', 0, 0.66, 0, 0, 0, 0, 14);      // 井水
+  for (const sx of [-1, 1]) box(g, 0.09, 1, 0.09, '#8A6844', 0.5 * sx, 1.2, 0);
+  cone(g, 0.85, 0.45, '#D95F4B', 0, 1.95, 0, 0, 0, 0, 4);           // 小屋顶
+  cyl(g, 0.03, 0.03, 1.06, '#8A6844', 0, 1.55, 0, 0, 0, Math.PI / 2);
+  cyl(g, 0.008, 0.008, 0.5, '#D9D9E0', 0, 1.28, 0);
+  cyl(g, 0.11, 0.09, 0.14, '#A87551', 0, 1, 0, 0, 0, 0, 10);        // 小木桶
+  tor(g, 0.1, 0.012, '#8A6844', 0, 1.06, 0, Math.PI / 2);
+  return g;
+};
+
+PROPS.signboard = () => {
+  const g = G();
+  for (const sx of [-1, 1]) cyl(g, 0.05, 0.06, 1.5, '#A87551', 0.55 * sx, 0.75, 0);
+  box(g, 1.7, 0.9, 0.08, '#C89A6B', 0, 1.25, 0);                    // 木板
+  box(g, 0.075, 0.9, 0.09, '#8A6844', 0, 1.25, 0);                  // 中缝
+  box(g, 0.62, 0.5, 0.03, '#FFFDF4', -0.4, 1.3, 0.055);             // 任务纸
+  for (let i = 0; i < 3; i++) {
+    box(g, 0.08, 0.08, 0.035, ['#FF6B6B', '#FFC94E', '#7CC96F'][i], -0.62, 1.42 - i * 0.16, 0.06);
+    box(g, 0.32, 0.03, 0.035, '#D9CBB8', -0.36, 1.42 - i * 0.16, 0.06);
+  }
+  box(g, 0.5, 0.4, 0.03, '#FFE9B8', 0.4, 1.32, 0.055);              // 公告纸
+  sph(g, 0.06, '#FFC94E', 0, 1.78, 0, 1, 1, 1, 0, 0, 0, { emissive: '#FFD34E', ei: 0.5 }); // 顶上小星
+  return g;
+};
+
+PROPS.gull = () => {
+  const g = G();
+  sph(g, 0.14, '#FFFFFF', 0, 0, 0, 1, 0.8, 1.4);
+  sph(g, 0.09, '#FFFFFF', 0, 0.08, 0.14);
+  cone(g, 0.03, 0.07, '#FF9A3C', 0, 0.07, 0.23, Math.PI / 2);
+  sph(g, 0.014, '#4A4046', 0.04, 0.1, 0.18); sph(g, 0.014, '#4A4046', -0.04, 0.1, 0.18);
+  const wingL = G(), wingR = G();
+  sph(wingL, 0.16, '#F4F4F8', -0.18, 0.05, 0, 1.3, 0.15, 0.7);
+  sph(wingR, 0.16, '#F4F4F8', 0.18, 0.05, 0, 1.3, 0.15, 0.7);
+  g.add(wingL, wingR);
+  g.userData.wingL = wingL;
+  g.userData.wingR = wingR;
+  return g;
+};
+
+PROPS.butterfly = (color = '#FF8FB0') => {
+  const g = G();
+  cap(g, 0.018, 0.08, '#6B5844', 0, 0, 0, Math.PI / 2);
+  const mkWing = side => {
+    const w = G();
+    sph(w, 0.07, color, 0.06 * side, 0.02, 0.02, 1.2, 0.9, 0.2);
+    sph(w, 0.045, color, 0.05 * side, 0.02, -0.05, 1, 0.8, 0.2);
+    sph(w, 0.012, '#FFF6EC', 0.075 * side, 0.025, 0.025);
+    return w;
+  };
+  const wl = mkWing(-1), wr = mkWing(1);
+  g.add(wl, wr);
+  g.userData.wings = [wl, wr];
+  return g;
+};
+
+// 机关：金色沙丘（wind 吹开）与荆棘丛（banana 拨开）
+PROPS.dune = (s = 1) => {
+  const g = G();
+  sph(g, 1, '#EDD49E', 0, 0, 0, 1.6, 0.72, 1);
+  sph(g, 1, '#E5C88E', 0.7, -0.1, 0.3, 1.1, 0.5, 0.8);
+  g.scale.setScalar(s);
+  return g;
+};
+
+PROPS.thorn = (s = 1) => {
+  const g = G();
+  for (const [x, y, z, r] of [[0, 0.5, 0, 0.42], [0.3, 0.9, 0.1, 0.3], [-0.28, 0.8, -0.08, 0.28], [0, 1.2, 0, 0.22]]) {
+    sph(g, r, '#3E7A44', x, y, z, 1, 1.15, 1);
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI * 2 * i / 5 + x;
+      cone(g, 0.03, 0.16, '#8A6844', x + Math.cos(a) * r * 1.1, y + Math.sin(a * 1.3) * r * 0.9, z + Math.sin(a) * r * 1.1,
+        Math.sin(a) * 1.2, 0, -Math.cos(a) * 1.2);
+    }
+  }
+  g.scale.setScalar(s);
   return g;
 };
 

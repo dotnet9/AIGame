@@ -1,18 +1,34 @@
-// 存档：localStorage + 遗忘曲线状态
+// 存档：localStorage + 遗忘曲线状态 + 星星/装扮/每日任务
 import { FEED_INTERVALS } from './words.js';
 
 const KEY = 'wordpet_save_v1';
 
+// 每日任务池：按日期轮换，完成奖 5 颗星星
+export const DAILY_QUESTS = [
+  { id: 'feed2', goal: 2, text: '喂饱 2 只想你的词宠' },
+  { id: 'hatch2', goal: 2, text: '孵化 2 颗新词宠蛋' },
+  { id: 'gate1', goal: 1, text: '解开 1 个机关谜题' },
+  { id: 'goodread', goal: 1, text: '朗读拿到 1 次 95 分以上' },
+  { id: 'summon3', goal: 3, text: '召唤 3 次词宠' },
+];
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function fresh() {
   return {
     pets: {},          // id -> { hatchedAt, fedAt, feedStage, feeds }
-    gates: {},         // boat / light / wind / beanstalk
+    gates: {},         // boat / light / wind / beanstalk / sandWall / vines
     visited: [],       // 去过的区域
     player: null,      // 上次位置 {x,y,z,yaw,camYaw,isle}
     book: { sem: null, units: {} }, // 课本：选中学期 + 单元成绩 {'3a#0': {scores:[..], done:true}}
     intro: false,
     playSeconds: 0,
-    profile: { username: '', score: 0, sessionScore: 0, gender: 'boy' },
+    profile: { username: '', score: 0, sessionScore: 0, gender: 'boy', stars: 0,
+      wear: { hat: '', hatOwned: [], balloon: false, balloonOwned: false, wand: false, wandOwned: false } },
+    daily: { day: '', idx: 0, n: 0, done: false },
   };
 }
 
@@ -29,8 +45,11 @@ function load() {
     merged.gates = d.gates || {};
     merged.visited = d.visited || [];
     merged.book = Object.assign({ sem: null, units: {} }, d.book || {});
-    merged.profile = Object.assign({ username: '', score: 0, sessionScore: 0, gender: 'boy' }, d.profile || {});
+    merged.profile = Object.assign(fresh().profile, d.profile || {});
+    merged.profile.wear = Object.assign(fresh().profile.wear, d.profile?.wear || {});
     if (!merged.profile.gender) merged.profile.gender = 'boy'; // 老存档没有性别字段 → 默认男孩
+    if (typeof merged.profile.stars !== 'number') merged.profile.stars = 0;
+    merged.daily = Object.assign({ day: '', idx: 0, n: 0, done: false }, d.daily || {});
     if (!merged.player) merged.player = null;
     return merged;
   } catch (e) {
@@ -130,5 +149,54 @@ export function addPoint() {
 }
 
 export function resetSessionScore() { data.profile.sessionScore = 0; save(); }
+
+// ---------- 星星经济 ----------
+export function getStars() { return Number(data.profile.stars) || 0; }
+export function addStars(n) {
+  data.profile.stars = Math.max(0, getStars() + n);
+  save();
+  return data.profile.stars;
+}
+export function spendStars(n) {
+  if (getStars() < n) return false;
+  data.profile.stars = getStars() - n;
+  save();
+  return true;
+}
+
+// ---------- 装扮（许愿井商店） ----------
+export function getWear() { return data.profile.wear; }
+export function updateWear(patch) {
+  Object.assign(data.profile.wear, patch);
+  save();
+  return data.profile.wear;
+}
+
+// ---------- 每日任务 ----------
+export function getDaily() {
+  const today = todayKey();
+  if (data.daily.day !== today) {
+    // 跨天：轮换到下一个小任务，进度清零
+    const idx = data.daily.day ? (data.daily.idx + 1) % DAILY_QUESTS.length
+      : Math.floor(Math.abs(new Date().getTimezoneOffset() + new Date().getDate() * 7)) % DAILY_QUESTS.length;
+    data.daily = { day: today, idx, n: 0, done: false };
+    save();
+  }
+  return { ...DAILY_QUESTS[data.daily.idx], n: data.daily.n, done: data.daily.done, key: data.daily.idx };
+}
+// 推进度：命中今日任务类型才计数；刚完成时自动发 5 颗星星。返回 'done' | 'progress' | null
+export function bumpDaily(id, n = 1) {
+  const q = DAILY_QUESTS[data.daily.idx];
+  if (!q || q.id !== id || data.daily.done) return null;
+  data.daily.n += n;
+  let result = 'progress';
+  if (data.daily.n >= q.goal) {
+    data.daily.done = true;
+    addStars(5);
+    result = 'done';
+  }
+  save();
+  return result;
+}
 
 export function resetSave() { data = fresh(); save(); }

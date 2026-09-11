@@ -87,6 +87,58 @@ export const WORDS = [
     story: '夜空里的萤火虫，一眨一眨，是在跟大家说晚安。' },
   { id: 'moon',    en: 'moon',    zh: '月亮',   syl: ['moon'],           hint: '弯弯的银色小船',                pet: 'moon',    pos: [-23.5, 25.5], zone: 'sky',
     story: '弯弯的银色小船，每天夜里载着全世界的梦。' },
+
+  // ============ 阳光海滩（吹开沙墙后） ============
+  { id: 'ship',    en: 'ship',    zh: '轮船',   syl: ['ship'],           hint: '海上轰隆隆的大船',              pet: 'ship',    pos: [-4, 39],   zone: 'beach',
+    story: '海上的大个子，汽笛一响，海鸥都跟着它去旅行。' },
+  { id: 'fish',    en: 'fish',    zh: '鱼',     syl: ['fish'],           hint: '在水里游来游去',                pet: 'fish',    pos: [8, 40],    zone: 'beach',
+    story: '眨眼的功夫就能从礁石游到沙滩，游泳比赛从不输。' },
+  { id: 'ball',    en: 'ball',    zh: '皮球',   syl: ['ball'],           hint: '圆圆的，能拍能踢',              pet: 'ball',    pos: [16, 40],   zone: 'beach',
+    story: '圆滚滚的捣蛋鬼，一拍就蹦得老高，谁都追不上。' },
+  { id: 'kite',    en: 'kite',    zh: '风筝',   syl: ['kite'],           hint: '牵着线飞上天的',                pet: 'kite',    pos: [-20, 38],  zone: 'beach',
+    story: '最喜欢大风天，飞得比楼还高，尾巴上的蝴蝶结哗啦啦。' },
+  { id: 'whale',   en: 'whale',   zh: '鲸鱼',   syl: ['whale'],          hint: '海里最大的动物',                pet: 'whale',   pos: [-12, 42],  zone: 'beach',
+    story: '大海里最大的歌手，喷出的水柱比房子还高。' },
+  { id: 'crab',    en: 'crab',    zh: '螃蟹',   syl: ['crab'],           hint: '横着走路，举着大钳子',          pet: 'crab',    pos: [14, 43],   zone: 'beach',
+    story: '沙滩上的横行小将军，挥着两把大钳子天天操练。' },
+  { id: 'sea',     en: 'sea',     zh: '大海',   syl: ['sea'],            hint: '很大很大的蓝色水域',            pet: 'sea',     pos: [18, 44],   zone: 'beach',
+    story: '蓝蓝的大摇篮，摇晃着所有的船和小鱼睡觉。' },
+  { id: 'shell',   en: 'shell',   zh: '贝壳',   syl: ['shell'],          hint: '海滩上能捡到的',                pet: 'shell',   pos: [-18, 42],  zone: 'beach',
+    story: '大海的小喇叭，贴在耳朵上能听见海浪的歌。' },
+  { id: 'sand',    en: 'sand',    zh: '沙子',   syl: ['sand'],           hint: '金灿灿软绵绵，堆城堡全靠它',    pet: 'sand',    pos: [10, 46],   zone: 'beach',
+    story: '数不清的金色小颗粒，是堆沙堡最好的砖头。' },
+  { id: 'wave',    en: 'wave',    zh: '浪花',   syl: ['wave'],           hint: '卷着白边冲上岸',                pet: 'wave',    pos: [-8, 47],   zone: 'beach',
+    story: '大海伸出的白花边小手，挠得脚丫子咯咯笑。' },
+  { id: 'starfish', en: 'starfish', zh: '海星', syl: ['star', 'fish'],   hint: '像星星一样趴在沙滩上',          pet: 'starfish', pos: [4, 47],   zone: 'beach',
+    story: '海里的五角星，走路慢吞吞，趴着睡大觉。' },
+  { id: 'icecream', en: 'ice cream', zh: '冰淇淋', syl: ['ice', 'cream'], hint: '甜甜的、凉凉的夏天甜点',        pet: 'icecream', pos: [-16, 45], zone: 'beach',
+    story: '太阳越晒它越开心，因为小朋友们都排着队等它。' },
+
+  // ============ 神秘森林（拨开荆棘后） ============
+  { id: 'owl',     en: 'owl',     zh: '猫头鹰', syl: ['owl'],            hint: '夜里值班，咕咕叫',              pet: 'owl',     pos: [-42, -10], zone: 'forest',
+    story: '森林的夜间守卫，睁着大眼睛替大家看星星。' },
+  { id: 'leaf',    en: 'leaf',    zh: '树叶',   syl: ['leaf'],           hint: '秋天会变黄飘落',                pet: 'leaf',    pos: [-44, -16], zone: 'forest',
+    story: '大树寄给地面的明信片，落下来时会转着圈跳舞。' },
+  { id: 'stone',   en: 'stone',   zh: '石头',   syl: ['stone'],          hint: '硬硬的，河边的灰色小块',        pet: 'stone',   pos: [-40, -4],  zone: 'forest',
+    story: '最有耐心的大力士，蹲在溪边数了一百年小鱼。' },
+  { id: 'wood',    en: 'wood',    zh: '木头',   syl: ['wood'],           hint: '砍下来的树干',                  pet: 'wood',    pos: [-46, -6],  zone: 'forest',
+    story: '躺着也干活的小木头，啄木鸟把它当成敲门的家。' },
+  { id: 'fox',     en: 'fox',     zh: '狐狸',   syl: ['fox'],            hint: '尖耳朵大尾巴，很聪明',          pet: 'fox',     pos: [-48, 2],   zone: 'forest',
+    story: '森林里的小机灵鬼，蓬蓬大尾巴一扫就是一个枕头。' },
+  { id: 'bear',    en: 'bear',    zh: '熊',     syl: ['bear'],           hint: '爱吃蜂蜜的壮家伙',              pet: 'bear',    pos: [-44, 8],   zone: 'forest',
+    story: '抱着蜂蜜罐打呼噜的大家伙，冬天要睡长长一觉。' },
+  { id: 'panda',   en: 'panda',   zh: '熊猫',   syl: ['pan', 'da'],      hint: '黑白相间，爱吃竹子',            pet: 'panda',   pos: [-48, 10],  zone: 'forest',
+    story: '戴着黑墨镜的竹子大胃王，吃完就靠着树打滚。' },
+  { id: 'monkey',  en: 'monkey',  zh: '猴子',   syl: ['mon', 'key'],     hint: '爬树高手，爱吃香蕉',            pet: 'monkey',  pos: [-46, 16],  zone: 'forest',
+    story: '树梢上的杂技演员，尾巴一卷就能倒挂看世界。' },
+  { id: 'deer',    en: 'deer',    zh: '鹿',     syl: ['deer'],           hint: '头上长着树枝一样的角',          pet: 'deer',    pos: [-40, 14],  zone: 'forest',
+    story: '森林里的小绅士，头顶的角像一顶开花的王冠。' },
+  { id: 'squirrel', en: 'squirrel', zh: '松鼠', syl: ['squir', 'rel'],   hint: '大尾巴，爱囤松果',              pet: 'squirrel', pos: [-40, 20], zone: 'forest',
+    story: '毛茸茸的小管家，把松果藏得到处都是，再慢慢找。' },
+  { id: 'nest',    en: 'nest',    zh: '鸟窝',   syl: ['nest'],           hint: '小鸟的家，树枝搭成',            pet: 'nest',    pos: [-46, 20],  zone: 'forest',
+    story: '树上圆圆的小摇篮，风一吹，小鸟们就睡着了。' },
+  { id: 'mushroom', en: 'mushroom', zh: '蘑菇', syl: ['mush', 'room'],   hint: '雨后伞一样冒出来',              pet: 'mushroom', pos: [-48, -12], zone: 'forest',
+    story: '森林里的小雨伞，下雨天蚂蚁们排队来躲雨。' },
 ];
 
 export const WORD_MAP = Object.fromEntries(WORDS.map(w => [w.id, w]));
@@ -96,11 +148,13 @@ export const TOTAL = WORDS.length;
 export const ZONE_NAMES = {
   meadow: '出生草甸', orchard: '阳光果园', windmill: '风车田',
   barnyard: '谷仓前院', barn: '谷仓里', garden: '魔法菜园', sky: '天空岛',
+  beach: '阳光海滩', forest: '神秘森林',
 };
 
-// 关卡制：每关 6 个词，通关后新一批蛋才会出现（避免一上来 36 颗蛋太散太累）
+// 关卡制：每关 6 个词，通关后新一批蛋才会出现（避免一上来 60 颗蛋太散太累）
 // 钥匙词固定钉在对应关卡：boat→第1关过河，light→第2关照亮谷仓，wind→第3关吹走干草球，
-// seed/rain→第4关种豆藤，star/moon→第6关天空岛金色传说
+// seed/rain→第4关种豆藤，star/moon→第6关天空岛金色传说；
+// 第7-10关：吹开沙墙进海滩（用已孵化的 wind）、拨开荆棘进森林（用已孵化的 banana）
 export const CHAPTERS = [
   { name: '出生草甸', words: ['cat', 'dog', 'duck', 'rabbit', 'mouse', 'boat'] },
   { name: '阳光果园', words: ['flower', 'grass', 'frog', 'apple', 'banana', 'light'] },
@@ -108,6 +162,10 @@ export const CHAPTERS = [
   { name: '风车田与菜园', words: ['pig', 'cow', 'bird', 'bee', 'seed', 'rain'] },
   { name: '谷仓与牧场', words: ['horse', 'sheep', 'hen', 'milk', 'bread', 'egg'] },
   { name: '天空岛传说', words: ['cake', 'tractor', 'tree', 'sun', 'star', 'moon'] },
+  { name: '海边来客', words: ['ship', 'fish', 'ball', 'kite', 'whale', 'crab'] },
+  { name: '沙滩游戏', words: ['sea', 'shell', 'sand', 'wave', 'starfish', 'icecream'] },
+  { name: '森林朋友', words: ['owl', 'leaf', 'stone', 'wood', 'fox', 'bear'] },
+  { name: '森林秘密', words: ['panda', 'monkey', 'deer', 'squirrel', 'nest', 'mushroom'] },
 ];
 export const PER_CHAPTER = 6;
 export const chapterIndex = hatchedCount => Math.min(Math.floor(hatchedCount / PER_CHAPTER), CHAPTERS.length - 1);

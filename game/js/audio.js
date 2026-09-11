@@ -99,22 +99,27 @@ function tts(text, { rate = 0.8, pitch = 1.05, onEnd } = {}) {
   speechSynthesis.speak(u);
 }
 
-// 对外发音入口：单词/短语/音节/字母 自动匹配语音文件
+// 对外发音入口：单词/短语/音节/字母 自动匹配语音文件（喝彩播放中会礼貌排队）
 export async function speak(text, { rate = 0.8, onEnd } = {}) {
   const raw = String(text).trim();
   const fk = fileKey(raw);
-  if (fk) {
-    if (await tryFile(`word/${fk}`)) { if (onEnd) onEnd(); return; }
-    const t = fk.replace(/-/g, '');
-    if (t && t.length === 1 && await tryFile(`letter/${t}`)) { if (onEnd) onEnd(); return; }
-    if (raw.includes(' ') || fk.includes('-')) { /* 多词短语没有独立文件时走 TTS */ }
-  }
-  tts(raw, { rate, onEnd });
+  const go = async () => {
+    if (fk) {
+      if (await tryFile(`word/${fk}`)) { if (onEnd) onEnd(); return; }
+      const t = fk.replace(/-/g, '');
+      if (t && t.length === 1 && await tryFile(`letter/${t}`)) { if (onEnd) onEnd(); return; }
+      if (raw.includes(' ') || fk.includes('-')) { /* 多词短语没有独立文件时走 TTS */ }
+    }
+    tts(raw, { rate, onEnd });
+  };
+  waitCheer(go);
 }
 
 // 慢速单词（有专门录的慢速文件）
 export function speakSlow(word, onEnd) {
-  tryFile('word/' + fileKey(word) + '_slow').then(ok => { if (!ok) tts(word, { rate: 0.55, onEnd }); else if (onEnd) onEnd(); });
+  waitCheer(() => {
+    tryFile('word/' + fileKey(word) + '_slow').then(ok => { if (!ok) tts(word, { rate: 0.55, onEnd }); else if (onEnd) onEnd(); });
+  });
 }
 
 // 跟读：播放整词慢速标准音（真人录音变速），音节只做视觉高亮同步，不再单独念音节
@@ -149,28 +154,33 @@ export function playRecording(url, onEnd) {
 
 // 逐字母
 export function spellLetters(word, onEnd) {
-  const w = word.toLowerCase();
-  let i = 0;
-  const next = () => {
-    if (i >= w.length) { if (onEnd) onEnd(); return; }
-    const ch = w[i++];
-    tryFile('letter/' + ch).then(ok => {
-      if (ok) setTimeout(next, 200);
-      else tts(ch, { rate: 0.55, onEnd: () => setTimeout(next, 200) });
-    });
-  };
-  next();
+  waitCheer(() => {
+    const w = word.toLowerCase();
+    let i = 0;
+    const next = () => {
+      if (i >= w.length) { if (onEnd) onEnd(); return; }
+      const ch = w[i++];
+      tryFile('letter/' + ch).then(ok => {
+        if (ok) setTimeout(next, 200);
+        else tts(ch, { rate: 0.55, onEnd: () => setTimeout(next, 200) });
+      });
+    };
+    next();
+  });
 }
 
 // 劲舞团式评分喝彩：Perfect / Great / Cool / Nice / Bad / Miss
-// 优先播放预生成的情绪童声（audio/fx/，AnaNeural），缺文件时用 TTS 提调兜底
+// 优先播放预生成的情绪童声（audio/fx/，AnaNeural），缺文件时用 TTS 提调兜底；
+// 播放期间上锁，保证喝彩完整播完再轮到单词发音
 export function scoreVoice(score) {
   const key = score >= 95 ? 'perfect' : score >= 85 ? 'great' : score >= 75 ? 'cool'
     : score >= 60 ? 'nice' : score >= 40 ? 'bad' : 'miss';
   const texts = { perfect: 'Perfect!', great: 'Great!', cool: 'Cool!', nice: 'Nice try!', bad: 'Oh, bad...', miss: 'Miss...' };
   const happy = score >= 60;
-  tryFile('fx/' + key).then(ok => {
-    if (!ok) tts(texts[key], { rate: happy ? 1 : 0.85, pitch: happy ? 1.35 : 0.8 });
+  tryFileMeta('fx/' + key).then(res => {
+    // 实测时长 + 余量上锁；拿不到时长就按 1.2 秒估
+    cheerUntil = Date.now() + (res.ok && res.dur ? res.dur * 1000 + 150 : 1200);
+    if (!res.ok) tts(texts[key], { rate: happy ? 1 : 0.85, pitch: happy ? 1.35 : 0.8 });
   });
 }
 
@@ -182,6 +192,14 @@ function ctx() {
   }
   if (actx && actx.state === 'suspended') actx.resume();
   return actx;
+}
+
+// 喝彩独占期：Perfect!/Great! 这类带情绪的喝彩播放期间，后面的单词发音排队等待，别把喝彩掐断
+let cheerUntil = 0;
+function waitCheer(fn) {
+  const d = cheerUntil - Date.now();
+  if (d > 0) setTimeout(fn, d + 60);
+  else fn();
 }
 
 function tone(freq, t0, dur, type = 'sine', gain = 0.16) {

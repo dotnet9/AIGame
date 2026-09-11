@@ -6,6 +6,7 @@ import * as ui from './ui.js';
 import { CURRICULUM } from './curriculum.js';
 
 window.THREE = THREE; // 调试句柄
+window.__save = save; // 调试句柄
 
 const canvas = document.getElementById('scene');
 
