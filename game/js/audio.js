@@ -224,6 +224,8 @@ export const sfx = {
   miss() { tone(300, 0, 0.18, 'triangle', 0.12); tone(240, 0.14, 0.22, 'triangle', 0.1); },
   crack() { tone(180, 0, 0.1, 'square', 0.08); tone(140, 0.08, 0.12, 'square', 0.06); },
   magic() { [660, 880, 1100, 1320].forEach((f, i) => tone(f, i * 0.07, 0.25, 'sine', 0.09)); },
+  // 脚步：很轻的沙沙声，音高带一点随机免得像打拍子
+  step() { tone(140 + Math.random() * 70, 0.05, 'sine', 0.018); },
 };
 
 // ---------- 轻快背景音乐（WebAudio 程序化作曲，零下载） ----------

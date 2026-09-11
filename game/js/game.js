@@ -487,6 +487,11 @@ export class Game {
     this.pets.update(dt, t, this.player.position);
     this._updatePrompt();
     this._placeQuestBubble();
+    // 脚步声：真的在走才响，每 0.34 秒很轻的一声
+    this._stepT = (this._stepT || 0) + dt;
+    const stepped = this._lastPos && this._lastPos.distanceToSquared(this.player.position) > 0.0004;
+    if (stepped && this._stepT > 0.34) { sfx.step(); this._stepT = 0; }
+    (this._lastPos = this._lastPos || new THREE.Vector3()).copy(this.player.position);
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }
