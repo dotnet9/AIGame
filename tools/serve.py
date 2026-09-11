@@ -232,8 +232,18 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-store, must-revalidate")
-        self.send_header("Expires", "0")
+        # 与 serve.js 缓存策略一致：模型几十 MB 且内容不变，长缓存避免每次进游戏重复下载；
+        # 音频 7 天；API 保持不缓存；其余代码文件不缓存（Python 版不做 ETag 协商）
+        path = urlparse(self.path).path
+        if "/models/" in path:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        elif "/audio/" in path:
+            self.send_header("Cache-Control", "public, max-age=604800")
+        elif path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-store, must-revalidate")
+            self.send_header("Expires", "0")
+        else:
+            self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
 
