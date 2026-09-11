@@ -1266,6 +1266,16 @@ export class Game {
         },
       });
     }
+    // 归航：几颗星星飞进 HUD 星星胶囊（投影复用任务气泡的做法）
+    this._v3 = this._v3 || new THREE.Vector3();
+    this._v3.copy(pos).project(this.camera);
+    if (this._v3.z < 1) {
+      ui.homeStars(
+        (this._v3.x * 0.5 + 0.5) * innerWidth,
+        (-this._v3.y * 0.5 + 0.5) * innerHeight,
+        Math.min(3, n)
+      );
+    }
   }
 
   // 集齐全部词宠的烟花秀

@@ -327,6 +327,29 @@ export function vibrate(pattern) {
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* 不支持就算了 */ }
 }
 
+// 星星归航：从 3D 世界投影到屏幕的位置起飞，飞进 HUD 的星星胶囊（星星“进兜里”的爽感）
+export function homeStars(x, y, n = 3) {
+  const pill = document.getElementById('star-pill');
+  if (!pill) return;
+  const pr = pill.getBoundingClientRect();
+  const tx = pr.x + pr.width / 2, ty = pr.y + pr.height / 2;
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('span');
+    s.className = 'home-star';
+    s.textContent = '⭐';
+    s.style.left = x + 'px';
+    s.style.top = y + 'px';
+    document.body.appendChild(s);
+    const dx = tx - x + (Math.random() - 0.5) * 14;
+    const dy = ty - y + (Math.random() - 0.5) * 14;
+    setTimeout(() => {
+      s.style.transform = `translate(${dx}px, ${dy}px) scale(.35)`;
+      s.style.opacity = '.9';
+    }, 420 + i * 130);
+    setTimeout(() => s.remove(), 1500 + i * 130);
+  }
+}
+
 // ---------- FEVER 连击：连续 3 次 PERFECT(95+) 触发，星星翻倍，读非完美即断 ----------
 let perfectStreak = 0;
 let feverOn = false;

@@ -121,6 +121,9 @@ body {
   100% { transform: translate(var(--dx, 0), 108vh) rotate(var(--rot, 540deg)); opacity: .8 }
 }
 
+/* 星星归航：从得分点飞向 HUD 星星胶囊 */
+.home-star { position: fixed; z-index: 65; pointer-events: none; font-size: 20px; opacity: 0; transform: translate(0, 0) scale(.5); transition: transform .75s cubic-bezier(.45, -0.15, .65, 1), opacity .75s ease-in; text-shadow: 0 0 8px rgba(255, 200, 60, .8); }
+
 /* ---------- FEVER 连击 ---------- */
 #fever-bar {
   position: fixed; top: calc(56px + var(--sat)); left: 50%; transform: translateX(-50%); z-index: 70;
