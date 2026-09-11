@@ -914,6 +914,10 @@ export class Game {
     const a = this.world.anim;
     if (a.windmill) a.windmill.rotation.z += dt * 0.7;
     for (const pw of a.pinwheels || []) pw.rotation.z += dt * 2.2;
+    for (const cl of a.clouds || []) {   // 云影缓缓东移，飘出边界就回到西边
+      cl.position.x += dt * 0.7;
+      if (cl.position.x > 62) cl.position.x = -62;
+    }
     if (a.water) {
       const pos = a.water.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {

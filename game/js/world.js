@@ -236,6 +236,17 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   scene.add(surf);
   world.anim.surf = surf;
 
+  // ---- 云影：几团大暗斑贴地缓慢漂移，世界有“云过”的呼吸感 ----
+  const clouds = [];
+  for (let i = 0; i < 3; i++) {
+    const c = new THREE.Mesh(new THREE.CircleGeometry(7 + i * 3.5, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x274D27, transparent: true, opacity: 0.08, depthWrite: false }));
+    c.position.set(-60 + i * 45, 0.32, (i - 1) * 22);
+    scene.add(c);
+    clouds.push(c);
+  }
+  world.anim.clouds = clouds;
+
   // ---- 岛屿地面（彩绘） ----
   const ground = new THREE.Mesh(new THREE.CircleGeometry(ISLE_R, 72).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 1 }));
