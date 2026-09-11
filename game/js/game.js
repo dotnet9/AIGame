@@ -550,8 +550,8 @@ export class Game {
   // ================= 指引系统 =================
   _zoneAt(p) {
     if (this.onIsle) return 'sky';
-    // 跳云梯上岛时 onIsle 不会置位，按岛面位置识别
-    if (Math.hypot(p.x + 22, p.z - 27) <= 6) return 'sky';
+    // 跳云梯上岛时 onIsle 不会置位，按岛面位置识别（6.2 与平台落足余量对齐）
+    if (Math.hypot(p.x + 22, p.z - 27) <= 6.2) return 'sky';
     const isl = this._islandAt(p);
     if (isl) return isl.key;
     if (p.x > 20.9 && p.x < 27.1 && p.z > 19.3 && p.z < 24.7) return 'barn';
@@ -944,7 +944,11 @@ export class Game {
     // 圆形与矩形碰撞体
     for (const c of this.world.colliders) {
       if (c.dead) continue;                                   // 机关已开，碰撞体作废
-      if (c.top !== undefined && p.y > c.top - 0.25) continue; // 跳到石头顶上后侧面不再挡
+      if (c.top !== undefined) {
+        // 有台面高度的物件：站上台面不挡；悬空物件（云、天空岛）从底下走过也不挡
+        if (p.y > c.top - 0.25) continue;
+        if (p.y + 1.3 <= (c.bottom || 0)) continue;
+      }
       if (c.t === 'c') {
         const dx = p.x - c.x, dz = p.z - c.z;
         const d = Math.hypot(dx, dz);

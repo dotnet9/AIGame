@@ -171,10 +171,12 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   const world = { colliders: [], anim: {}, gates: {}, platforms: [] };
   const C = world.colliders;
   // 可站立物件：给碰撞体一个“台面高度”，跳得够高就能落上去站着（站得高看得远）
-  const colTop = (x, z, r, top) => {
-    C.push({ t: 'c', x, z, r, top });
+  const colTop = (x, z, r, top, bottom = 0) => {
+    C.push({ t: 'c', x, z, r, top, bottom });
     world.platforms.push({ x, z, r, top });
   };
+  // 纯平台（不挡路）：云朵这类悬空软物件，跳穿它落在上面反而更好玩
+  const addPlatform = (x, z, r, top) => world.platforms.push({ x, z, r, top });
   const colC = (x, z, r, top) => C.push(top ? { t: 'c', x, z, r, top } : { t: 'c', x, z, r });
   const colR = (x1, z1, x2, z2, top) => C.push(top ? { t: 'r', x1, z1, x2, z2, top } : { t: 'r', x1, z1, x2, z2 });
 
@@ -386,22 +388,27 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   scene.add(isle);
   world.gates.skyIsle = isle;
   // 天空岛顶面本身也是可站平台：沿云朵阶梯跳上来后就能直接落在岛上
-  colTop(-22, 27, 6, 14);
-  // ---- 云朵阶梯：菜园南侧外圈盘旋而上，每跳要一次二段跳，跳完正好落到岛沿 ----
-  // 阶梯刻意绕开岛的正下方（在岛底下起跳永远够不到岛面）
+  colTop(-22, 27, 6, 14, 13);   // bottom=13：岛底下走路自由通过
+  // ---- 云朵阶梯：菜园南侧外圈 9 朵矮云，每跳 1.3 米单跳可达，一路跳到岛沿 ----
+  // 云是纯平台不设碰撞：跳穿了就落上去，地面上从云底下走也不撞隐形墙；
+  // 阶梯绕开岛的正下方（在岛底下起跳永远够不到岛面）
   {
     const stair = [
-      [-16.8, 20.4, 1.6],
-      [-15.4, 22.4, 4.2],
-      [-14.6, 25.2, 6.8],
-      [-14.4, 28.2, 9.4],
-      [-15.6, 31.0, 11.9],
+      [-16.4, 19.6, 1.3],
+      [-14.9, 21.3, 2.6],
+      [-14.0, 23.3, 3.9],
+      [-13.7, 25.5, 5.2],
+      [-14.0, 27.8, 6.5],
+      [-14.8, 30.0, 7.8],
+      [-16.2, 31.8, 9.1],
+      [-18.0, 33.1, 10.4],
+      [-21.3, 33.4, 12.4],
     ];
     for (const [x, z, top] of stair) {
-      const c = PROPS.cloud(1.1);
-      c.position.set(x, top - 0.5, z);
+      const c = PROPS.cloud(1.3);
+      c.position.set(x, top - 0.6, z);
       scene.add(c);
-      colTop(x, z, 1.15, top);
+      addPlatform(x, z, 1.35, top);
     }
   }
 
