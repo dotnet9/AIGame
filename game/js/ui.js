@@ -413,7 +413,8 @@ function showScore(score, heard, opts = {}) {
     // 过关就要爽快：1.4 秒内自动关卡，不让孩子干等
     setTimeout(() => {
       els.scorePanel.classList.add('hidden');
-      ch.onSuccess && ch.onSuccess({ score, heard });
+      // via 告诉游戏层这次分数是“朗读”还是“拼字母块”（“朗读 95 分”类每日任务只认真正的朗读）
+      ch.onSuccess && ch.onSuccess({ score, heard, via: ch.spellMode ? 'spell' : 'voice' });
     }, 1400);
   } else {
     // 未过关：先示范标准慢速音（音节高亮同步显示），可继续尝试或换字母块

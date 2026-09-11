@@ -1162,12 +1162,12 @@ export class Game {
     this._maybePreloadWhisper(); this._warmMic();
     ui.openChallenge({
       word, mode: 'hatch',
-      onSuccess: res => this._doHatch(word, res && res.score),
+      onSuccess: res => this._doHatch(word, res && res.score, res && res.via),
       onClose: () => { this.currentWord = null; },
     });
   }
 
-  _doHatch(word, score = 80) {
+  _doHatch(word, score = 80, via = 'voice') {
     setTimeout(() => {
       ui.closeChallenge();
       // 仪式感：蛋先越摇越小幅度地晃三下 → 咔嚓裂开 → 星星彩带庆祝 → 词宠蹦出来
@@ -1178,14 +1178,14 @@ export class Game {
           const a = Math.sin(k * Math.PI * 9) * (1 - k) * 0.24;
           g.rotation.z = a;
           g.rotation.x = a * 0.5;
-        }, () => { g.rotation.z = 0; g.rotation.x = 0; this._hatchReveal(word, score, eggObj); });
+        }, () => { g.rotation.z = 0; g.rotation.x = 0; this._hatchReveal(word, score, eggObj, via); });
       } else {
-        this._hatchReveal(word, score, null);
+        this._hatchReveal(word, score, null, via);
       }
     }, 280);
   }
 
-  _hatchReveal(word, score, eggObj) {
+  _hatchReveal(word, score, eggObj, via = 'voice') {
     save.hatch(word.id);
     save.addPoint();
     ui.updatePlayerScore(save.getScore(), save.getSessionScore());
@@ -1194,7 +1194,8 @@ export class Game {
     save.addStars(earned);
     ui.updateStars(save.getStars());
     if (save.bumpDaily('hatch2') === 'done') this._afterDaily();
-    if (score >= 95 && save.bumpDaily('goodread') === 'done') this._afterDaily();
+    // “朗读 95 分”每日任务只认真正的朗读，拼字母块不算
+    if (score >= 95 && via === 'voice' && save.bumpDaily('goodread') === 'done') this._afterDaily();
     const golden = !!(eggObj && eggObj.golden);
     const eggPos = eggObj ? eggObj.group.position.clone() : this.player.position.clone().add(new THREE.Vector3(0, 0.6, 0));
     this.eggs.removeEgg(word.id);
@@ -1864,7 +1865,7 @@ export class Game {
         p.scores.push(res.score || 80);
         save.addPoint();
         ui.updatePlayerScore(save.getScore(), save.getSessionScore());
-        if ((res.score || 0) >= 95 && save.bumpDaily('goodread') === 'done') this._afterDaily();
+        if ((res.score || 0) >= 95 && res.via !== 'spell' && save.bumpDaily('goodread') === 'done') this._afterDaily();
         p.idx++;
         setTimeout(() => this._practiceNext(), 300);
       },
