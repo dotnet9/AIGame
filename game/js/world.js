@@ -214,6 +214,10 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   // ---- 光照 ----
   scene.add(new THREE.HemisphereLight(0xFFF6E8, 0x9CC98F, 1.05));
   const sun = new THREE.DirectionalLight(0xFFF2DC, 2.1);
+  // 真实时段色温：清晨和黄昏整岛偏金（只调一次，白天玩的孩子看不到差别）
+  const hr = new Date().getHours();
+  if (hr >= 16 && hr < 19) { sun.color.set(0xFFC98A); sun.intensity = 1.75; }
+  else if (hr >= 5 && hr < 8) { sun.color.set(0xFFE2B8); sun.intensity = 1.85; }
   sun.position.set(18, 30, 12);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
