@@ -96,8 +96,16 @@ body {
   box-shadow: 0 5px 16px rgba(150,110,60,.14); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
 }
 .leaderboard-head { display: flex; align-items: center; justify-content: space-between; color: rgba(180,117,20,.9); font-size: 12px; font-weight: bold; margin: 0 2px 6px; }
-#leaderboard-refresh { border: 0; background: transparent; color: #C4A78F; font-family: inherit; font-size: 18px; font-weight: bold; line-height: 1; cursor: pointer; padding: 0 2px; }
-#leaderboard-refresh:hover { color: #B47514; transform: rotate(30deg); }
+.leaderboard-actions { display: flex; align-items: center; gap: 2px; }
+#leaderboard-refresh, #leaderboard-fold { border: 0; background: transparent; color: #C4A78F; font-family: inherit; font-size: 16px; font-weight: bold; line-height: 1; cursor: pointer; padding: 0 2px; }
+#leaderboard-refresh:hover, #leaderboard-fold:hover { color: #B47514; }
+#leaderboard-refresh:hover { transform: rotate(30deg); }
+/* 收起后只剩一颗小小的 🏆 圆钮，不挡地图 */
+#leaderboard-toggle { display: none; border: 0; cursor: pointer; font-size: 22px; line-height: 1; padding: 8px 10px; background: transparent; }
+#leaderboard-widget.collapsed { width: auto; padding: 0 4px; border-radius: 999px; }
+#leaderboard-widget.collapsed .leaderboard-body { display: none; }
+#leaderboard-widget.collapsed #leaderboard-toggle { display: block; }
+#leaderboard-widget.collapsed #leaderboard-toggle:active { transform: scale(.92); }
 #leaderboard-list { display: flex; flex-direction: column; gap: 4px; }
 #leaderboard-list .rank-row { grid-template-columns: 22px 1fr auto; gap: 5px; border-width: 1px; border-radius: 8px; padding: 4px 6px; font-size: 11.5px; background: rgba(255,247,234,.5); border-color: rgba(255,224,184,.55); color: rgba(107,88,68,.95); }
 #leaderboard-list .rank-row b { font-size: 13px; }

@@ -164,19 +164,31 @@ function serveStatic(req, res, pathname) {
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) {   // 防目录穿越
     res.writeHead(403); res.end('forbidden'); return;
   }
-  fs.readFile(file, (err, data) => {
-    if (err) {
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('not found');
       log(req, 404);
       return;
     }
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Content-Length': data.length,
-      'Cache-Control': 'no-store, must-revalidate',
-    });
-    res.end(req.method === 'HEAD' ? undefined : data);
+      'Content-Length': st.size,
+    };
+    // 模型几十 MB 且内容不变化：长缓存，避免每次进游戏重新下载；
+    // 音频按文件名寻址、可能重生成，给 7 天缓存；其余代码文件走 ETag 协商缓存
+    // （站点可能挂在 / 或 /game/ 下，两种路径都要命中）
+    if (rel.includes('/models/')) headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+    else if (rel.includes('/audio/')) headers['Cache-Control'] = 'public, max-age=604800';
+    else {
+      headers['Cache-Control'] = 'no-cache';
+      const etag = `"${st.size}-${st.mtimeMs}"`;
+      headers['ETag'] = etag;
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); res.end(); log(req, 304); return; }
+    }
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') { res.end(); return; }
+    fs.createReadStream(file).pipe(res);
   });
 }
 

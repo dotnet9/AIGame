@@ -12,6 +12,7 @@ export function ensureWhisper() {
       mod.env.allowLocalModels = true;
       mod.env.localModelPath = 'models/';
       mod.env.allowRemoteModels = false; // 绝不访问外部模型源
+      mod.env.useBrowserCache = true;    // 模型文件缓存在浏览器 Cache API，二次进入不再下载几十 MB
       return mod.pipeline('automatic-speech-recognition', 'whisper-tiny.en', {
         dtype: 'q8',
         progress_callback: p => {

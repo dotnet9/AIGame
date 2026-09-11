@@ -1,5 +1,5 @@
 // DOM UI：HUD、挑战弹窗（语音+拼块）、召唤、图鉴、引导、提示
-import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice } from './audio.js';
+import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice, updateBgm, isBgmMuted, setBgmMuted } from './audio.js';
 import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.js';
 import { CURRICULUM, gradeKey } from './curriculum.js';
 
@@ -12,7 +12,7 @@ for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'sta
   'btn-skip',
   'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-title', 'picker-grid', 'picker-close',
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-head', 'map-canvas', 'map-close',
-  'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh',
+  'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh', 'leaderboard-toggle', 'leaderboard-fold',
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
   'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout',
   'hud-menu', 'btn-menu']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
@@ -544,6 +544,35 @@ export function setLeaderboardPlayer(current = {}) {
   leaderboardCurrent.username = String(current.username || '').trim();
   leaderboardCurrent.score = Number(current.score) || 0;
   refreshLeaderboard();
+}
+
+// ---------- 排行榜收纳：手机屏小，默认收成一颗 🏆 小圆钮，点开再看 ----------
+const LB_FOLD_KEY = 'lb-folded';
+function setLeaderboardFolded(folded) {
+  const w = els.leaderboardWidget;
+  if (!w) return;
+  w.classList.toggle('collapsed', folded);
+  const btn = els.leaderboardToggle;
+  if (btn) {
+    btn.title = folded ? '展开排行榜' : '收起排行榜';
+    btn.setAttribute('aria-label', btn.title);
+  }
+  try { localStorage.setItem(LB_FOLD_KEY, folded ? '1' : '0'); } catch { /* 隐私模式忽略 */ }
+  if (!folded) refreshLeaderboard();
+}
+function initLeaderboardFold() {
+  const w = els.leaderboardWidget;
+  if (!w || w.dataset.foldReady) return;
+  w.dataset.foldReady = '1';
+  let saved = null;
+  try { saved = localStorage.getItem(LB_FOLD_KEY); } catch { /* 隐私模式走默认 */ }
+  // 没有记忆时：触屏/窄屏默认收起（别挡地图），大屏默认展开
+  const defaultFolded = window.innerWidth < 760 || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  setLeaderboardFolded(saved ? saved === '1' : defaultFolded);
+  if (els.leaderboardToggle) els.leaderboardToggle.addEventListener('click', () => setLeaderboardFolded(false));
+  if (els.leaderboardFold) els.leaderboardFold.addEventListener('click', () => setLeaderboardFolded(true));
+  // 点头部标题也允许收起
+  w.querySelector('.leaderboard-head span')?.addEventListener('click', () => setLeaderboardFolded(true));
 }
 
 // 调账号接口。返回 { ok, status, data }；网络不可用（离线/没后端）时抛出，交给调用方走本地兜底。
@@ -1207,6 +1236,32 @@ export function showAbout() {
   sfx.pop();
 }
 
+// ---------- 背景音乐跟随弹窗状态：有弹窗淡出，全关了才淡入 ----------
+function hasOpenDialog() {
+  return Array.from(document.querySelectorAll('.overlay')).some(el =>
+    !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none');
+}
+let bgmWatchReady = false;
+let bgmWatchPending = false;
+function watchBgmDialogs() {
+  if (bgmWatchReady) return;
+  bgmWatchReady = true;
+  const update = () => {
+    bgmWatchPending = false;
+    updateBgm(hasOpenDialog());
+  };
+  const schedule = () => {   // rAF 合并 MutationObserver 的密集通知
+    if (bgmWatchPending) return;
+    bgmWatchPending = true;
+    requestAnimationFrame(update);
+  };
+  // 覆盖：静态弹窗的 class 开关 + 动态创建的弹窗（排行榜/商店/帮助等 append 到 body）
+  new MutationObserver(schedule).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true });
+  setInterval(schedule, 800); // 兜底：display 等不走 class 的显隐
+  document.addEventListener('visibilitychange', schedule);
+  update();
+}
+
 // ---------- 绑定 HUD 按钮 ----------
 export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, onAccount, onAbout, isTouch }) {
   isTouchMode = !!isTouch;
@@ -1220,6 +1275,19 @@ export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, 
   // 左上角头像 pill 本身就写着"学习档案"，点它直接开档案（和菜单里的「我的档案」一样）
   if (els.userPill) els.userPill.addEventListener('click', onAccount);
   if (els.leaderboardRefresh) els.leaderboardRefresh.addEventListener('click', () => refreshLeaderboard());
+  initLeaderboardFold();
+  watchBgmDialogs();
+  const bgmBtn = document.getElementById('btn-bgm');
+  if (bgmBtn) {
+    const label = bgmBtn.querySelector('span');
+    const paint = () => { if (label) label.textContent = isBgmMuted() ? '音乐：关' : '音乐：开'; };
+    paint();
+    bgmBtn.addEventListener('click', () => {
+      setBgmMuted(!isBgmMuted());
+      paint();
+      toast(isBgmMuted() ? '🎵 背景音乐已关' : '🎵 背景音乐已开');
+    });
+  }
   const summonBtn = document.getElementById('btn-summon');
   if (summonBtn) summonBtn.addEventListener('click', onSummon);
   const mapBtn = document.getElementById('btn-map');

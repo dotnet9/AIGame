@@ -99,7 +99,7 @@ game/            游戏本体（纯静态，可整目录部署）
   index.html     页面 + 触屏摇杆
   css/style.css  柔软治愈 UI（含手机适配）
   js/            words 词库(52 岛 932 词宠) · pep-extra 教材拓展岛 · models 程序化建模
-                 · world 场景 · pets 词宠 · speech 语音识别 · audio TTS/音效
+                 · world 场景 · pets 词宠 · speech 语音识别 · audio TTS/音效/程序化背景音乐
                  · curriculum 课本 8 册课程 · ui 界面 · game 主逻辑 · save 存档
 tools/           gen-extra/gen-curriculum 词库生成 · gen-voice.mjs 语音补录
                  · serve.mjs 本地开发服务器 · make_voice.py 发音生成

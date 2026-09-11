@@ -225,3 +225,124 @@ export const sfx = {
   crack() { tone(180, 0, 0.1, 'square', 0.08); tone(140, 0.08, 0.12, 'square', 0.06); },
   magic() { [660, 880, 1100, 1320].forEach((f, i) => tone(f, i * 0.07, 0.25, 'sine', 0.09)); },
 };
+
+// ---------- 轻快背景音乐（WebAudio 程序化作曲，零下载） ----------
+// 不用音乐素材文件：旋律/低音/和弦全部用振荡器现场合成，8 小节无缝循环。
+// 弹窗（.overlay）打开时淡出、全部关闭后淡入；浏览器要求首次点击后才能出声，
+// 所以在第一次 pointerdown/keydown 时解锁。
+const BGM_MUTE_KEY = 'bgm-muted';
+let bgmMuted = false;
+try { bgmMuted = localStorage.getItem(BGM_MUTE_KEY) === '1'; } catch (e) { /* 隐私模式忽略 */ }
+let bgmWanted = false;   // ui 层告知的期望状态：true = 当前没有弹窗、可以放
+let bgmOn = false;       // 是否正在调度播放
+let bgmGain = null;      // BGM 总音量（淡入淡出）
+let bgmTimer = null;
+let bgmBar = 0;          // 循环到第几小节
+let bgmNextBarTime = 0;  // 下一小节的 AudioContext 时间
+
+// C 大调五声音阶（C D E G A）配 C→G→Am→F 和弦进行，旋律音落在任何和弦上都不刺耳
+const BPM = 96, BEAT = 60 / BPM, BAR = BEAT * 4;
+const N = { F2: 87.31, G2: 98.00, A2: 110.00, C3: 130.81, A3: 220.00, B3: 246.94, F3: 174.61,
+  C4: 261.63, D4: 293.66, E4: 329.63, G4: 392.00, A4: 440.00, C5: 523.25, D5: 587.33, E5: 659.26 };
+const CHORDS = [ // 每小节：低音根音 + 柔和垫音
+  { bass: N.C3, pad: [N.C4, N.E4, N.G4] },
+  { bass: N.G2, pad: [N.B3, N.D4, N.G4] },
+  { bass: N.A2, pad: [N.A3, N.C4, N.E4] },
+  { bass: N.F2, pad: [N.A3, N.C4, N.F3] },
+];
+// 旋律：8 小节两个乐句，[第几拍, 频率, 时值(拍)]，第二句结尾扬上去再收回来
+const MELODY = [
+  [[0, N.E4, 1], [1, N.G4, .5], [1.5, N.A4, .5], [2, N.G4, 1], [3, N.E4, 1]],
+  [[0, N.D4, 1], [1, N.E4, .5], [1.5, N.D4, .5], [2, N.G4, 1], [3, N.D4, 1]],
+  [[0, N.E4, 1], [1, N.G4, .5], [1.5, N.A4, .5], [2, N.C5, 1.5], [3.5, N.A4, .5]],
+  [[0, N.G4, 1], [1, N.E4, 1], [2, N.D4, 1], [3, N.C4, 1]],
+  [[0, N.E4, 1], [1, N.G4, .5], [1.5, N.A4, .5], [2, N.G4, 1], [3, N.E4, 1]],
+  [[0, N.D4, 1], [1, N.E4, .5], [1.5, N.D4, .5], [2, N.G4, 1], [3, N.A4, 1]],
+  [[0, N.C5, 1], [1, N.D5, 1], [2, N.E5, 1.5], [3.5, N.D5, .5]],
+  [[0, N.C5, 1.5], [1.5, N.G4, 1], [2.5, N.A4, .5], [3, N.G4, 1]],
+];
+
+function bgmVoice(freq, t0, dur, type, peak) {
+  const a = ctx();
+  if (!a || !bgmGain) return;
+  const o = a.createOscillator();
+  const g = a.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(bgmGain);
+  o.start(t0);
+  o.stop(t0 + dur + 0.05);
+}
+
+function bgmScheduleBar(idx, t0) {
+  const chord = CHORDS[idx % CHORDS.length];
+  bgmVoice(chord.bass, t0, BEAT * 0.95, 'sine', 0.05);            // 低音：第 1 拍
+  bgmVoice(chord.bass, t0 + BEAT * 2, BEAT * 0.95, 'sine', 0.04); // 低音：第 3 拍
+  chord.pad.forEach(f => bgmVoice(f, t0, BEAT * 3.6, 'sine', 0.013)); // 垫音铺满小节
+  for (const [beat, freq, dur] of MELODY[idx % MELODY.length]) {
+    bgmVoice(freq, t0 + beat * BEAT, dur * BEAT * 0.92, 'triangle', 0.055); // 主旋律：三角波像木琴
+  }
+}
+
+function bgmSchedule() {
+  const a = ctx();
+  if (!a) return;
+  if (bgmNextBarTime < a.currentTime) bgmNextBarTime = a.currentTime + 0.1;
+  // 提前 1.2 秒把接下来的小节排进音频时钟，循环无缝
+  while (bgmNextBarTime - a.currentTime < 1.2) {
+    bgmScheduleBar(bgmBar % MELODY.length, bgmNextBarTime);
+    bgmBar++;
+    bgmNextBarTime += BAR;
+  }
+}
+
+function bgmRefresh() {
+  const want = bgmWanted && !bgmMuted && !document.hidden;
+  if (want && !bgmOn) {
+    const a = ctx();
+    if (!a) return;
+    if (!bgmGain) { bgmGain = a.createGain(); bgmGain.gain.value = 0; bgmGain.connect(a.destination); }
+    bgmOn = true;
+    bgmTimer = setInterval(bgmSchedule, 300);
+    bgmSchedule();
+    bgmGain.gain.cancelScheduledValues(a.currentTime);
+    bgmGain.gain.setTargetAtTime(1, a.currentTime, 0.6);   // 淡入
+  } else if (!want && bgmOn) {
+    bgmOn = false;
+    clearInterval(bgmTimer);
+    bgmTimer = null;
+    const a = ctx();
+    if (a && bgmGain) {
+      bgmGain.gain.cancelScheduledValues(a.currentTime);
+      bgmGain.gain.setTargetAtTime(0, a.currentTime, 0.3); // 淡出，正在响的音自然衰减
+    }
+  }
+}
+
+// ui 层在弹窗开/关时调用：dialogOpen = 是否还有弹窗亮着
+export function updateBgm(dialogOpen) {
+  bgmWanted = !dialogOpen;
+  bgmRefresh();
+}
+
+export function isBgmMuted() { return bgmMuted; }
+
+export function setBgmMuted(muted) {
+  bgmMuted = !!muted;
+  try { localStorage.setItem(BGM_MUTE_KEY, bgmMuted ? '1' : '0'); } catch (e) { /* 隐私模式忽略 */ }
+  bgmRefresh();
+}
+
+// 浏览器自动播放限制：首次用户手势里解锁音频，之后才能出声
+function bgmUnlockOnce() {
+  document.removeEventListener('pointerdown', bgmUnlockOnce, true);
+  document.removeEventListener('keydown', bgmUnlockOnce, true);
+  ctx();
+  bgmRefresh();
+}
+document.addEventListener('pointerdown', bgmUnlockOnce, true);
+document.addEventListener('keydown', bgmUnlockOnce, true);
+document.addEventListener('visibilitychange', bgmRefresh); // 切后台暂停，回来接着放
