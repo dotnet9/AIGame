@@ -73,10 +73,10 @@ export class EggManager {
       sparkles.push(s);
     }
     const [x, z] = word.pos;
-    const isSky = word.zone === 'sky';
-    g.position.set(x, isSky ? 14 : 0, z);
+    const baseY = word.zone === 'sky' ? 14 : 0;   // 高台蛋会由 game 层改写 baseY
+    g.position.set(x, baseY, z);
     this.scene.add(g);
-    const egg = { group: g, word, shell, ring, beam, sparkles, keyTag, t: Math.random() * 9, golden, key };
+    const egg = { group: g, word, shell, ring, beam, sparkles, keyTag, t: Math.random() * 9, golden, key, baseY };
     this.eggs.set(word.id, egg);
     return egg;
   }
@@ -102,7 +102,7 @@ export class EggManager {
   update(dt, t) {
     for (const egg of this.eggs.values()) {
       egg.t += dt;
-      egg.group.position.y = (egg.word.zone === 'sky' ? 14 : 0) + Math.abs(Math.sin(egg.t * 1.6)) * 0.12;
+      egg.group.position.y = egg.baseY + Math.abs(Math.sin(egg.t * 1.6)) * 0.12;
       egg.group.rotation.y = Math.sin(egg.t * 0.8) * 0.4;
       const pulse = 0.18 + Math.sin(egg.t * 2.4) * 0.1;
       egg.shell.material.emissiveIntensity = egg.golden ? 0.45 + Math.sin(egg.t * 2.4) * 0.2 : pulse;

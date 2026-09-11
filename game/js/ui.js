@@ -500,13 +500,26 @@ function buildSpell() {
   ch.slots = w.split('');
   // 空格自动补好（短语如 ice cream / good morning），只拼字母
   ch.filled = w.split('').map(c => (c === ' ' ? ' ' : null));
-  ch.tiles = shuffle(w.split('').filter(c => c !== ' '));
+  ch.tileAt = w.split('').map(() => null);   // 槽位 -> 用的字母块
+  ch.selSlot = null;
+  // 字母块 = 单词字母打乱 + 1~2 个干扰字母：允许自由组合、拼错只提示，
+  // 小朋友得真的记住单词长什么样才拼得对，而不是把唯一的块挨个塞进去
+  const letters = w.split('').filter(c => c !== ' ');
+  const decoyN = letters.length >= 4 ? 2 : 1;
+  const pool = 'abcdefghijklmnoprstuvw';
+  const decoys = [];
+  while (decoys.length < decoyN) {
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    if (!letters.includes(c) && !decoys.includes(c)) decoys.push(c);
+  }
+  ch.tiles = shuffle(letters.concat(decoys));
   els.spellSlots.innerHTML = '';
   els.spellTiles.innerHTML = '';
-  ch.slots.forEach(c => {
+  ch.slots.forEach((c, i) => {
     const d = document.createElement('div');
     d.className = 'slot' + (c === ' ' ? ' space filled' : '');
     if (c === ' ') d.textContent = '·';
+    else d.addEventListener('click', () => slotClick(i));
     els.spellSlots.appendChild(d);
   });
   ch.tiles.forEach((letter, idx) => {
@@ -518,34 +531,66 @@ function buildSpell() {
   });
 }
 
+// 点槽位：已放字母=取回来重摆；空槽=选中它，下一块字母放这里
+function slotClick(i) {
+  if (!ch.open || ch.busy) return;
+  if (ch.filled[i] !== null) { returnTile(i); return; }
+  ch.selSlot = i;
+  [...els.spellSlots.children].forEach((el, k) => el.classList.toggle('sel', k === i));
+}
+
+function returnTile(i) {
+  const idx = ch.tileAt[i];
+  if (idx == null) return;
+  ch.filled[i] = null;
+  ch.tileAt[i] = null;
+  els.spellSlots.children[i].textContent = '';
+  els.spellSlots.children[i].classList.remove('filled', 'sel');
+  els.spellTiles.children[idx].classList.remove('used');
+  sfx.pop();
+}
+
 function tileClick(idx, btn) {
   if (!ch.open || ch.busy) return;
-  const slotIdx = ch.filled.findIndex(x => x === null);
-  const need = ch.word.en[slotIdx];
-  if (ch.tiles[idx] === need) {
-    ch.filled[slotIdx] = ch.tiles[idx];
-    els.spellSlots.children[slotIdx].textContent = ch.tiles[idx];
-    els.spellSlots.children[slotIdx].classList.add('filled');
-    btn.classList.add('used');
-    speak(ch.tiles[idx], { rate: 0.6 });
-    sfx.pop();
-    if (!ch.filled.includes(null)) {
-      // 拼完整啦 —— 拼写满分演出
-      speak(ch.word.en);
-      showScore(100, null, { msg: '🧩 拼写满分！会拼就会读！' });
-    }
-  } else {
-    els.spellArea.classList.remove('shake');
-    void els.spellArea.offsetWidth;
-    els.spellArea.classList.add('shake');
-    sfx.miss();
-    els.voiceFeedback.textContent = `${ch.tiles[idx]} 还不是下一个字母哦，听听看～`;
-    els.voiceFeedback.className = 'bad';
-    speak(ch.word.en, { rate: 0.6 });
+  if (btn.classList.contains('used')) return;
+  // 放进点选中的槽；没选就放进最前面的空槽
+  let slotIdx = ch.selSlot;
+  if (slotIdx == null || ch.filled[slotIdx] !== null) slotIdx = ch.filled.findIndex(x => x === null);
+  if (slotIdx < 0) return;
+  if (ch.filled[slotIdx] !== null) returnTile(slotIdx);   // 换掉槽里原有的字母
+  ch.filled[slotIdx] = ch.tiles[idx];
+  ch.tileAt[slotIdx] = idx;
+  const el = els.spellSlots.children[slotIdx];
+  el.textContent = ch.tiles[idx];
+  el.classList.add('filled');
+  el.classList.remove('sel');
+  btn.classList.add('used');
+  if (ch.selSlot === slotIdx) ch.selSlot = null;
+  speak(ch.tiles[idx], { rate: 0.6 });
+  sfx.pop();
+  if (!ch.filled.includes(null)) checkSpell();
+}
+
+function checkSpell() {
+  const attempt = ch.filled.join('');
+  if (attempt === ch.word.en) {
+    // 真的自己拼出来了 —— 拼写满分演出
+    speak(ch.word.en);
+    showScore(100, null, { msg: '🧩 拼写满分！会拼就会读！' });
+    return;
   }
+  // 拼错了：不扣分也不收字母，点槽位取回改一改再来
+  els.spellArea.classList.remove('shake');
+  void els.spellArea.offsetWidth;
+  els.spellArea.classList.add('shake');
+  sfx.miss();
+  els.voiceFeedback.textContent = `拼出来的是「${attempt}」，不对哦～点字母槽把块取回来再试试！`;
+  els.voiceFeedback.className = 'bad';
+  speak(ch.word.en, { rate: 0.6 });
 }
 
 function setSpellMode(on) {
+  if (on && (!ch.open || !ch.word)) return;   // 挑战已关/没词时忽略，别在空词上崩溃
   ch.spellMode = on;
   els.spellArea.classList.toggle('hidden', !on);
   els.modalFoot.classList.toggle('hidden', on);
@@ -802,6 +847,8 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;
 els.btnSwitchSpell.addEventListener('click', () => { setSpellMode(true); sfx.pop(); });
 els.btnReplayLetters.addEventListener('click', () => { spellLetters(ch.word.en); speak(ch.word.en); });
 els.btnShowHelpWord.addEventListener('click', () => {
+  if (!ch.open || ch.busy) return;
+  ch.selSlot = null;   // 提示永远补到最前面的空槽
   const slotIdx = ch.filled.findIndex(x => x === null);
   if (slotIdx < 0) return;
   const tileIdx = ch.tiles.findIndex((t, i) => t === ch.word.en[slotIdx] && !els.spellTiles.children[i].classList.contains('used'));

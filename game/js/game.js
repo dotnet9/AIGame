@@ -180,6 +180,7 @@ export class Game {
   // 关卡制出蛋：已孵化的变词宠；蛋只出"当前关卡的 6 个"（粉光柱）+ 剧情还没用掉的钥匙词蛋（蓝光柱带 🔑，不算本关进度）
   _spawnProgress() {
     const cur = new Set(this.currentChapter.words);
+    const perchId = this._perchEggId();
     for (const w of this.scopeWords) {
       if (save.isHatched(w.id)) {
         if (!this.pets.get(w.id)) {
@@ -192,11 +193,27 @@ export class Game {
       if (cur.has(w.id)) {
         const egg = this.eggs.spawnEgg(w, w.zone === 'sky');
         egg.group.userData.wordId = w.id;
+        // 本关有一颗蛋放上跳跳石高台：要跳上去才够得着，加点小挑战
+        if (perchId === w.id) this._putEggOnPerch(egg);
       } else if (this._pendingGateWord(w.id)) {
         const egg = this.eggs.spawnEgg(w, w.zone === 'sky', true);
         egg.group.userData.wordId = w.id;
       }
     }
+  }
+
+  // 本关放上高台的蛋：剧情钥匙蛋和天空岛的蛋不动，剩下的按关卡序号轮换一颗
+  _perchEggId() {
+    if (!this.world.perch) return null;
+    const GATES = ['boat', 'light', 'wind', 'seed', 'rain'];
+    const ids = this.currentChapter.words.filter(id => !GATES.includes(id) && WORD_MAP[id].zone !== 'sky');
+    return ids.length ? ids[this.chapterIndex(this.hatchedInScope()) % ids.length] : null;
+  }
+
+  _putEggOnPerch(egg) {
+    const pf = this.world.perch;
+    egg.baseY = pf.top;
+    egg.group.position.set(pf.x, pf.top, pf.z);
   }
 
   // 钥匙词蛋：只要对应机关还没触发就一直留在场上，保证剧情卡不死
@@ -221,6 +238,7 @@ export class Game {
     const desktopLike = matchMedia('(hover: hover) and (pointer: fine)').matches;
     this.isTouch = q ? q[1] === '1' : (uaMobile || (coarse && !desktopLike));
     this.vy = 0;            // 跳跃垂直速度
+    this.jumps = 0;         // 本跳是第几跳（最多 2，落地清零）
     this.onGround = true;
     this.riding = false;    // 正在坐船过河
     this.moveTarget = null; // 点击移动目标
@@ -353,14 +371,21 @@ export class Game {
   }
 
   // ================= 跳跃 =================
+  // 最多连跳两次：地面起跳算第 1 跳，空中再按一次空格/跳 = 第 2 跳（稍微矮一点），之后只能等落地
   _jump() {
-    if (!this.onGround || this.climbing || this.riding) return;
+    if (this.climbing || this.riding) return;
     if (ui.challengeOpen()) return;
     if (document.querySelector('.overlay:not(.hidden)')) return;  // 弹窗打开时不跳
     const el = document.activeElement;
     if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
-    this.vy = 8.6;
-    this.onGround = false;
+    if (this.onGround) {
+      this.vy = 8.6;
+      this.onGround = false;
+      this.jumps = 1;
+    } else if ((this.jumps || 0) < 2) {
+      this.vy = Math.max(this.vy, 0) * 0.4 + 7.6;   // 空中二段跳：略矮，但能把高度再顶上去一截
+      this.jumps = 2;
+    } else return;
     sfx.pop();
     // 起跳小蹲
     this.player.scale.set(1.08, 0.9, 1.08);
@@ -373,8 +398,26 @@ export class Game {
   // ================= 点击移动 =================
   _clearMoveTarget() {
     this.moveTarget = null;
+    this.moveThenEgg = null;
     if (this.moveMarker) this.moveMarker.visible = false;
     this._stuckT = 0;
+  }
+
+  // 点了蛋：够得着就直接孵，够不着先走过去（高台蛋还得跳上去），走到近处自动打开
+  _approachEgg(id) {
+    const egg = this.eggs.get(id);
+    if (!egg) return;
+    const p = this.player.position, ep = egg.group.position;
+    if (Math.hypot(ep.x - p.x, ep.z - p.z) <= 2.4 && ep.y - p.y <= 1.2) {
+      this._clearMoveTarget();
+      this._openEgg(id);
+      return;
+    }
+    this.moveTarget = { x: ep.x, z: ep.z };
+    this.moveThenEgg = id;
+    this.moveMarker.position.set(ep.x, ep.y + 0.06, ep.z);
+    this.moveMarker.visible = true;
+    if (ep.y - p.y > 1.2) ui.toast('⬆️ 这颗蛋在高台顶上，踩着石头跳上去！', 3000);
   }
 
   _setMoveTarget(e) {
@@ -727,8 +770,16 @@ export class Game {
       const dx = this.moveTarget.x - this.player.position.x;
       const dz = this.moveTarget.z - this.player.position.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.4) {
+      // 去孵蛋的路：进入互动半径就停下开蛋，不用非走到蛋的正中心
+      if (d < 0.4 || (this.moveThenEgg && d < 2.4)) {
+        const eggId = this.moveThenEgg;
+        const egg = eggId && this.eggs.get(eggId);
         this._clearMoveTarget();
+        if (egg) {
+          const ep = egg.group.position;
+          if (Math.hypot(ep.x - this.player.position.x, ep.z - this.player.position.z) <= 2.6 && ep.y - this.player.position.y <= 1.2) this._openEgg(eggId);
+          else ui.toast('⬆️ 蛋就在头顶的台子上，踩着石头跳上去！', 3200);
+        }
       } else {
         cameraRelative = false;
         move.x = dx / d; move.z = dz / d;
@@ -761,23 +812,28 @@ export class Game {
       this.player.rotation.y += dy * Math.min(1, dt * 12);
       this.walkT += dt * 9;
     } else this.walkT += dt * 1.5;
-    // 跳跃物理
-    const groundY = this.onIsle ? 14 : 0;
+    // 跳跃物理：support = 脚下最高的支撑面（地面或跳跳石台面）
+    const pp = this.player.position;
+    const support = this._supportAt(pp.x, pp.z);
     if (!this.onGround) {
       this.vy -= 20 * dt;
       this.player.position.y += this.vy * dt;
-      if (this.player.position.y <= groundY) {
-        this.player.position.y = groundY;
+      if (this.vy <= 0 && this.player.position.y <= support + 0.04) {
+        this.player.position.y = support;
         this.onGround = true;
         this.vy = 0;
+        this.jumps = 0;
         // 落地一压，Q 弹一下
         this.player.scale.set(1.12, 0.8, 1.12);
         this.addTween(0.2, k => {
           this.player.scale.set(1.12 - k * 0.12, 0.8 + k * 0.2, 1.12 - k * 0.12);
         }, () => this.player.scale.set(1, 1, 1));
       }
-    } else if (!this.onIsle) {
-      this.player.position.y = 0;
+    } else if (this.player.position.y > support + 0.06) {
+      this.onGround = false;   // 走出石头边缘：脚下没支撑了，开始下落
+      this.vy = 0;
+    } else {
+      this.player.position.y = support;
     }
     // 摆动：空中定格成张开的姿势
     const sw = this.onGround ? Math.sin(this.walkT) * (moving ? 0.55 : 0.06) : 0.8;
@@ -809,6 +865,18 @@ export class Game {
       const d = Math.hypot(this.player.position.x - ISLE_CENTER.x, this.player.position.z - ISLE_CENTER.z);
       if (d > 5.1 && !this.climbing) this._climb(false); // 走出边缘 → 滑下去
     }
+  }
+
+  // 脚下支撑面高度：地面（0 / 天空岛 14）或位置重合、台面不高于脚边太多的跳跳石
+  _supportAt(x, z) {
+    let top = this.onIsle ? 14 : 0;
+    if (!this.onIsle) {
+      const y = this.player.position.y;
+      for (const pf of this.world.platforms || []) {
+        if (Math.hypot(x - pf.x, z - pf.z) <= pf.r + 0.15 && pf.top <= y + 0.3 && pf.top > top) top = pf.top;
+      }
+    }
+    return top;
   }
 
   // 脚下的小尘土
@@ -873,6 +941,8 @@ export class Game {
     }
     // 圆形与矩形碰撞体
     for (const c of this.world.colliders) {
+      if (c.dead) continue;                                   // 机关已开，碰撞体作废
+      if (c.top !== undefined && p.y > c.top - 0.25) continue; // 跳到石头顶上后侧面不再挡
       if (c.t === 'c') {
         const dx = p.x - c.x, dz = p.z - c.z;
         const d = Math.hypot(dx, dz);
@@ -904,15 +974,64 @@ export class Game {
     const target = this.player.position;
     // 复用临时向量：相机每帧跑 60 次，不能每次都 new（GC 卡顿元凶）
     const v = this._cv = this._cv || new THREE.Vector3();
+    // 遮挡检测：人到大件（沙丘/岩石/谷仓…）之间被挡住就把镜头拉近，
+    // 不然镜头埋进大件里，整个画面被糊住，看着像小人钻进了图形
+    this._occT = (this._occT || 0) - dt;
+    if (this._occT <= 0) {
+      this._occT = 0.15;   // 每 0.15 秒检测一次就够，别每帧射
+      this._occK = this._occlusionK(target, v);
+    }
+    if (this._occK === undefined) this._occK = 1;
+    // 拉近要快（立刻不被挡），放远要慢（走开后再缓缓回到正常距离）
+    const want = this._occK < (this._occSmooth || 1) ? this._occK : Math.min(1, (this._occSmooth || 1) + dt * 1.2);
+    this._occSmooth = this._occSmooth === undefined ? want : this._occSmooth + (want - this._occSmooth) * Math.min(1, dt * 10);
+    const dist = this.camDist * this._occSmooth;
     const cp = Math.cos(this.camPitch);
     v.set(
-      target.x + Math.sin(this.camYaw) * cp * this.camDist,
-      target.y + Math.sin(this.camPitch) * this.camDist + 1.6,
-      target.z + Math.cos(this.camYaw) * cp * this.camDist
+      target.x + Math.sin(this.camYaw) * cp * dist,
+      target.y + Math.sin(this.camPitch) * dist + 1.6,
+      target.z + Math.cos(this.camYaw) * cp * dist
     );
     if (!this.onIsle && v.y < 1.2) v.y = 1.2;
+    // 雾距离跟着镜头远近走：拉远镜头后若雾的起点不变，整张地图会被雾刷成灰白色
+    if (this.scene.fog) {
+      this.scene.fog.near = 34 + dist;
+      this.scene.fog.far = 142 + dist;
+    }
     this.camera.position.lerp(v, Math.min(1, dt * 7));
     this.camera.lookAt(target.x, target.y + 1.0, target.z);
+  }
+
+  // 从小人头顶向理想镜头位置打一条射线，返回允许的镜头距离系数（被挡=拉近）
+  _occlusionK(target, camPos) {
+    if (!this._occluders) {
+      // 收集一次世界大件：大网格才可能挡镜头，小件（花花草草）不用管
+      this._occluders = [];
+      this.scene.traverse(o => {
+        if (!o.isMesh || o.userData.noOcclude) return;
+        o.geometry.computeBoundingSphere();
+        const s = Math.max(o.scale.x, o.scale.y, o.scale.z, 1);
+        if (o.geometry.boundingSphere.radius * s >= 1.8) this._occluders.push(o);
+      });
+    }
+    const from = this._occFrom = (this._occFrom || new THREE.Vector3());
+    from.set(target.x, target.y + 1.1, target.z);
+    const dir = this._occDir = (this._occDir || new THREE.Vector3());
+    dir.copy(camPos).sub(from);
+    const len = dir.length();
+    if (len < 0.5) return 1;
+    dir.divideScalar(len);
+    const ray = this._occRay = (this._occRay || new THREE.Raycaster());
+    ray.set(from, dir);
+    ray.far = len;
+    const hits = ray.intersectObjects(this._occluders, false);
+    for (const h of hits) {
+      // 机关开门后大件会隐藏（沙墙散开），隐形的不再算遮挡
+      let o = h.object, hidden = false;
+      while (o) { if (o.visible === false) { hidden = true; break; } o = o.parent; }
+      if (!hidden) return Math.max(0.22, (h.distance - 0.4) / len);
+    }
+    return 1;
   }
 
   _updateWorldAnim(dt, t) {
@@ -1031,9 +1150,11 @@ export class Game {
   _updatePrompt() {
     if (ui.challengeOpen()) { ui.hidePrompt(); return; }
     const p = this.player.position;
-    // 蛋
+    // 蛋（高台顶上的蛋要跳上去，站在地面够不着）
     const egg = this.eggs.nearest(p, 2.6);
-    if (egg) { ui.showPrompt('读出单词，唤醒词宠蛋', 'E'); this.promptAction = () => this._openEgg(egg.word.id); return; }
+    if (egg && egg.group.position.y - p.y <= 1.2) {
+      ui.showPrompt('读出单词，唤醒词宠蛋', 'E'); this.promptAction = () => this._openEgg(egg.word.id); return;
+    }
     // 饿了的词宠
     const hungry = this._nearHungryPet(p, 2.4);
     if (hungry) {
@@ -1122,7 +1243,7 @@ export class Game {
       if (!this._rideBoat()) ui.toast('⛵ 走到渡口边上再坐船哦');
       return;
     }
-    if (this.eggs.get(id)) { this._clearMoveTarget(); this._openEgg(id); }
+    if (this.eggs.get(id)) { this._approachEgg(id); }
     else if (save.isHungry(id)) { this._clearMoveTarget(); this._feedPet(id); }
     else if (this.pets.get(id)) {
       // 摸头：点吃饱了的词宠，它开心地跳一下、念出自己的名字（顺手就是一次复习）
@@ -1152,7 +1273,7 @@ export class Game {
     const dock = new THREE.Vector3(from.x, 0, from.z);
     const farDock = new THREE.Vector3(0, 0, toZ);
     this.riding = true;
-    this.onGround = true; this.vy = 0;
+    this.onGround = true; this.vy = 0; this.jumps = 0;
     this.player.rotation.y = toZ < fromZ ? Math.PI : 0; // 面朝对岸
     ui.hidePrompt();
     sfx.pop();
@@ -1545,6 +1666,13 @@ export class Game {
     }, 500);
   }
 
+  // 机关开门后把它的碰撞体作废（只做标记不清数组，免得其他门的下标错位）
+  _killGateCols(gate) {
+    if (!gate || !gate.cols) return;
+    for (const i of gate.cols) { const c = this.world.colliders[i]; if (c) c.dead = true; }
+    gate.cols = [];
+  }
+
   _applyGate(gateId, pet) {
     switch (gateId) {
       case 'boat': {
@@ -1568,7 +1696,7 @@ export class Game {
           hay.group.rotation.z = -k * 4;
           hay.group.position.y = Math.sin(k * Math.PI) * 1.5;
         }, () => {
-          this.world.colliders.splice(hay.colIndex, 1);
+          this.world.colliders[hay.colIndex].dead = true;   // 干草球滚走了，碰撞体作废
           hay.group.visible = false;
           this.pets.flyTo(pet.word.id, new THREE.Vector3(pet.home.x, 0, pet.home.y), 1.2);
         });
@@ -1621,6 +1749,7 @@ export class Game {
         save.setGate('sandWall');
         sfx.magic();
         const wall = this.world.gates.sandWall;
+        this._killGateCols(wall);   // 沙墙散开后隐形墙也得撤，不然永远过不去
         // 沙子四散的粒子
         for (let i = 0; i < 26; i++) {
           const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('·', '#EDD49E', '#C9A46B'), transparent: true }));
@@ -1645,6 +1774,7 @@ export class Game {
         save.setGate('vines');
         sfx.magic();
         const vines = this.world.gates.vines;
+        this._killGateCols(vines);   // 荆棘让路后撤掉隐形墙
         for (let i = 0; i < 22; i++) {
           const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('🍃', '#8FD08F', '#D8F2D0'), transparent: true }));
           s.position.set(-38 + (Math.random() - 0.5) * 2, 1 + Math.random() * 2.5, (Math.random() - 0.5) * 60);
@@ -1696,7 +1826,7 @@ export class Game {
       this.climbing = false;
       this.onIsle = up;
       this.player.position.copy(to);
-      this.onGround = true; this.vy = 0;
+      this.onGround = true; this.vy = 0; this.jumps = 0;
       if (up) ui.toast('☁️ 欢迎来到天空岛！这里有两颗金色的蛋…', 3600);
     });
   }
@@ -1750,7 +1880,7 @@ export class Game {
       this.riding = false;
       this.player.position.copy(to);
       this.player.position.y = 0;
-      this.onGround = true; this.vy = 0;
+      this.onGround = true; this.vy = 0; this.jumps = 0;
       this.lastZone = null;  // 触发新区域提示
       sfx.good();
       if (save.addVisited(isl ? isl.key : 'meadow')) {

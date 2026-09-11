@@ -170,7 +170,7 @@ function glowTexture(inner = 'rgba(255,244,214,1)', outer = 'rgba(255,244,214,0)
 export function buildWorld(scene, semIslands = ISLANDS) {
   const world = { colliders: [], anim: {}, gates: {} };
   const C = world.colliders;
-  const colC = (x, z, r) => C.push({ t: 'c', x, z, r });
+  const colC = (x, z, r, top) => C.push(top ? { t: 'c', x, z, r, top } : { t: 'c', x, z, r });
   const colR = (x1, z1, x2, z2) => C.push({ t: 'r', x1, z1, x2, z2 });
 
   // ---- 天空穹顶（渐变 + 更晴朗的蓝） ----
@@ -400,6 +400,29 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   for (const [x, z] of [[-11.5, 16.5], [-10.5, 23], [7, 29], [8.5, 7.5], [-2, 27]])
     place(scene, PROPS.sunflower(), x, z, Math.random() * 3);
 
+  // ---- 跳跳石（草甸东南的空地）：三级石阶跳上高台，台顶的蛋要跳上去才够得着 ----
+  world.platforms = [];
+  {
+    const perch = { x: 11.5, z: 27.2, r: 1.35, top: 2.75 };
+    const steps = [
+      { x: 11.5, z: 24.2, r: 1.0, top: 1.0 },
+      { x: 11.5, z: 25.7, r: 1.0, top: 1.85 },
+      perch,
+    ];
+    for (const s of steps) {
+      const stone = new THREE.Mesh(
+        new THREE.CylinderGeometry(s.r, s.r + 0.18, s.top, 14),
+        M(s === perch ? '#9FB894' : '#BCC8B4'));
+      stone.position.set(s.x, s.top / 2, s.z);
+      stone.castShadow = true;
+      stone.receiveShadow = true;
+      scene.add(stone);
+      colC(s.x, s.z, s.r, s.top);   // 侧面也挡人，但站到台顶高度后不再挡
+      world.platforms.push(s);
+    }
+    world.perch = perch;   // 每关会有一颗蛋放到台顶（见 game.js _spawnProgress）
+  }
+
   // ---- 阳光海滩（吹开沙墙后）：椰树、遮阳伞、沙堡、浮木 ----
   const palmSpots = [[-14, 41.5], [12, 44], [-22, 44], [20, 41], [2, 49.5], [-28, 40.5]];
   for (const [x, z] of palmSpots) {
@@ -458,12 +481,12 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     world.anim.fireflies = fire;
   }
 
-  // ---- 云朵 ----
+  // ---- 云朵（抬到高处：飘太低会挡在镜头和小人之间，把地面糊成一片白） ----
   world.anim.clouds = [];
   for (let i = 0; i < 8; i++) {
     const c = PROPS.cloud(1.4 + Math.random());
     const a = Math.PI * 2 * i / 8;
-    c.position.set(Math.cos(a) * (24 + Math.random() * 16), 11 + Math.random() * 5, Math.sin(a) * (24 + Math.random() * 16));
+    c.position.set(Math.cos(a) * (24 + Math.random() * 16), 19 + Math.random() * 7, Math.sin(a) * (24 + Math.random() * 16));
     scene.add(c);
     world.anim.clouds.push(c);
   }
@@ -528,19 +551,24 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   // ---- 机关 1：金色沙墙（南边去海滩的路，用 wind 吹开） ----
   {
     const wall = new THREE.Group();
+    const cols = [];
     for (let i = 0; i < 6; i++) {
       const d = PROPS.dune(3.1 + Math.random() * 0.5);
-      d.position.set(-27.5 + i * 11, 0, 38.2 + (i % 2) * 0.5);
+      const dx = -27.5 + i * 11, dz = 38.2 + (i % 2) * 0.5;
+      d.position.set(dx, 0, dz);
       d.rotation.y = Math.random();
       wall.add(d);
+      // 沙丘是个半径 5 米多的大球，比细条矩形碰撞体外鼓很多，
+      // 不补圆形碰撞的话小人会走进沙球身体里，镜头也被整个埋进去
+      cols.push(C.length); colC(dx + 0.4, dz, 4.3);
     }
     const castle = PROPS.sandcastle(1.25);
     castle.position.set(0, 1.4, 38.4);
     wall.add(castle);
     wall.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(wall);
-    colR(-34.5, 37.3, 34.5, 39.3);
-    world.gates.sandWall = { group: wall, cols: [C.length - 1] };
+    cols.push(C.length); colR(-34.5, 37.3, 34.5, 39.3);
+    world.gates.sandWall = { group: wall, cols };
     // 沙墙两端的大岩石封口
     for (const [x, z] of [[37.5, 39.5], [-37.5, 39.5]]) {
       place(scene, PROPS.rock(2.4), x, z);

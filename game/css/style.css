@@ -36,7 +36,7 @@ body {
 #hud > div { display: flex; gap: 10px; min-width: 0; }
 .pill {
   pointer-events: auto;
-  background: linear-gradient(rgba(255,255,255,.8), rgba(255,255,255,.5)); border: 2px solid rgba(255,211,224,.75); color: #A0566F;
+  background: rgba(255,253,248,.42); border: 2px solid rgba(255,211,224,.6); color: #A0566F;
   padding: 6px 13px; border-radius: 999px; font-size: 14px; font-weight: bold;
   box-shadow: 0 3px 10px rgba(214,120,150,.14), inset 0 1px 0 rgba(255,255,255,.85);
   text-shadow: 0 1px 0 rgba(255,255,255,.6);
@@ -50,13 +50,13 @@ body {
 #user-pill:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(214,120,150,.22), inset 0 1px 0 rgba(255,255,255,.85); }
 #user-pill:active { transform: translateY(0) scale(.97); }
 /* 星星 pill：拿到星星时蹦一下 */
-.pill.star-pill { border-color: #FFE08A; color: #B47514; background: rgba(255,249,225,.7); }
+.pill.star-pill { border-color: #FFE08A; color: #B47514; background: rgba(255,249,225,.42); }
 .pill.star-pill.star-pop-anim { animation: starPopAnim .5s cubic-bezier(.34,1.56,.64,1); }
 @keyframes starPopAnim { 0% { transform: scale(1) } 40% { transform: scale(1.28) rotate(-4deg) } 100% { transform: scale(1) } }
 .round-btn {
   pointer-events: auto; cursor: pointer; flex: none;
   width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,211,224,.72);
-  background: linear-gradient(rgba(255,255,255,.85), rgba(255,255,255,.5)); font-size: 20px; color: #A0566F;
+  background: rgba(255,253,248,.42); font-size: 20px; color: #A0566F;
   box-shadow: 0 3px 10px rgba(214,120,150,.14), inset 0 1px 0 rgba(255,255,255,.9);
   transition: transform .15s, box-shadow .15s;
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
@@ -457,6 +457,8 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 }
 .slot.filled { border-style: solid; border-color: #FFB1CC; background: #FFF0F5; }
 .slot.space { border: none; background: none; width: 18px; }
+.slot { cursor: pointer; }
+.slot.sel { border-style: solid; border-color: #FF8FB0; background: #FFE9F1; transform: translateY(-3px); box-shadow: 0 3px 10px rgba(255,143,176,.35); }
 .tile {
   width: 40px; height: 46px; border-radius: 11px; border: 2px solid #BDE3F0;
   background: #EAF7FC; color: #2E6E8E; font-size: 22px; font-weight: 900; cursor: pointer;
