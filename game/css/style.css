@@ -286,7 +286,11 @@ body {
   width: min(380px, 92vw); background: #FFFDF8; border-radius: 22px; border: 3px solid #FFD3E0;
   box-shadow: 0 18px 50px rgba(150,90,110,.25); padding: 18px 18px 14px; text-align: center; position: relative;
 }
-#profile-card .profile-emoji { font-size: 38px; }
+#profile-card .profile-emoji {
+  font-size: 34px; width: 58px; height: 58px; line-height: 58px;
+  margin: 0 auto; background: radial-gradient(circle at 35% 30%, #FFFDF8, #FFE9F0);
+  border: 2px solid #FFD3E0; border-radius: 50%; box-shadow: 0 3px 10px rgba(224,103,141,.18);
+}
 #profile-close { position: absolute; top: 12px; right: 12px; }
 #profile-card h2 { color: #C4788F; margin: 4px 0; font-size: 17px; }
 #profile-card p { color: #8A7664; font-size: 13px; line-height: 1.55; }
@@ -365,8 +369,12 @@ body {
 }
 @keyframes popIn { from { transform: scale(.7); opacity: 0 } to { transform: scale(1); opacity: 1 } }
 #modal-head { display: flex; justify-content: space-between; align-items: center; }
-#modal-title { color: #C4788F; font-weight: bold; font-size: 16px; }
-#word-display { text-align: center; margin: 10px 0 6px; }
+#modal-title { color: #C4788F; font-weight: bold; font-size: 15px; letter-spacing: 1px; }
+#word-display {
+  text-align: center; margin: 8px 0 6px; padding: 8px 6px 10px;
+  background: linear-gradient(#FFFBF0, #FFF4E2);
+  border: 2px solid #FFE9C8; border-radius: 16px;
+}
 #word-en { font-size: 38px; font-weight: 900; color: #5A4632; letter-spacing: 2px; line-height: 1.1; }
 #word-en.spell-hidden { visibility: hidden; height: 0; margin: 0; }
 #word-ipa { font-size: 15px; color: #7C9BC4; font-weight: bold; margin-top: 3px; letter-spacing: 1px; }

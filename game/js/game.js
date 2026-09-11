@@ -702,7 +702,8 @@ export class Game {
   // ================= 玩家 =================
   _updatePlayer(dt) {
     if (this.climbing || this.riding) return;
-    const move = new THREE.Vector3();
+    const move = this._mv = this._mv || new THREE.Vector3();
+    move.set(0, 0, 0);
     // 键盘/摇杆方向是“相对镜头”的；点击移动是“世界坐标直线”，不随镜头转
     let cameraRelative = true;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) move.z -= 1;
@@ -737,7 +738,12 @@ export class Game {
     // 空中保留操控且带一点冲劲：方向键+空格 = 向前跳
     const speed = PLAYER_SPEED * (this.onGround ? 1 : 1.38);
     if (moving) {
-      if (cameraRelative) move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.camYaw);
+      if (cameraRelative) {
+        // 绕 Y 轴转 camYaw（等价于原 applyAxisAngle，不建临时对象）
+        const s = Math.sin(this.camYaw), c = Math.cos(this.camYaw);
+        const mx = move.x * c + move.z * s, mz = move.z * c - move.x * s;
+        move.x = mx; move.z = mz;
+      }
       this.player.position.x += move.x * speed * dt;
       this.player.position.z += move.z * speed * dt;
       const targetYaw = Math.atan2(move.x, move.z);
@@ -784,7 +790,7 @@ export class Game {
       this.sparkT -= dt;
       if (moving && this.onGround && this.sparkT <= 0) {
         this.sparkT = 0.16;
-        const wp = new THREE.Vector3();
+        const wp = this._wp = this._wp || new THREE.Vector3();
         this.playerParts.wandTip.getWorldPosition(wp);
         this._sparkle(wp);
       }
@@ -881,14 +887,16 @@ export class Game {
 
   _updateCamera(dt) {
     const target = this.player.position;
-    const off = new THREE.Vector3(
-      Math.sin(this.camYaw) * Math.cos(this.camPitch),
-      Math.sin(this.camPitch),
-      Math.cos(this.camYaw) * Math.cos(this.camPitch)
-    ).multiplyScalar(this.camDist);
-    const camPos = target.clone().add(off).add(new THREE.Vector3(0, 1.6, 0));
-    if (!this.onIsle) camPos.y = Math.max(camPos.y, 1.2);
-    this.camera.position.lerp(camPos, Math.min(1, dt * 7));
+    // 复用临时向量：相机每帧跑 60 次，不能每次都 new（GC 卡顿元凶）
+    const v = this._cv = this._cv || new THREE.Vector3();
+    const cp = Math.cos(this.camPitch);
+    v.set(
+      target.x + Math.sin(this.camYaw) * cp * this.camDist,
+      target.y + Math.sin(this.camPitch) * this.camDist + 1.6,
+      target.z + Math.cos(this.camYaw) * cp * this.camDist
+    );
+    if (!this.onIsle && v.y < 1.2) v.y = 1.2;
+    this.camera.position.lerp(v, Math.min(1, dt * 7));
     this.camera.lookAt(target.x, target.y + 1.0, target.z);
   }
 
@@ -1150,7 +1158,7 @@ export class Game {
   _openEgg(id) {
     const word = WORD_MAP[id];
     this.currentWord = word;
-    this._maybePreloadWhisper();
+    this._maybePreloadWhisper(); this._warmMic();
     ui.openChallenge({
       word, mode: 'hatch',
       onSuccess: res => this._doHatch(word, res && res.score),
@@ -1336,7 +1344,7 @@ export class Game {
   _feedPet(id) {
     const word = WORD_MAP[id];
     this.currentWord = word;
-    this._maybePreloadWhisper();
+    this._maybePreloadWhisper(); this._warmMic();
     ui.openChallenge({
       word, mode: 'feed',
       onSuccess: () => {
@@ -1825,7 +1833,7 @@ export class Game {
     }
     const w = p.list[p.idx];
     this.currentWord = w;
-    this._maybePreloadWhisper();
+    this._maybePreloadWhisper(); this._warmMic();
     ui.openChallenge({
       word: { en: w.en, zh: w.zh, syl: [w.en], hint: `第 ${p.idx + 1}/${p.list.length} 个 · 大声读给词宠听` },
       mode: 'practice',
@@ -1864,6 +1872,17 @@ export class Game {
     if (!canRecord || webSpeechOk) return;   // 桌面浏览器走即时识别，不必提前下 40MB
     this._whisperPreloaded = true;
     preloadWhisper();
+  }
+
+  // 打开挑战卡时先把麦克风"点着"：权限弹窗、麦克风启动都发生在孩子认单词的时候，
+  // 等他点下录音键立刻就能开口，不用对着"准备中"干等（只做一次，失败的静默）
+  _warmMic() {
+    if (this._micWarmed) return;
+    this._micWarmed = true;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      stream.getTracks().forEach(t => t.stop());
+    }).catch(() => { /* 权限没给：录音时再正式提示 */ });
   }
 
   _startWhisper() {

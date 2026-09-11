@@ -111,12 +111,21 @@ export function setQuest(text) {
   }
   els.quest.classList.toggle('hidden', questDismissedFor === text);
 }
-// 每帧由 game.js 传入小人头顶的屏幕坐标；null 表示小人在镜头外，先藏起来
+// 每帧由 game.js 传入小人头顶的屏幕坐标；null 表示小人在镜头外，先藏起来。
+// 值没变就不动 DOM（每帧写 style 会白耗布局）
+let _qx = null, _qy = null;
 export function placeQuest(x, y) {
-  if (x == null) { els.quest.style.visibility = 'hidden'; return; }
+  if (x == null) {
+    if (_qx !== null) { els.quest.style.visibility = 'hidden'; _qx = null; }
+    return;
+  }
+  const qx = Math.round(Math.max(125, Math.min(innerWidth - 125, x)));
+  const qy = Math.round(Math.max(96, Math.min(innerHeight - 24, y)));
+  if (qx === _qx && qy === _qy) return;
+  _qx = qx; _qy = qy;
   els.quest.style.visibility = 'visible';
-  els.quest.style.left = Math.round(Math.max(125, Math.min(innerWidth - 125, x))) + 'px';
-  els.quest.style.top = Math.round(Math.max(96, Math.min(innerHeight - 24, y))) + 'px';
+  els.quest.style.left = qx + 'px';
+  els.quest.style.top = qy + 'px';
 }
 els.questClose.addEventListener('click', () => {
   questDismissedFor = els.questText.textContent;
@@ -813,87 +822,177 @@ export function openMap(data) {
   const scale = W / 420;                       // 世界 ±210 都画进来（主岛 + 内圈主题岛 + 中圈短语岛 + 外圈拓展岛）
   const X = x => W / 2 + x * scale, Z = z => H / 2 + z * scale;
   c.clearRect(0, 0, W, H);
-  // 大海
-  c.fillStyle = '#8FCDE8';
-  c.beginPath(); c.roundRect(0, 0, W, H, 16 * k); c.fill();
-  // 主岛
-  c.fillStyle = '#BFE8AC';
+  // 文字白边：让小字在任何底色上都清晰
+  const halo = (txt, x, y) => {
+    c.lineWidth = 3.5 * k; c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineJoin = 'round';
+    c.strokeText(txt, x, y); c.fillText(txt, x, y);
+  };
+  // ---- 大海：渐变 + 圆角 + 小波纹 ----
+  const sea = c.createLinearGradient(0, 0, 0, H);
+  sea.addColorStop(0, '#93D6F0');
+  sea.addColorStop(1, '#6CB9E2');
+  c.fillStyle = sea;
+  c.beginPath(); c.roundRect(0, 0, W, H, 22 * k); c.fill();
+  c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 1.6 * k; c.lineCap = 'round';
+  for (const [wx, wz] of [[-88, -78], [-70, 70], [86, -60], [92, 84], [-96, 8], [58, 94], [-42, -94], [28, -86], [96, 22], [-88, 42]]) {
+    c.beginPath(); c.arc(X(wx), Z(wz), 6 * k, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+    c.beginPath(); c.arc(X(wx) + 13 * k, Z(wz) + 5 * k, 4.5 * k, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+  }
+  // ---- 主岛：海沫圈 → 沙滩 → 草地渐变 → 描边 ----
+  c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 3 * k;
+  c.beginPath(); c.arc(X(0), Z(0), 60 * scale, 0, Math.PI * 2); c.stroke();
+  c.fillStyle = '#F2E2B3';
+  c.beginPath(); c.arc(X(0), Z(0), 56 * scale, 0, Math.PI * 2); c.fill();
+  const grass = c.createRadialGradient(X(0), Z(0) - 10 * scale, 8 * scale, X(0), Z(0), 56 * scale);
+  grass.addColorStop(0, '#C7EDB0');
+  grass.addColorStop(1, '#9BD283');
+  c.fillStyle = grass;
   c.beginPath(); c.arc(X(0), Z(0), 52 * scale, 0, Math.PI * 2); c.fill();
-  // 海滩沙子（南）
-  c.fillStyle = '#EFDCA8';
+  c.strokeStyle = 'rgba(110,158,94,.5)'; c.lineWidth = 2 * k;
+  c.beginPath(); c.arc(X(0), Z(0), 52 * scale, 0, Math.PI * 2); c.stroke();
+  // 南边沙滩 + 沙点
+  c.fillStyle = '#F2E2B3';
   c.beginPath();
   c.moveTo(X(-34), Z(35.5));
   c.quadraticCurveTo(X(0), Z(33.5), X(34), Z(35.5));
   c.arc(X(0), Z(0), 52 * scale, Math.PI * 0.22, Math.PI * 0.78);
   c.closePath(); c.fill();
-  // 森林深绿（西）
-  c.fillStyle = 'rgba(78,142,78,.55)';
-  c.beginPath(); c.ellipse(X(-45), Z(3), 9 * scale, 15 * scale, 0, 0, Math.PI * 2); c.fill();
-  // 河流
-  c.fillStyle = '#8FD0E8';
-  c.fillRect(X(-52), Z(-3.5), 104 * scale, 7 * scale);
+  c.fillStyle = 'rgba(201,164,107,.55)';
+  for (const [sx, sz] of [[-26, 36], [-12, 37.5], [4, 36.8], [20, 37], [30, 34.5]]) {
+    c.beginPath(); c.arc(X(sx), Z(sz), 0.9 * k, 0, Math.PI * 2); c.fill();
+  }
+  // ---- 森林（西）：一小片树 ----
+  for (const [tx, tz, s] of [[-49, -4, 1.1], [-44, -9, 0.8], [-40, 0, 1], [-49, 8, 0.9], [-43, 12, 1.15], [-46, 3, 0.7], [-38, 6, 0.8]]) {
+    c.fillStyle = '#8A6844';
+    c.fillRect(X(tx) - 0.7 * k, Z(tz) - 1 * k, 1.4 * k, 3.2 * k);
+    c.fillStyle = '#4E8E4E';
+    c.beginPath(); c.arc(X(tx), Z(tz) - 2.6 * s * k, 3.1 * s * k, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#6BAA5C';
+    c.beginPath(); c.arc(X(tx) - 1.1 * s * k, Z(tz) - 2.1 * s * k, 1.5 * s * k, 0, Math.PI * 2); c.fill();
+  }
+  // ---- 河流：水带 + 两岸 + 波纹 ----
+  const river = c.createLinearGradient(0, Z(-3.5), 0, Z(3.5));
+  river.addColorStop(0, '#8FCEE9');
+  river.addColorStop(0.5, '#A8DCF0');
+  river.addColorStop(1, '#8FCEE9');
+  c.fillStyle = river;
+  c.fillRect(X(-53), Z(-3.5), 106 * scale, 7 * scale);
+  c.strokeStyle = 'rgba(242,226,179,.9)'; c.lineWidth = 1.8 * k;
+  c.beginPath(); c.moveTo(X(-53), Z(-3.5)); c.lineTo(X(53), Z(-3.5)); c.stroke();
+  c.beginPath(); c.moveTo(X(-53), Z(3.5)); c.lineTo(X(53), Z(3.5)); c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,.45)';
+  c.beginPath(); c.arc(X(-14), Z(0), 2.2 * k, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+  c.beginPath(); c.arc(X(18), Z(1), 2.2 * k, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+  // 码头（木头小平台）
+  c.fillStyle = '#C89A6B';
+  c.beginPath(); c.roundRect(X(-1.2), Z(-2.8), 2.4 * scale, 5.6 * scale, 2 * k); c.fill();
+  c.strokeStyle = '#A87F52'; c.lineWidth = 1 * k;
+  for (const pz of [-1.6, 0, 1.6]) {
+    c.beginPath(); c.moveTo(X(-1.2), Z(pz)); c.lineTo(X(1.2), Z(pz)); c.stroke();
+  }
   // 机关墙标记
   if (!data.gates || !data.gates.sandWall) {
     c.fillStyle = '#C9A46B';
-    c.fillRect(X(-32), Z(37.6), 64 * scale, 1.6 * scale);
+    c.beginPath(); c.roundRect(X(-32), Z(37.6), 64 * scale, 1.6 * scale, 0.8 * k); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 0.8 * k;
+    for (let bx = -30; bx <= 30; bx += 4) {
+      c.beginPath(); c.moveTo(X(bx), Z(37.7)); c.lineTo(X(bx), Z(39.1)); c.stroke();
+    }
   }
   if (!data.gates || !data.gates.vines) {
     c.fillStyle = '#3E7A44';
-    c.fillRect(X(-38.8), Z(4.5), 1.6 * scale, 29 * scale);
-    c.fillRect(X(-38.8), Z(-33.5), 1.6 * scale, 29 * scale);
+    c.beginPath(); c.roundRect(X(-39.6), Z(4.5), 1.6 * scale, 29 * scale, 0.8 * k); c.fill();
+    c.beginPath(); c.roundRect(X(-39.6), Z(-33.5), 1.6 * scale, 29 * scale, 0.8 * k); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.22)';
+    for (let vz = 6; vz <= 32; vz += 3.4) {
+      c.beginPath(); c.arc(X(-38.8), Z(vz), 1.1 * k, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(X(-38.8), Z(-vz), 1.1 * k, 0, Math.PI * 2); c.fill();
+    }
   }
-  // 群岛（只画当前册的岛）
+  // 群岛（只画当前册的岛）：投影 → 沙圈 → 草面 → 高光（文字最后统一画，免得被蛋点盖住）
+  const islTexts = [];
   for (const isl of data.islands || []) {
-    c.fillStyle = isl.unlocked ? '#D8F0C8' : '#D8DDE4';
-    c.beginPath(); c.arc(X(isl.cx), Z(isl.cz), isl.r * scale, 0, Math.PI * 2); c.fill();
-    c.strokeStyle = isl.unlocked ? '#5CA85C' : '#B9AC9E';
-    c.lineWidth = 1.5 * k;
+    const ix = X(isl.cx), iz = Z(isl.cz), ir = isl.r * scale;
+    c.fillStyle = 'rgba(30,80,120,.16)';
+    c.beginPath(); c.arc(ix, iz + 3 * k, ir, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#F2E2B3';
+    c.beginPath(); c.arc(ix, iz, ir + 2.6 * k, 0, Math.PI * 2); c.fill();
+    c.fillStyle = isl.unlocked ? '#BFE6A4' : '#D5DAE2';
+    c.beginPath(); c.arc(ix, iz, ir, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = isl.unlocked ? 'rgba(92,168,92,.6)' : 'rgba(148,140,128,.5)';
+    c.lineWidth = 1.6 * k;
     c.stroke();
     c.font = `${13 * k}px sans-serif`;
     c.textAlign = 'center';
-    c.fillText(isl.emoji, X(isl.cx), Z(isl.cz) - isl.r * scale + 14 * k);
-    c.fillStyle = isl.unlocked ? '#3E6B36' : '#8C8478';
-    c.font = `bold ${11 * k}px "Microsoft YaHei"`;
-    c.fillText(isl.name.replace('岛', '').replace('大陆', ''), X(isl.cx), Z(isl.cz) + isl.r * scale - 3 * k);
-    if (isl.total) {
-      c.fillStyle = isl.hatched >= isl.total ? '#D9941E' : '#6E9E5E';
-      c.font = `${10 * k}px "Microsoft YaHei"`;
-      c.fillText(`${isl.hatched}/${isl.total}`, X(isl.cx), Z(isl.cz) + isl.r * scale + 9 * k);
-    }
+    c.fillText(isl.emoji, ix, iz - ir + 14 * k);
+    if (isl.name) islTexts.push({
+      txt: isl.name.replace('岛', '').replace('大陆', ''), x: ix, y: iz + ir - 3 * k,
+      col: isl.unlocked ? '#3E6B36' : '#8C8478', font: `bold ${11 * k}px "Microsoft YaHei"`,
+    });
+    if (isl.total) islTexts.push({
+      txt: `${isl.hatched}/${isl.total}`, x: ix, y: iz + ir + 9 * k,
+      col: isl.hatched >= isl.total ? '#D9941E' : '#6E9E5E', font: `${10 * k}px "Microsoft YaHei"`,
+    });
   }
   // 火车站
   c.font = `${12 * k}px sans-serif`;
-  c.fillText('🚂', X(-9), Z(9.6) + 4 * k);
-  // 区域
+  halo('🚂', X(-9), Z(9.6) + 4 * k);
+  // 区域（文字同样挪到最后画）
+  const znTexts = [];
   for (const zn of data.zones) {
     const x = X(zn.x1), y = Z(zn.z1), w = (zn.x2 - zn.x1) * scale, h = (zn.z2 - zn.z1) * scale;
-    c.strokeStyle = zn.discovered ? '#5CA85C' : '#B9AC9E';
+    c.strokeStyle = zn.discovered ? 'rgba(92,168,92,.8)' : 'rgba(185,172,158,.75)';
     c.lineWidth = 1.5 * k;
     c.setLineDash(zn.discovered ? [] : [5 * k, 4 * k]);
-    c.fillStyle = zn.discovered ? 'rgba(255,255,255,.32)' : 'rgba(255,255,255,.18)';
+    c.fillStyle = zn.discovered ? 'rgba(255,255,255,.3)' : 'rgba(255,255,255,.14)';
     c.beginPath(); c.roundRect(x, y, w, h, 8 * k); c.fill(); c.stroke();
     c.setLineDash([]);
-    c.fillStyle = zn.discovered ? '#3E6B36' : '#B9AC9E';
-    c.font = `bold ${11 * k}px "Microsoft YaHei"`;
-    c.textAlign = 'center';
-    // 未发现的区域不再写"？？？"，只留虚线框（+锁），画面更清爽
-    const label = (zn.discovered ? zn.name : '') + (zn.locked ? ' 🔒' : '');
-    if (label) c.fillText(label, x + w / 2, y + h / 2 - 3 * k);
+    // 未发现的区域不再写"？？？"，只留虚线框，锁画在右上角，不挤名字
+    if (zn.discovered) znTexts.push({
+      txt: zn.name, x: x + w / 2, y: y + h / 2 - 3 * k, col: '#3E6B36',
+      font: `bold ${11 * k}px "Microsoft YaHei"`,
+    });
+    if (zn.locked) {
+      c.font = `${9 * k}px sans-serif`;
+      c.fillText('🔒', x + w - 7 * k, y + 9 * k);
+    }
   }
-  // 蛋点（粉=本关词宠蛋，金=天空蛋，蓝=剧情钥匙蛋）
+  // 蛋点（粉=本关词宠蛋，金=天空蛋，蓝=剧情钥匙蛋）：先光晕后实体
   for (const e of data.eggs) {
-    c.beginPath();
-    c.fillStyle = e.golden ? '#FFC94E' : e.key ? '#4A90D9' : '#FF9FB6';
-    c.arc(X(e.x), Z(e.z), 3 * k, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = '#fff'; c.lineWidth = 1 * k; c.stroke();
+    const ex = X(e.x), ez = Z(e.z);
+    const col = e.golden ? '255,201,78' : e.key ? '74,144,217' : '255,159,182';
+    c.fillStyle = `rgba(${col},.3)`;
+    c.beginPath(); c.arc(ex, ez, 6.5 * k, 0, Math.PI * 2); c.fill();
+    c.fillStyle = `rgb(${col})`;
+    c.beginPath(); c.arc(ex, ez, 3 * k, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 1.2 * k; c.stroke();
   }
-  // 玩家
-  c.beginPath();
+  // 玩家：呼吸圈 + 白边圆点
+  const px = X(data.player.x), pz = Z(data.player.z);
+  c.strokeStyle = 'rgba(74,144,217,.4)'; c.lineWidth = 1.6 * k;
+  c.beginPath(); c.arc(px, pz, 8.5 * k, 0, Math.PI * 2); c.stroke();
   c.fillStyle = '#4A90D9';
-  c.arc(X(data.player.x), Z(data.player.z), 5 * k, 0, Math.PI * 2);
-  c.fill();
-  c.lineWidth = 2.5 * k; c.strokeStyle = '#fff'; c.stroke();
+  c.beginPath(); c.arc(px, pz, 4.6 * k, 0, Math.PI * 2); c.fill();
+  c.lineWidth = 2.4 * k; c.strokeStyle = '#fff'; c.stroke();
+  // 文字最后画：地名/岛名带白边压在圆点上面，不会被蛋点或玩家标记盖住
+  for (const t of [...islTexts, ...znTexts]) {
+    c.fillStyle = t.col;
+    c.font = t.font;
+    halo(t.txt, t.x, t.y);
+  }
+  // 指南针（右上角）
+  c.fillStyle = 'rgba(255,253,248,.8)';
+  c.beginPath(); c.arc(W - 26 * k, 30 * k, 11 * k, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = 'rgba(255,224,168,.9)'; c.lineWidth = 1.4 * k; c.stroke();
+  c.fillStyle = '#E0675A';
+  c.beginPath();
+  c.moveTo(W - 26 * k, 30 * k - 7 * k);
+  c.lineTo(W - 26 * k - 3.4 * k, 30 * k + 4 * k);
+  c.lineTo(W - 26 * k + 3.4 * k, 30 * k + 4 * k);
+  c.closePath(); c.fill();
+  c.fillStyle = '#8C8478';
+  c.font = `bold ${7.5 * k}px sans-serif`;
+  c.fillText('N', W - 26 * k, 30 * k + 8.6 * k);
   // 标题带上当前关卡
   const headSpan = els.mapHead.querySelector('span');
   if (headSpan) headSpan.textContent = '🗺️ 词宠岛地图' + (data.chapterLabel ? ' · ' + data.chapterLabel : '');

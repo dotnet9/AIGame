@@ -274,10 +274,11 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   for (const z of [5.8, -5.8]) place(scene, PROPS.flowerpatch(), (Math.random() - 0.5) * 6, z * 0.9 + Math.sign(z) * 1.5);
 
   // ---- 栅栏（河岸两侧，留码头缺口，不可穿越） ----
+  // 面板必须转 90° 顺着岸线排：不转的话一块块立着像缺口，看着能钻过去其实撞墙
   for (const bank of [1, -1]) {
     for (let x = -34; x <= 34; x += 2.1) {
       if (x > -4.5 && x < 4.5) continue;
-      place(scene, PROPS.fence(), x, bank * 6.2);
+      place(scene, PROPS.fence(), x, bank * 6.2, Math.PI / 2);
     }
     colR(-35, bank * 6.2 - 0.3, -4.5, bank * 6.2 + 0.3);
     colR(4.5, bank * 6.2 - 0.3, 35, bank * 6.2 + 0.3);
