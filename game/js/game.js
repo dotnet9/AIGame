@@ -759,8 +759,12 @@ export class Game {
         p.z = p.z >= 0 ? 4.1 : -4.1;
         if (this.riverHintCd <= 0) {
           this.riverHintCd = 6;
-          if (save.isHatched('boat')) ui.toast(`🌊 河流挡路啦！${this.isTouch ? '点 🪄' : '按 Tab'}召唤 boat 来帮忙`);
-          else ui.toast('🌊 河流挡住了去路…听说码头边有一颗 boat 蛋');
+          // 码头边交互提示条已经在引导了，别再用 toast 重复念叨同一句话
+          const nearDock = Math.abs(p.x) < 8;
+          if (!nearDock) {
+            if (save.isHatched('boat')) ui.toast('🌊 河流挡路啦！回码头召唤能浮在水上的词宠吧');
+            else ui.toast('🌊 河流挡住了去路…码头边好像有一颗蛋在发光');
+          }
         }
       }
     }
@@ -1334,7 +1338,10 @@ export class Game {
           if (tries === 2) setTimeout(() => ui.toast(`💡 再想一想：${gate.riddle}`, 4200), 1600);
           else if (tries >= 3) setTimeout(() => {
             const answer = gate.need.map(wid => `「${WORD_MAP[wid].en}」${WORD_MAP[wid].zh}`).join(' ');
-            ui.toast(`💡 谜底是 ${answer}，去召唤它试试！`, 4600);
+            const allHatched = gate.need.every(wid => save.isHatched(wid));
+            ui.toast(allHatched
+              ? `💡 谜底是 ${answer}，去召唤它试试！`
+              : `💡 谜底是 ${answer}——找到它的蛋孵出来，就能召唤啦！`, 4800);
           }, 1600);
         });
       });

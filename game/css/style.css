@@ -422,7 +422,7 @@ body {
 
 /* ---------- Toast ---------- */
 #toast {
-  position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 40;
+  position: fixed; top: 150px; left: 50%; transform: translateX(-50%); z-index: 40;
   background: rgba(255,253,248,.88); border: 2px solid rgba(255,224,184,.8); color: #5C4A38;
   border-radius: 999px; padding: 10px 22px; font-size: 15px; font-weight: bold;
   box-shadow: 0 6px 18px rgba(150,110,60,.16); max-width: 80vw; text-align: center;
@@ -497,6 +497,7 @@ body {
   body.has-hungry #score-pill { display: none; }
   #quest { top: 54px; font-size: 13px; padding: 6px 14px; background: rgba(255,249,232,.68); border-color: rgba(255,224,168,.72); box-shadow: 0 3px 10px rgba(120,100,70,.12); backdrop-filter: blur(2px); }
   #daily { top: 96px; font-size: 12px; padding: 4px 12px; }
+  #toast { top: 128px; }
   #cheer { top: 18%; }
   #word-en { font-size: 38px; }
   #modal-card { padding: 16px 14px 12px; }
