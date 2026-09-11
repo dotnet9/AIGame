@@ -11,6 +11,7 @@ setAutoSpecs(AUTO_SPECS); // 海岛词宠的参数化模型配方
 
 window.THREE = THREE; // 调试句柄
 window.__save = save; // 调试句柄
+window.__ui = ui;     // 调试句柄
 window.__words = WORDS; // 调试句柄
 window.__buildPet = buildPet; // 调试句柄
 window.__petThumb = petThumbnail; // 调试句柄

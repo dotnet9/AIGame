@@ -1195,10 +1195,12 @@ export class Game {
     const word = WORD_MAP[id];
     this.currentWord = word;
     this._maybePreloadWhisper(); this._warmMic();
+    // 本地识别为主时提前常开录音：孩子按下按钮的瞬间已在收音，不丢字头
+    if (this.preferWhisper || !voiceSupported || isVoiceBroken()) this._primeRec();
     ui.openChallenge({
       word, mode: 'hatch',
       onSuccess: res => this._doHatch(word, res && res.score, res && res.via),
-      onClose: () => { this.currentWord = null; },
+      onClose: () => { this.currentWord = null; this._stopPrimeRec(); },
     });
   }
 
@@ -1933,12 +1935,12 @@ export class Game {
 
   // 打开挑战卡时悄悄预热本地识别引擎：手机上 Web Speech 多半不可用，
   // 等孩子听完示范发音、开口录音时，40MB 模型基本已在后台下好了
-  _maybePreloadWhisper() {
+  _maybePreloadWhisper(force = false) {
     if (this._whisperPreloaded) return;
     const canRecord = typeof MediaRecorder !== 'undefined'
       && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const webSpeechOk = voiceSupported && !isVoiceBroken();
-    if (!canRecord || webSpeechOk) return;   // 桌面浏览器走即时识别，不必提前下 40MB
+    if (!canRecord || (!force && webSpeechOk)) return;   // 桌面浏览器走即时识别，不必提前下 40MB
     this._whisperPreloaded = true;
     preloadWhisper();
   }
@@ -1954,15 +1956,99 @@ export class Game {
     }).catch(() => { /* 权限没给：录音时再正式提示 */ });
   }
 
+  _canRecord() {
+    return typeof MediaRecorder !== 'undefined'
+      && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  // 常开录音：挑战卡打开时就开录，闲置期只保留最近 ~3 秒。
+  // “点我开始读”最容易点了就读，等点击后才启动录音会剪掉第一个音节，
+  // 识别就只剩残词，得分永远卡在 6、70 分——提前开录后按下即收音，字头不再丢。
+  _primeRec() {
+    if (this._primeRecActive || !this._canRecord()) return;
+    this._primeRecActive = true;
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      if (!this._primeRecActive) { try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ } return; }
+      const live = stream.getAudioTracks().some(t => t.readyState === 'live');
+      if (!live) { this._primeRecActive = false; try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ } return; }
+      this.mediaStream = stream;
+      const rec = new MediaRecorder(stream);
+      this.recorder = rec;
+      this.chunks = [];
+      this._armed = false;
+      rec.ondataavailable = e => {
+        if (!(e.data && e.data.size)) return;
+        this.chunks.push(e.data);
+        if (!this._armed && this.chunks.length > 3) this.chunks.shift();
+      };
+      rec.onstop = () => this._recOnStop(rec, stream);
+      try { rec.start(1000); } catch (e) { this._primeRecActive = false; }
+    }).catch(() => { this._primeRecActive = false; });
+  }
+
+  _stopPrimeRec() {
+    this._primeRecActive = false;
+    this._armed = false;
+    clearTimeout(this._recCap);
+    if (this.recorder && this.recorder.state !== 'inactive') { try { this.recorder.stop(); } catch (e) { /* ignore */ } }
+    if (this.mediaStream) { try { this.mediaStream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ } this.mediaStream = null; }
+  }
+
+  // 录音结束的公共出口：拼 blob → 回放 → 本地识别 → 评分，然后为下次尝试重新常开
+  _recOnStop(rec, stream) {
+    clearTimeout(this._recCap);
+    try { stream && stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
+    const wasArmed = this._armed;
+    this._primeRecActive = false;
+    this._armed = false;
+    (async () => {
+      try {
+        const blob = new Blob(this.chunks, { type: rec.mimeType || 'audio/webm' });
+        // 留下孩子自己的读音，评分后可以回放对比
+        if (blob.size > 800) {
+          if (this._lastRecUrl) URL.revokeObjectURL(this._lastRecUrl);
+          this._lastRecUrl = URL.createObjectURL(blob);
+          ui.showReplay(this._lastRecUrl);
+        }
+        if (!this.currentWord) return;
+        // 只有真的录过一轮才重新常开，避免设备异常时空转
+        if ((wasArmed || blob.size > 800) && (this.preferWhisper || !voiceSupported || isVoiceBroken())) this._primeRec();
+        ui.voiceStatus('识别中…');
+        const text = await recognizeBlob(blob);
+        if (!this.currentWord) return;
+        if (!text) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
+        ui.voiceResult(matchAlt([{ transcript: text, confidence: 0.9 }], this.currentWord.en));
+      } catch (e) {
+        ui.voiceResult({ score: 0, heard: '', error: 'no-result' });
+      }
+    })();
+  }
+
   _startWhisper() {
     const word = this.currentWord;
     if (!word) return false;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
-      return this._startWebSpeech();
-    }
+    if (!this._canRecord()) return this._startWebSpeech();
     this.voiceCancelled = false;
-    // 在线识别不可用/不好用时使用本地模型；模型只在需要时加载。
-    // 首次下载有实时进度提示，孩子和家长知道在等什么、要等多久。
+    // 常开录音已在滚：按下即刻收音，零启动延迟
+    if (this._primeRecActive && this.recorder && this.recorder.state === 'recording') {
+      this._armed = true;
+      if (this.chunks.length > 2) this.chunks = this.chunks.slice(-2);   // 只留按下前 ~2 秒做缓冲
+      ui.voiceRecording();
+      // 模型若还在准备中，顺带把下载进度显示出来
+      clearInterval(this._loadTick);
+      ensureWhisper().finally(() => clearInterval(this._loadTick));
+      this._loadTick = setInterval(() => {
+        const pct = loadPercent();
+        if (pct > 0) ui.voiceStatus(`正在下载语音引擎 ${pct}%（约 40MB，只需下载一次）…`);
+      }, 400);
+      // 10 秒硬上限：倒计时归零自动收音识别，绝不让孩子干等
+      clearTimeout(this._recCap);
+      this._recCap = setTimeout(() => {
+        if (this.recorder && this.recorder.state === 'recording') { try { this.recorder.stop(); } catch (e) { /* ignore */ } }
+      }, 10000);
+      return true;
+    }
+    // 常开录音没就绪（权限刚给/第一次）：退回按下时启动的老流程
     ui.voiceStatus('正在准备语音引擎…');
     clearInterval(this._loadTick);
     this._loadTick = setInterval(() => {
@@ -1976,32 +2062,12 @@ export class Game {
           try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
           return;
         }
-        this.mediaStream = stream;
         const rec = new MediaRecorder(stream);
         this.recorder = rec;
         this.chunks = [];
+        this._armed = true;
         rec.ondataavailable = e => { if (e.data && e.data.size) this.chunks.push(e.data); };
-        rec.onstop = async () => {
-          clearTimeout(this._recCap);
-          try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
-          try {
-            const blob = new Blob(this.chunks, { type: rec.mimeType || 'audio/webm' });
-            // 留下孩子自己的读音，评分后可以回放对比
-            if (blob.size > 800) {
-              if (this._lastRecUrl) URL.revokeObjectURL(this._lastRecUrl);
-              this._lastRecUrl = URL.createObjectURL(blob);
-              ui.showReplay(this._lastRecUrl);
-            }
-            if (!this.currentWord) return;
-            ui.voiceStatus('识别中…');
-            const text = await recognizeBlob(blob);
-            if (!this.currentWord) return;
-            if (!text) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
-            ui.voiceResult(matchAlt([{ transcript: text, confidence: 0.9 }], this.currentWord.en));
-          } catch (e) {
-            ui.voiceResult({ score: 0, heard: '', error: 'no-result' });
-          }
-        };
+        rec.onstop = () => this._recOnStop(rec, stream);
         rec.start();
         ui.voiceRecording(); // “正在录音，读完再点一下”
         // 10 秒硬上限：倒计时归零自动收音识别，绝不让孩子干等
@@ -2021,7 +2087,7 @@ export class Game {
 
   _stopVoice() {
     clearTimeout(this._recCap);
-    if (this.recorder && this.recorder.state === 'recording') {
+    if (this.recorder && this.recorder.state === 'recording' && this._armed) {
       try { this.recorder.stop(); } catch (e) { /* ignore */ }
     } else {
       this.voiceCancelled = true; // 引擎还没就绪就取消了
@@ -2041,6 +2107,8 @@ export class Game {
         if (err === 'not-allowed') ui.toast('🎤 需要允许麦克风权限才能语音读单词哦（点地址栏旁的麦克风图标）', 5000);
         else if (err && err !== 'no-result') {
           this._noteVoiceMiss();
+          // Web Speech 出问题就立刻开始下载本地模型，别等下次切换时才让孩子干等
+          this._maybePreloadWhisper(true);
           if (!this.preferWhisper) ui.toast('🎤 识别不太顺，也可以点“换成拼字母块”过关', 4000);
         }
       }
