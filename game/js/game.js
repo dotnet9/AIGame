@@ -918,6 +918,13 @@ export class Game {
       cl.position.x += dt * 0.7;
       if (cl.position.x > 62) cl.position.x = -62;
     }
+    // 水面呼吸：河水轻起伏、透明度微变，岛边浪花一圈涨落，海面缓慢升降
+    if (a.water) {
+      a.water.position.y = 0.04 + Math.sin(t * 1.1) * 0.012;
+      a.water.material.opacity = 0.84 + Math.sin(t * 0.8 + 1) * 0.06;
+    }
+    if (a.surf) a.surf.material.opacity = 0.4 + Math.sin(t * 1.4) * 0.12;
+    if (a.sea) a.sea.position.y = -0.14 + Math.sin(t * 0.7) * 0.02;
     if (a.water) {
       const pos = a.water.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
