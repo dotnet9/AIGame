@@ -385,6 +385,25 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   isle.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(isle);
   world.gates.skyIsle = isle;
+  // 天空岛顶面本身也是可站平台：沿云朵阶梯跳上来后就能直接落在岛上
+  colTop(-22, 27, 6, 14);
+  // ---- 云朵阶梯：菜园南侧外圈盘旋而上，每跳要一次二段跳，跳完正好落到岛沿 ----
+  // 阶梯刻意绕开岛的正下方（在岛底下起跳永远够不到岛面）
+  {
+    const stair = [
+      [-16.8, 20.4, 1.6],
+      [-15.4, 22.4, 4.2],
+      [-14.6, 25.2, 6.8],
+      [-14.4, 28.2, 9.4],
+      [-15.6, 31.0, 11.9],
+    ];
+    for (const [x, z, top] of stair) {
+      const c = PROPS.cloud(1.1);
+      c.position.set(x, top - 0.5, z);
+      scene.add(c);
+      colTop(x, z, 1.15, top);
+    }
+  }
 
   // ---- 村庄小广场：许愿井 + 任务板 + 向日葵 + 稻草人 + 风车花 ----
   const well = place(scene, PROPS.well(), 4.6, 19.5, -0.5);

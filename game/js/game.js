@@ -550,6 +550,8 @@ export class Game {
   // ================= 指引系统 =================
   _zoneAt(p) {
     if (this.onIsle) return 'sky';
+    // 跳云梯上岛时 onIsle 不会置位，按岛面位置识别
+    if (Math.hypot(p.x + 22, p.z - 27) <= 6) return 'sky';
     const isl = this._islandAt(p);
     if (isl) return isl.key;
     if (p.x > 20.9 && p.x < 27.1 && p.z > 19.3 && p.z < 24.7) return 'barn';
