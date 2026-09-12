@@ -416,8 +416,9 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     ];
     world.anim.cloudStair = [];
     for (const [x, z, top] of stair) {
-      const c = PROPS.cloud(1.3);
+      const c = PROPS.cloud(1.15);
       c.position.set(x, top - 0.6, z);
+      c.traverse(o => { if (o.isMesh) { o.material.transparent = true; o.material.opacity = 0.8; } });
       scene.add(c);
       addPlatform(x, z, 1.35, top);
       const pf = world.platforms[world.platforms.length - 1];
@@ -531,9 +532,10 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   // ---- 云朵（抬到高处：飘太低会挡在镜头和小人之间，把地面糊成一片白） ----
   world.anim.clouds = [];
   for (let i = 0; i < 8; i++) {
-    const c = PROPS.cloud(1.4 + Math.random());
+    const c = PROPS.cloud(1.1 + Math.random() * 0.8);
     const a = Math.PI * 2 * i / 8;
-    c.position.set(Math.cos(a) * (24 + Math.random() * 16), 19 + Math.random() * 7, Math.sin(a) * (24 + Math.random() * 16));
+    c.position.set(Math.cos(a) * (24 + Math.random() * 16), 22 + Math.random() * 8, Math.sin(a) * (24 + Math.random() * 16));
+    c.traverse(o => { if (o.isMesh) { o.material.transparent = true; o.material.opacity = 0.45; o.castShadow = false; } });
     scene.add(c);
     world.anim.clouds.push(c);
   }
