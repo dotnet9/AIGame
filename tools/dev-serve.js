@@ -5,6 +5,17 @@ const path = require('path');
 const root = path.join(__dirname, '..', 'game');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg' };
 http.createServer((req, res) => {
+  // /api 存根：本地无后端也能走完注册/登录/同步流程
+  if (req.url.startsWith('/api/')) {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url.includes('pull-save')) { res.end(JSON.stringify({ save: null })); return; }
+      res.end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
   let fp = path.join(root, decodeURIComponent(req.url.split('?')[0]));
   if (fp.endsWith('/') || fp.endsWith('\\')) fp = path.join(fp, 'index.html');
   fs.readFile(fp, (err, data) => {

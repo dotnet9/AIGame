@@ -1107,7 +1107,11 @@ export function showProfile(onDone, profile = {}, options = {}) {
   let submitted = false;
   const busy = () => { start.disabled = true; start.textContent = '稍等…'; };
   const resume = () => { if (!editing) start.textContent = mode === 'login' ? '登录' : '出发去词宠岛'; };
-  const done = (semKey, password, serverScore) => { ov.classList.add('hidden'); onDone && onDone(input.value.trim(), semKey, gender, password, serverScore); };
+  const done = (semKey, password, serverScore) => {
+    const citySel = document.getElementById('profile-city');
+    if (citySel && citySel.value) setHomeCity(citySel.value);   // 档案里选的城市=巡游起点
+    ov.classList.add('hidden'); onDone && onDone(input.value.trim(), semKey, gender, password, serverScore);
+  };
   const fail = msg => {
     error.textContent = msg; submitted = false; start.disabled = false; resume();
     error.classList.remove('shake'); void error.offsetWidth; error.classList.add('shake');   // 轻轻晃一下，更醒目
