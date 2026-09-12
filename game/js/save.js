@@ -26,7 +26,7 @@ function fresh() {
     book: { sem: null, units: {} }, // 课本：选中学期 + 单元成绩 {'3a#0': {scores:[..], done:true}}
     intro: false,
     playSeconds: 0,
-    profile: { username: '', password: '', registered: false, score: 0, sessionScore: 0, gender: 'boy', stars: 0,
+    profile: { username: '', password: '', registered: false, score: 0, sessionScore: 0, gender: 'boy', stars: 0, city: 'beijing',
       wear: { hat: '', hatOwned: [], balloon: false, balloonOwned: false, wand: false, wandOwned: false } },
     daily: { day: '', idx: 0, n: 0, done: false },
     milestones: {},    // 已领取的里程碑（collect1=孵满10只、enrolled3b=换过这册）
@@ -133,6 +133,7 @@ function mergeSave(r) {
   if (rw.balloonOwned) data.profile.wear.balloonOwned = true;
   if (rw.wandOwned) data.profile.wear.wandOwned = true;
   if (!data.profile.wear.hat && rw.hat) data.profile.wear.hat = rw.hat;
+  if (r.profile?.city) data.profile.city = r.profile.city;
   if (r.intro) data.intro = true;
   data.milestones = Object.assign({}, r.milestones || {}, data.milestones);
   // 周报流水并集去重（按时间戳+内容）
@@ -344,6 +345,9 @@ export function getIntro() { return data.intro; }
 export function addPlaySeconds(s) { data.playSeconds += s; save(); }
 
 export function getUsername() { return data.profile.username || ''; }
+// 家乡城市：城市巡游的起点（IP 定位或档案卡选择）
+export function getHomeCity() { return data.profile.city || 'beijing'; }
+export function setHomeCity(id) { data.profile.city = id || 'beijing'; save(); }
 export function getScore() { return Number(data.profile.score) || 0; }
 export function getSessionScore() { return Number(data.profile.sessionScore) || 0; }
 // 登录时用服务端分数补上本机（换设备登录时本地是 0，但账号其实有分）；只升不降，避免抹掉离线攒的分

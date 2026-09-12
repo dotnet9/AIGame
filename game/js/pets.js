@@ -14,7 +14,7 @@ export class EggManager {
   }
 
   // key=true 是剧情钥匙蛋：蓝光柱 + 头顶一把小钥匙，和本关要孵的粉蛋一眼区分开
-  spawnEgg(word, golden = false, key = false, num = null) {
+  spawnEgg(word, golden = false, key = false, num = null, posOverride = null) {
     const g = new THREE.Group();
     const shellC = golden ? '#FFE9A8' : key ? '#EAF6FF' : '#FFF6F0';
     const dotC = golden ? '#FFD34E' : key ? '#A8D4F5' : '#FFC9DD';
@@ -83,8 +83,8 @@ export class EggManager {
       g.add(s);
       sparkles.push(s);
     }
-    const [x, z] = word.pos;
-    const baseY = word.zone === 'sky' ? 14 : 0;   // 高台蛋会由 game 层改写 baseY
+    const [x, z] = posOverride ? [posOverride.x, posOverride.z] : word.pos;
+    const baseY = posOverride ? (posOverride.y || 0) : (word.zone === 'sky' ? 14 : 0);   // 高台蛋会由 game 层改写 baseY
     g.position.set(x, baseY, z);
     this.scene.add(g);
     const egg = { group: g, word, shell, ring, beam, sparkles, keyTag, numTag, t: Math.random() * 9, golden, key, baseY };
@@ -137,11 +137,11 @@ export class PetManager {
     this.hearts = [];   // 飘起的爱心特效
   }
 
-  spawn(word) {
+  spawn(word, posOverride = null) {
     const g = buildPet(word.pet);
     if (word.phrase) addPhraseTag(g, word.en, word.icon);
     else addLetterTag(g, word.en[0]);
-    const [x, z] = word.pos;
+    const [x, z] = posOverride ? [posOverride.x, posOverride.z] : word.pos;
     const baseY = word.zone === 'sky' ? 14 : 0;
     g.position.set(x, baseY, z);
     this.scene.add(g);

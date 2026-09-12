@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
+import { CITY_MAP, cityRoute, cityVariant, DECO_EMOJI } from './cities.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail, speechBubbleTexture, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -82,7 +83,23 @@ export class Game {
     this.sem = save.getBookSem() || '3a';
     this.scopeWords = allWordsForSem(this.sem);
     this.chapters = chaptersFor(this.sem);
-    this.islands = islandsForSem(this.sem);
+    // 城市巡游：海岛替换为城市舞台（路线=家乡→随机→北京，seed=昵称+册 固定可续）
+    this.cityTour = true;
+    this.homeCity = save.getHomeCity();
+    const route = cityRoute(this.homeCity, this.sem, this.chapters.length, save.getUsername());
+    this.cityRouteList = route;
+    this.islands = route.map((cid, i) => {
+      const c = CITY_MAP[cid];
+      const a = (i / route.length) * Math.PI * 2 + 0.35;
+      const dist = 66 + (i % 3) * 13;
+      const v0 = cityVariant(c, 0);
+      return {
+        key: cid, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
+        cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: 13 + (i % 2) * 2,
+        landmark: c.landmark, decos: c.variants.map(v => DECO_EMOJI[v.deco] || '🏮'),
+        startChapter: i, unis: c.unis, city: c,
+      };
+    });
     this.scopeIds = new Set(this.scopeWords.map(w => w.id));
     this.total = this.scopeIds.size;
     this.riverHintCd = 0;
@@ -167,9 +184,12 @@ export class Game {
     this.player = p.group;
     this.playerParts = p.parts;
     this.player.rotation.y = Math.PI; // 面朝北（河流方向）
-    // 恢复上次的位置与朝向（存档续玩）
+    // 恢复上次的位置与朝向（存档续玩）；城市巡游模式固定出生在当前城市舞台
     const sp = save.getPlayer();
-    if (sp && typeof sp.x === 'number') {
+    if (this.cityTour) {
+      const st = this._currentStage();
+      this.player.position.set(st.cx, 0, st.cz - st.r * 0.35);
+    } else if (sp && typeof sp.x === 'number') {
       this.player.position.set(sp.x, sp.y || 0, sp.z);
       this.player.rotation.y = sp.yaw || Math.PI;
       this.camYaw = sp.camYaw || 0;
@@ -249,7 +269,7 @@ export class Game {
       if (save.isHatched(w.id)) {
         let pet = this.pets.get(w.id);
         if (!pet) {
-          pet = this.pets.spawn(w);
+          pet = this.pets.spawn(w, this._cityPos(w));
           pet.group.userData.wordId = w.id;
           const pd = save.getSave().pets[w.id];
           if (pd && pd.evo) this._applyEvolved(pet);
@@ -260,13 +280,15 @@ export class Game {
       if (this.eggs.get(w.id)) continue;
       if (cur.has(w.id)) {
         if (brickId === w.id) continue;   // 这颗蛋藏进了悬浮砖块，顶爆才掉出来
-        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', false, this.currentChapter.words.indexOf(w.id) + 1);
+        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', false, this.currentChapter.words.indexOf(w.id) + 1, this._cityPos(w));
         egg.group.userData.wordId = w.id;
         // 本关有一颗蛋放上跳跳石高台：要跳上去才够得着，加点小挑战
         if (perchId === w.id) this._putEggOnPerch(egg);
       } else if (this._pendingGateWord(w.id)) {
-        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', true);
+        const pos = this._cityPos(w);
+        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', true, null, pos);
         egg.group.userData.wordId = w.id;
+        (this._cityGatePos = this._cityGatePos || {})[w.id] = { x: pos.x, z: pos.z };
       }
     }
   }
@@ -281,7 +303,7 @@ export class Game {
 
   // 本关藏进悬浮砖块的蛋：非钥匙/天空/高台蛋，按关卡序号轮换；换关时砖块重置
   _brickEggId(perchId = null) {
-    if (!this.world.brickSpots) return null;
+    if (this.cityTour || !this.world.brickSpots) return null;   // 城市巡游：没有悬浮砖块，蛋全在城市舞台
     const pid = perchId ?? this._perchEggId();
     const GATES = ['boat', 'light', 'wind', 'seed', 'rain', 'banana'];
     const ids = this.currentChapter.words.filter(id => !GATES.includes(id) && id !== pid && WORD_MAP[id].zone !== 'sky');
@@ -298,6 +320,12 @@ export class Game {
   }
 
   _putEggOnPerch(egg) {
+    if (this.cityTour) {   // 城市巡游：高台蛋放城市舞台的观景石台上
+      const st = this._currentStage();
+      egg.baseY = 3.2;
+      egg.group.position.set(st.cx + st.r * 0.3, 3.2, st.cz - st.r * 0.3);
+      return;
+    }
     const pf = this.world.perch;
     egg.baseY = pf.top;
     egg.group.position.set(pf.x, pf.top, pf.z);
@@ -1445,6 +1473,59 @@ export class Game {
   }
 
   // ================= 玩家 =================
+  // ---------- 城市巡游 ----------
+  // 当前关对应的城市舞台（路线[章节序]）
+  _currentStage() {
+    const idx = Math.min(this.chapterIndex(this.hatchedInScope()), this.islands.length - 1);
+    return this.islands[idx] || this.islands[0];
+  }
+  // 主岛词坐标 → 当前城市舞台：保留主岛方向角，压进舞台半径（每个词有固定的新家）
+  _cityPos(word, stage = this._currentStage()) {
+    const [ox, oz] = word.pos;
+    const a = Math.atan2(oz, ox);
+    const rr = stage.r * (0.38 + 0.28 * Math.min(1, Math.hypot(ox, oz) / 52));
+    const x = stage.cx + Math.cos(a) * rr, z = stage.cz + Math.sin(a) * rr;
+    // 天空词蛋放城市高台上（地标旁的石台，跳上去够得着）
+    return word.zone === 'sky'
+      ? { x: stage.cx + stage.r * 0.3, z: stage.cz - stage.r * 0.3, y: 3.2 }
+      : { x, z, y: 0 };
+  }
+  // 换城：切舞台显隐、词宠全家迁城、玩家落在新城
+  _switchCity(stageIdx) {
+    const cur = this.islands[stageIdx];
+    if (!cur) return;
+    for (const isl of this.islands) if (isl.grp) isl.grp.visible = isl === cur;
+    for (const pt of this.pets.all()) {
+      const c2 = this._cityPos(pt.word, cur);
+      pt.group.position.set(c2.x, c2.y || 0, c2.z);
+      pt.home.set(c2.x, c2.z);
+      pt.target.set(c2.x, c2.z);
+    }
+    this.player.position.set(cur.cx, 0, cur.cz - cur.r * 0.35);
+    this.onIsle = false;
+    this._clearMoveTarget();
+  }
+  // 坐小火车回当前城市（主岛火车站触发）
+  _trainToCity() {
+    if (this.riding || this.mount) return;
+    const st = this._currentStage();
+    const from = this.player.position.clone();
+    const to = new THREE.Vector3(st.cx, 0, st.cz - st.r * 0.35);
+    this.riding = true;
+    ui.hidePrompt();
+    sfx.pop();
+    this.addTween(3.2, k => {
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      this.player.position.lerpVectors(from, to, e);
+      this.player.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
+      if (Math.random() < 0.25) this._puff(0xffffff);
+    }, () => {
+      this.riding = false;
+      this.player.position.copy(to);
+      ui.toast(`🚂 到站！欢迎来到 ${st.name} ${st.emoji}`, 3400);
+    });
+  }
+
   // 淘气词宠：读错 2 次以上的词隔天变淘气词宠出场，点它读出单词就抓住（错词复习）
   _spawnNaughty() {
     const id = save.pickNaughtyToday();
@@ -2080,6 +2161,31 @@ export class Game {
     this.riverHintCd -= dt;
   }
 
+  // 城市任务牌：钥匙词孵化后出现在孵出点（📍），机关解开自动收起
+  _refreshCityGateTags() {
+    if (!this.cityTour || !this._cityGatePos) return;
+    const needMap = { boat: 'boat', light: 'light', wind: 'wind', seed: 'planted', rain: 'beanstalk', banana: 'vines' };
+    this._cityGateTag = this._cityGateTag || {};
+    for (const [wid, pt] of Object.entries(this._cityGatePos)) {
+      const gid = needMap[wid];
+      const done = !gid || save.hasGate(gid);
+      const show = save.isHatched(wid) && !done;
+      const have = !!this._cityGateTag[wid];
+      if (show && !have) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: letterTexture('📍', '#E8C86A', '#5C4A38'), transparent: true, depthWrite: false,
+        }));
+        s.scale.setScalar(0.78);
+        s.position.set(pt.x, 2.1, pt.z);
+        this.scene.add(s);
+        this._cityGateTag[wid] = s;
+      } else if (!show && have) {
+        this.scene.remove(this._cityGateTag[wid]);
+        delete this._cityGateTag[wid];
+      }
+    }
+  }
+
   // 昼夜循环：按真实时间移动日月、调光照与雾色（18:00-6:00 进夜晚模式）
   _updateDayNight() {
     const dn = this.world.anim.dayNight;
@@ -2087,6 +2193,7 @@ export class Game {
     this._dnT = (this._dnT || 0) - 1;
     if (this._dnT > 0) return;
     this._dnT = 60;   // 约每秒一次
+    this._refreshCityGateTags();
     const hr = new Date().getHours() + new Date().getMinutes() / 60;
     const sea = this.world.anim.sea;
     if (hr < 6 || hr >= 18) {
@@ -2118,11 +2225,17 @@ export class Game {
   }
 
   // 外圈海岛懒加载：雾外的岛整组隐藏（省 draw call），走近再显示，视觉无感
+  // 城市巡游模式：只显示当前城市舞台（其他城市在雾外"等待解锁"）
   _updateIslandLOD() {
     this._lodT = (this._lodT || 0) - 1;
     if (this._lodT > 0) return;
     this._lodT = 30;   // 约每半秒检查一次
     const p = this.player.position;
+    if (this.cityTour) {
+      const cur = this._currentStage();
+      for (const isl of this.world.islands) if (isl.grp) isl.grp.visible = isl === cur;
+      return;
+    }
     for (const isl of this.world.islands) {
       if (isl.grp) isl.grp.visible = Math.hypot(p.x - isl.cx, p.z - isl.cz) < 95;
     }
@@ -2234,10 +2347,16 @@ export class Game {
       this.promptAction = () => this._openOwl();
       return;
     }
-    // 小火车站（主岛）与海岛返回台
+    // 小火车站（主岛）：城市巡游模式=回当前城市；老模式=去群岛
     if (!this._islandAt(p) && Math.hypot(p.x + 9, p.z - 9.6) < 2.8) {
-      ui.showPrompt('坐小火车去群岛', this.isTouch ? '👆' : 'E');
-      this.promptAction = () => this._openStation();
+      if (this.cityTour) {
+        const st = this._currentStage();
+        ui.showPrompt(`坐小火车回 ${st.name} ${st.emoji}`, this.isTouch ? '👆' : 'E');
+        this.promptAction = () => this._trainToCity();
+      } else {
+        ui.showPrompt('坐小火车去群岛', this.isTouch ? '👆' : 'E');
+        this.promptAction = () => this._openStation();
+      }
       return;
     }
     const hereIsl = this._islandAt(p);
@@ -2509,6 +2628,7 @@ export class Game {
   // 点了"继续冒险"：猫头鹰送奖说话 + 镜头飞向新一关第一颗蛋 → 开始横幅
   _enterChapter(doneCount) {
     const ch = this.chapters[doneCount];
+    if (this.cityTour) this._switchCity(doneCount);   // 城市巡游：直接搬到下一城
     this._owlDeliver(`第 ${doneCount + 1} 关「${ch.name}」的蛋我都备好啦，出发！`);
     const egg = ch.words.map(id => this.eggs.get(id)).find(e => e && e.group && e.group.visible);
     const go = () => {
@@ -2572,6 +2692,7 @@ export class Game {
 
   // 关卡主题换装：给第 idx 关（0 起）词蛋集中的区域布置主题装饰 + 氛围灯
   _dressChapter(idx) {
+    if (this.cityTour) return;   // 城市巡游：城市舞台自带主题装饰，不再给主岛换装
     const ch = this.chapters[idx];
     if (!ch || !this.world.dressChapter) return;
     // 统计本关词落在哪里，选蛋最多的区域
@@ -2856,6 +2977,36 @@ export class Game {
   // 猜错不惩罚（词宠摇头回家），第一次就猜对额外奖 3 颗星星。
   _activeGate() {
     const p = this.player.position;
+    // 城市巡游：机关任务牌跟着钥匙蛋走——玩家靠近任务牌（蛋的孵化点）就地解谜
+    if (this.cityTour && this._cityGatePos) {
+      const needMap = { boat: 'boat', light: 'light', wind: 'wind', seed: 'planted', rain: 'beanstalk', banana: 'vines' };
+      for (const [wid, pt] of Object.entries(this._cityGatePos)) {
+        const gid = needMap[wid];
+        if (!gid || save.hasGate(gid)) continue;
+        if (wid === 'rain' && !save.hasGate('planted')) continue;   // 先种下种子才轮到浇水
+        if (Math.hypot(p.x - pt.x, p.z - pt.z) < 4) {
+          const cfg = this._gateConfig(wid);
+          if (cfg) return { ...cfg, point: new THREE.Vector3(pt.x, 0, pt.z) };
+        }
+      }
+      return null;
+    }
+    return this._mainIsleGate(p);
+  }
+  // 钥匙词 → 机关谜语配置（城市任务牌用）
+  _gateConfig(wid) {
+    const MAP = {
+      boat: { id: 'boat', need: ['boat'], riddle: '河水挡住了去路——什么能浮在水上，带你过河？' },
+      light: { id: 'light', need: ['light'], riddle: '谷仓里黑漆漆的——谁一出现，到处都亮堂堂？' },
+      wind: { id: 'wind', need: ['wind'], riddle: '圆圆的干草球挡路了——谁看不见摸不着，却能呼呼地把它吹走？' },
+      seed: { id: 'beanstalkSeed', need: ['seed'], riddle: '菜园的泥土翻好了——把它种下去，就会发芽的是？' },
+      rain: { id: 'beanstalkRain', need: ['rain'], riddle: '豆苗咕嘟咕嘟口渴了——从云朵里落下来、花草都张嘴接住的是？' },
+      banana: { id: 'vines', need: ['banana'], riddle: '带刺的荆棘丛拦住了森林——弯弯的黄月亮、猴子最爱的水果是？' },
+    };
+    return MAP[wid] || null;
+  }
+  // 主岛实体机关（老家可玩，城市模式下非必经）
+  _mainIsleGate(p) {
     if (!save.hasGate('boat') && Math.hypot(p.x, p.z - 4.6) < 5 && Math.abs(p.x) < 8)
       return { id: 'boat', need: ['boat'], riddle: '河水挡住了去路——什么能浮在水上，带你过河？', point: new THREE.Vector3(0, 0, 2.2) };
     if (!save.hasGate('wind') && Math.hypot(p.x - 13, p.z + 6.5) < 4)

@@ -582,6 +582,12 @@ export const CITIES = [
   },
 ];
 
+// 舞台装饰类型 → emoji（cities variants 的 deco 字段）
+export const DECO_EMOJI = {
+  lantern: '🏮', chili: '🌶️', boat: '⛵', tea: '🍵', flower: '🌸', shell: '🐚',
+  palm: '🌴', bamboo: '🎍', horse: '🐴', grape: '🍇', iceflake: '❄️',
+};
+
 // ---------- 工具函数 ----------
 export const CITY_MAP = Object.fromEntries(CITIES.map(c => [c.id, c]));
 

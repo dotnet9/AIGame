@@ -189,7 +189,7 @@ function glowTexture(inner = 'rgba(255,244,214,1)', outer = 'rgba(255,244,214,0)
 export function buildWorld(scene, semIslands = ISLANDS) {
   const world = { colliders: [], anim: {}, gates: {}, platforms: [] };
   const C = world.colliders;
-  // 可站立物件：给碰撞体一个“台面高度”，跳得够高就能落上去站着（站得高看得远）
+  // 可站立物件：给碰撞体一个"台面高度"，跳得够高就能落上去站着（站得高看得远）
   const colTop = (x, z, r, top, bottom = 0, bounce = false) => {
     C.push({ t: 'c', x, z, r, top, bottom });
     world.platforms.push({ x, z, r, top, bounce });
@@ -295,7 +295,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   scene.add(surf);
   world.anim.surf = surf;
 
-  // ---- 云影：几团大暗斑贴地缓慢漂移，世界有“云过”的呼吸感 ----
+  // ---- 云影：几团大暗斑贴地缓慢漂移，世界有"云过"的呼吸感 ----
   const clouds = [];
   for (let i = 0; i < 3; i++) {
     const c = new THREE.Mesh(new THREE.CircleGeometry(7 + i * 3.5, 24).rotateX(-Math.PI / 2),
@@ -774,6 +774,10 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       const lm = cityLandmark(isl.landmark, color);
       grp.add(lm);
       colC(cx, cz, 1.4);
+      // 观景石台：天空词蛋放上面，跳上去够得着
+      box(grp, 1.6, 3.2, 1.6, '#C8B898', r * 0.3, 1.6, -r * 0.3);
+      box(grp, 2.1, 0.3, 2.1, '#D8CCA8', r * 0.3, 3.3, -r * 0.3);
+      colTop(cx + r * 0.3, cz - r * 0.3, 1.15, 3.45);
       // 中英文城市名牌
       const sign = new THREE.Sprite(letterTexture(isl.name || '', color, '#FFFDF4'));
       sign.scale.set(3.4, 0.95, 1);
