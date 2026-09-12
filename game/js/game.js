@@ -16,6 +16,15 @@ import { ensureWhisper, recognizeBlob, preloadWhisper, loadPercent } from './whi
 import { CURRICULUM } from './curriculum.js';
 
 const PLAYER_SPEED = 4.4;
+// 情景单词点：词与场景实物绑定记忆（走近弹气泡并念一遍；只启用词库里真实存在的词）
+const SCENE_WORDS = [
+  { x: -20, z: -14, en: 'apple', emoji: '🍎' },
+  { x: 13, z: -9, en: 'wind', emoji: '🌬️' },
+  { x: 22, z: 16, en: 'barn', emoji: '🏚️' },
+  { x: -24, z: 24, en: 'flower', emoji: '🌸' },
+  { x: 8, z: 42, en: 'shell', emoji: '🐚' },
+  { x: -6, z: 12, en: 'duck', emoji: '🦆' },
+].filter(s => WORD_MAP[s.en]);
 // 麦克风采集参数：回声消除 + 噪声抑制 + 自动增益 + 单声道。
 // 微信 WebView / 部分安卓默认不开这些处理，不显式要的话录音噪声大、识别明显不准
 const AUDIO_CONSTRAINTS = {
@@ -1345,6 +1354,16 @@ export class Game {
     this._zoneTimer = (this._zoneTimer || 0) + dt;
     if (this._zoneTimer < 0.6) return;
     this._zoneTimer = 0;
+    const p = this.player.position;
+    // 情景单词：走到实物旁弹气泡并念一遍（每个点 90 秒最多触发一次）
+    for (const s of SCENE_WORDS) {
+      if (this._sceneCd && this._sceneCd[s.en] > performance.now()) continue;
+      if (Math.hypot(p.x - s.x, p.z - s.z) > 2.6) continue;
+      (this._sceneCd = this._sceneCd || {})[s.en] = performance.now() + 90000;
+      this._sceneBubble(s, WORD_MAP[s.en]);
+      speak(WORD_MAP[s.en].en);
+      break;
+    }
     const z = this._zoneAt(this.player.position);
     if (z !== this.lastZone) {
       this.lastZone = z;
@@ -2493,6 +2512,23 @@ export class Game {
         }, () => { owl.rotation.y = 0; this._owlBusy = false; });
       }, 2400);
     });
+  }
+
+  // 情景单词气泡：物件上方飘出"单词+中文"，慢慢上浮消散
+  _sceneBubble(s, w) {
+    const tex = speechBubbleTexture(`${w.en} ${w.zh}`, s.emoji);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(2.4, 1.68, 1);
+    sp.position.set(s.x, 2.2, s.z);
+    this.scene.add(sp);
+    this.fx.push({
+      obj: sp, t: 0, dur: 5,
+      update: (t, dt) => {
+        sp.position.y += dt * 0.25;
+        sp.material.opacity = t > 4 ? Math.max(0, 1 - (t - 4)) : 1;
+      },
+    });
+    this._starBurst(new THREE.Vector3(s.x, 1.6, s.z), 3);
   }
 
   // 猫头鹰头顶的说话气泡（复用词宠短语气泡的绘制）
