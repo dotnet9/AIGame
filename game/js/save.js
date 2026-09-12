@@ -98,6 +98,14 @@ export function hungryPets() {
   return Object.keys(data.pets).filter(isHungry);
 }
 
+// 稀有词宠（95 分孵化）与进化形态标记
+export function markRare(id) {
+  if (data.pets[id] && !data.pets[id].rare) { data.pets[id].rare = true; save(); }
+}
+export function markEvolved(id) {
+  if (data.pets[id] && !data.pets[id].evo) { data.pets[id].evo = true; save(); }
+}
+
 export function hatchedCount() { return Object.keys(data.pets).length; }
 
 export function setGate(name) { data.gates[name] = true; save(); }

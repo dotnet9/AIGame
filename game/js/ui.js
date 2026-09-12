@@ -391,10 +391,10 @@ export function homePaw(x, y, n = 6, onDone) {
 }
 
 // +1 飘字：在屏幕坐标处冒出一个“+1”然后飘走消失
-export function floatPlusOne(x, y) {
+export function floatPlusOne(x, y, text = '+1') {
   const d = document.createElement('div');
   d.className = 'plus-one';
-  d.textContent = '+1';
+  d.textContent = text;
   d.style.left = x + 'px';
   d.style.top = y + 'px';
   document.body.appendChild(d);
@@ -971,9 +971,10 @@ export function openCatalog(entries, getThumb, meta = {}) {
     const d = document.createElement('div');
     d.className = 'cat-item ' + (e.hatched ? 'open' : 'locked') + (e.hungry ? ' hungry' : '');
     if (e.hatched) {
-      d.innerHTML = `<div class="ico"><span class="ico-ph">🐾</span></div>
+      const badge = e.evo ? '<span class="cat-badge">🌟进化</span>' : (e.rare ? '<span class="cat-badge">✨稀有</span>' : '');
+      d.innerHTML = `${badge}<div class="ico"><span class="ico-ph">🐾</span></div>
         <div class="en">${e.word.en}</div><div class="zh">${e.word.zh}</div>`;
-      d.title = e.word.story;
+      d.title = (typeof e.word.story === 'string' && e.word.story) ? e.word.story : (e.word.hint || '');
       d.addEventListener('click', () => {
         toast(`「${e.word.en}」${e.word.zh} —— ${e.word.story}`, 4200);
         speak(e.word.en);

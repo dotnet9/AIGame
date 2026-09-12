@@ -184,9 +184,13 @@ export class Game {
     const brickId = this._brickEggId(perchId);
     for (const w of this.scopeWords) {
       if (save.isHatched(w.id)) {
-        if (!this.pets.get(w.id)) {
-          const pet = this.pets.spawn(w);
+        let pet = this.pets.get(w.id);
+        if (!pet) {
+          pet = this.pets.spawn(w);
           pet.group.userData.wordId = w.id;
+          const pd = save.getSave().pets[w.id];
+          if (pd && pd.evo) this._applyEvolved(pet);
+          if (pd && pd.rare) this._applyRare(pet);
         }
         continue;
       }
@@ -1059,6 +1063,37 @@ export class Game {
     if (pushed) { pt.wait = 0; pt.target.set(pos.x + (Math.random() - 0.5) * 3, pos.z + (Math.random() - 0.5) * 3); }
   }
 
+  // 进化形态：长大一圈 + 头顶星星光环（读档后也会在 _spawnProgress 里恢复）
+  _applyEvolved(pet, celebrate = false) {
+    if (!pet || pet.evo) return;
+    pet.evo = true;
+    pet.group.scale.setScalar(1.22);
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('✨', '#FFE24E', '#FFFDF0'), transparent: true, opacity: 0.95, depthWrite: false }));
+    aura.position.set(0, 0.95, 0);
+    aura.scale.setScalar(0.5);
+    aura.name = 'evoAura';
+    pet.group.add(aura);
+    if (celebrate) {
+      ui.toast(`🌟「${pet.word.en}」进化了！变得又大又亮！+2⭐`, 4200);
+      ui.confettiBurst(60);
+      save.addStars(2);
+      ui.updateStars(save.getStars());
+      sfx.evolve();
+      this._starBurst(pet.group.position.clone().add(new THREE.Vector3(0, 1, 0)), 6);
+    }
+  }
+
+  // 稀有词宠：95 分孵出的带柔光
+  _applyRare(pet) {
+    if (!pet || pet.rare || !pet.group) return;
+    pet.rare = true;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTexture(), color: 0xFFE08A, transparent: true, opacity: 0.4, depthWrite: false }));
+    glow.position.set(0, 0.5, 0);
+    glow.scale.setScalar(1.5);
+    glow.name = 'rareGlow';
+    pet.group.add(glow);
+  }
+
   // 碰撞提示：顶到什么东西时给一句小朋友听得懂的话（按类型限频，不会刷屏）
   _showBumpHint(kind) {
     const now = performance.now();
@@ -1929,6 +1964,12 @@ export class Game {
     this.eggs.removeEgg(word.id);
     const pet = this.pets.spawn(word);
     pet.group.userData.wordId = word.id;
+    // 95 分孵出的 = 稀有词宠：带柔光入场
+    if (score >= 95) {
+      save.markRare(word.id);
+      pet.rare = true;
+      this._applyRare(pet);
+    }
     // 孵化奖励挂起：词宠胶囊的数字先不加，小人走过去后 +1 入账（见 _updateIdleLife）
     ui.petRewardBegin();
     pet.rewardPending = true;
@@ -2125,6 +2166,13 @@ export class Game {
           this.pets.celebrate(id);
           sfx.good();
           ui.toast(`🍖「${word.en}」吃饱啦，心满意足地转了个圈 +1⭐`, 3000);
+          // 喂满 3 次触发进化：长大一圈、戴上星星光环
+          const d = save.getSave().pets[id];
+          if (d && d.feeds >= 3 && !d.evo) {
+            save.markEvolved(id);
+            const pet = this.pets.get(id);
+            if (pet) this._applyEvolved(pet, true);
+          }
           this._refreshHungry();
         }, 280);
       },
@@ -2565,9 +2613,12 @@ export class Game {
     const hungrySet = new Set(save.hungryPets());
     const entries = this.scopeWords.map(w => {
       const hatched = save.isHatched(w.id);
+      const pd = hatched ? save.getSave().pets[w.id] : null;
       return {
         word: w, hatched,
         hungry: hatched && hungrySet.has(w.id),
+        rare: !!(pd && pd.rare),
+        evo: !!(pd && pd.evo),
       };
     });
     if (hungryFirst) entries.sort((a, b) => (b.hungry ? 1 : 0) - (a.hungry ? 1 : 0));
