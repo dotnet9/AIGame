@@ -14,7 +14,7 @@ export class EggManager {
   }
 
   // key=true 是剧情钥匙蛋：蓝光柱 + 头顶一把小钥匙，和本关要孵的粉蛋一眼区分开
-  spawnEgg(word, golden = false, key = false) {
+  spawnEgg(word, golden = false, key = false, num = null) {
     const g = new THREE.Group();
     const shellC = golden ? '#FFE9A8' : key ? '#EAF6FF' : '#FFF6F0';
     const dotC = golden ? '#FFD34E' : key ? '#A8D4F5' : '#FFC9DD';
@@ -38,6 +38,17 @@ export class EggManager {
       new THREE.MeshBasicMaterial({ map: letterTexture(word.icon || word.en[0], golden ? '#FFB93C' : key ? '#4A90D9' : '#FF8FB0'), transparent: true, side: THREE.DoubleSide }));
     letter.position.set(0, 0.48, 0.32);
     g.add(letter);
+    // 序号角标：本关第几个词（顶上字母牌保留学习线索，角标给进度感和辨识度）
+    let numTag = null;
+    if (num) {
+      numTag = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: letterTexture(String(num), key ? '#4A90D9' : golden ? '#FFB93C' : '#FF8FB0', '#FFFDF4'),
+        transparent: true, depthWrite: false,
+      }));
+      numTag.scale.setScalar(0.3);
+      numTag.position.set(-0.28, 0.85, 0.1);
+      g.add(numTag);
+    }
     // 底座光圈
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.035, 8, 24), M(dotC, { emissive: golden ? '#FFC94E' : key ? '#6FB9EE' : '#FF9FB6', ei: 0.7 }));
     ring.rotation.x = Math.PI / 2;
@@ -76,7 +87,7 @@ export class EggManager {
     const baseY = word.zone === 'sky' ? 14 : 0;   // 高台蛋会由 game 层改写 baseY
     g.position.set(x, baseY, z);
     this.scene.add(g);
-    const egg = { group: g, word, shell, ring, beam, sparkles, keyTag, t: Math.random() * 9, golden, key, baseY };
+    const egg = { group: g, word, shell, ring, beam, sparkles, keyTag, numTag, t: Math.random() * 9, golden, key, baseY };
     this.eggs.set(word.id, egg);
     return egg;
   }

@@ -251,7 +251,7 @@ export class Game {
       if (this.eggs.get(w.id)) continue;
       if (cur.has(w.id)) {
         if (brickId === w.id) continue;   // 这颗蛋藏进了悬浮砖块，顶爆才掉出来
-        const egg = this.eggs.spawnEgg(w, w.zone === 'sky');
+        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', false, this.currentChapter.words.indexOf(w.id) + 1);
         egg.group.userData.wordId = w.id;
         // 本关有一颗蛋放上跳跳石高台：要跳上去才够得着，加点小挑战
         if (perchId === w.id) this._putEggOnPerch(egg);
