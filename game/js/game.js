@@ -3116,6 +3116,17 @@ export class Game {
     });
   }
 
+  // 连败安抚：连续读不准时自动放宽判定（听感像就算过）并温柔鼓励，别让孩子卡在挫败感里
+  _lenientResult(alts) {
+    const r = matchAlt(alts, this.currentWord.en, (this.voiceFailStreak || 0) >= 2 ? 1 : 0);
+    if (r.ok) this.voiceFailStreak = 0;
+    else {
+      this.voiceFailStreak = (this.voiceFailStreak || 0) + 1;
+      if (this.voiceFailStreak === 3) ui.toast('🌟 读得已经很棒啦！歇口气再试一次，也可以点下面的字母块拼一拼', 4200);
+    }
+    return r;
+  }
+
   // ---------- 语音识别（优先级：Web Speech → 本地 Whisper → 字母块） ----------
   // 点击麦克风：开始录音（10 秒倒计时自动收）；再点一次：立即识别。返回 false 表示无法启动，UI 自动切字母块。
   _startVoice() {
@@ -3216,8 +3227,8 @@ export class Game {
         ui.voiceStatus('识别中…');
         const text = await recognizeBlob(blob);
         if (!this.currentWord) return;
-        if (!text) { ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
-        ui.voiceResult(matchAlt([{ transcript: text, confidence: 0.9 }], this.currentWord.en));
+        if (!text) { this.voiceFailStreak = (this.voiceFailStreak || 0) + 1; ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
+        ui.voiceResult(this._lenientResult([{ transcript: text, confidence: 0.9 }]));
       } catch (e) {
         ui.voiceResult({ score: 0, heard: '', error: 'no-result' });
       }
@@ -3302,7 +3313,7 @@ export class Game {
       alts => {
         if (!this.currentWord) return;
         if (!alts) { this._noteVoiceMiss(); ui.voiceResult({ score: 0, heard: '', error: 'no-result' }); return; }
-        ui.voiceResult(matchAlt(alts, this.currentWord.en));
+        ui.voiceResult(this._lenientResult(alts));
       },
       (listening, err) => {
         if (err === 'not-allowed') ui.toast('🎤 需要允许麦克风权限才能语音读单词哦（点地址栏旁的麦克风图标）', 5000);
