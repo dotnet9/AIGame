@@ -490,7 +490,7 @@ function showScore(score, heard, opts = {}) {
   els.scoreMsg.style.color = score >= 70 ? '#4E9A46' : '#D06A9C';
   scoreVoice(score);   // 带情绪的英文喝彩（Perfect!/Great!/Cool!/…）
   // 完美时刻的庆祝：PERFECT 彩带雨 + 震动 + 镜头微震，85+ 小彩带；顺路维护 FEVER 连击
-  if (score >= 95) { perfectStreak++; confettiBurst(80); vibrate([30, 50, 80]); dispatchEvent(new CustomEvent('wordpet:shake')); }
+  if (score >= 95) { perfectStreak++; confettiBurst(80); vibrate([30, 50, 80]); dispatchEvent(new CustomEvent('wordpet:shake')); dispatchEvent(new CustomEvent('wordpet:cheer')); }
   else { perfectStreak = 0; if (score >= 85) confettiBurst(36); }
   setFever(perfectStreak >= 3);
   if (score >= 85) { sfx.great(); setTimeout(() => sfx.magic(), 500); }

@@ -175,6 +175,12 @@ export class Game {
     this._spawnProgress();
     this.planted = save.hasGate('planted');
     this._refreshHungry();
+    // NPC：猫头鹰园丁，站在任务板旁的木桩上管每日任务链
+    const owl = PROPS.owl();
+    owl.position.set(-6.1, 0, 19.1);
+    this.scene.add(owl);
+    this.world.anim.owl = owl;
+    this.world.colliders.push({ t: 'c', x: -6.1, z: 19.1, r: 0.55 });
   }
 
   // 关卡制出蛋：已孵化的变词宠；蛋只出"当前关卡的 6 个"（粉光柱）+ 剧情还没用掉的钥匙词蛋（蓝光柱带 🔑，不算本关进度）
@@ -503,6 +509,17 @@ export class Game {
     });
     // PERFECT 庆祝的镜头微震（ui 层发事件，这里只管震）
     addEventListener('wordpet:shake', () => { this.shakeT = 0.3; });
+    // 读出 95+：全场词宠一起跳起来欢呼（错开起跳更像“此起彼伏”）
+    addEventListener('wordpet:cheer', () => {
+      for (const pt of this.pets.all()) {
+        if (pt.flying || pt.group.position.distanceTo(this.player.position) > 14) continue;
+        pt.jumping = true;
+        pt.jt = -Math.random() * 0.8;
+        if (pt.group.position.distanceTo(this.player.position) < 8) {
+          this._letterBurst(pt.group.position.clone().add(new THREE.Vector3(0, 1.2, 0)), '💛');
+        }
+      }
+    });
     // 位置存档：每 3 秒 + 离开页面时
     setInterval(() => this._savePosition(), 3000);
     addEventListener('pagehide', () => this._savePosition());
@@ -556,6 +573,7 @@ export class Game {
     this._updateWorldAnim(dt, t);
     this._updateIdleLife(dt, t);
     this._updateEvents(dt);
+    this._updateWeather(dt, t);
     this._updateGuide(t);
     this._updateZoneHint(dt);
     this._updateFx(dt);
@@ -1092,6 +1110,72 @@ export class Game {
     glow.scale.setScalar(1.5);
     glow.name = 'rareGlow';
     pet.group.add(glow);
+  }
+
+  // 猫头鹰园丁：汇报/领取今天的任务链
+  _openOwl() {
+    if (ui.challengeOpen()) return;
+    const chain = save.getChain();
+    const steps = ['孵化 1 只词宠蛋', '喂饱 1 只饿肚子的词宠', '召唤 1 次词宠帮忙'];
+    if (chain.done) {
+      ui.toast('🦉 猫头鹰园丁：今天的活儿都干完啦，明天再来找我！', 3400);
+      return;
+    }
+    const cur = steps[chain.step];
+    const prog = chain.n > 0 ? `（进度 ${chain.n}/1）` : '';
+    ui.toast(`🦉 园丁：${cur}${prog}。做完我发星星！`, 4200);
+    sfx.pop();
+  }
+
+  // 任务链结算：单步完成 +2⭐，三步全完 +4⭐
+  _chainReward(res) {
+    if (!res) return;
+    if (res.done) {
+      save.addStars(4);
+      ui.updateStars(save.getStars());
+      ui.toast('🦉 猫头鹰园丁：三件活儿全干完啦！+4⭐ 额外奖励！', 3600);
+      ui.confettiBurst(50);
+      sfx.evolve();
+    } else if (res.step !== undefined) {
+      save.addStars(2);
+      ui.updateStars(save.getStars());
+      ui.toast('🦉 猫头鹰园丁：这一件干得漂亮！+2⭐', 3000);
+    }
+  }
+
+  // ---- 天气轮换：晴/雨/雪，纯氛围不拦玩法 ----
+  _updateWeather(dt, t) {
+    const w = this._weatherState || (this._weatherState = { cur: 'clear', next: 90 + Math.random() * 90 });
+    const rain = this.world.anim.rain, snow = this.world.anim.snow, sunL = this.world.anim.sunLight;
+    w.next -= dt;
+    if (w.next <= 0) {
+      const roll = Math.random();
+      w.cur = roll < 0.55 ? 'clear' : roll < 0.8 ? 'rain' : 'snow';
+      w.next = w.cur === 'clear' ? 120 + Math.random() * 120 : 50 + Math.random() * 40;
+      if (rain) rain.visible = w.cur === 'rain';
+      if (snow) snow.visible = w.cur === 'snow';
+      if (w.cur !== 'clear') ui.toast(w.cur === 'rain' ? '🌧️ 淅淅沥沥下雨啦～' : '❄️ 下雪啦！小岛白茫茫一片真好看～', 3000);
+    }
+    if (rain && rain.visible) {
+      const pos = rain.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        let y = pos.getY(i) - dt * 26;
+        if (y < 0) y += 24;
+        pos.setY(i, y);
+      }
+      pos.needsUpdate = true;
+    }
+    if (snow && snow.visible) {
+      const pos = snow.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        let y = pos.getY(i) - dt * 2.2;
+        if (y < 0) y += 24;
+        pos.setX(i, pos.getX(i) + Math.sin(t * 0.8 + i) * dt * 0.4);
+        pos.setY(i, y);
+      }
+      pos.needsUpdate = true;
+    }
+    if (sunL) sunL.intensity += ((w.cur === 'rain' ? 1.5 : w.cur === 'snow' ? 1.9 : 2.1) - sunL.intensity) * Math.min(1, dt * 2);
   }
 
   // 碰撞提示：顶到什么东西时给一句小朋友听得懂的话（按类型限频，不会刷屏）
@@ -1786,6 +1870,12 @@ export class Game {
         return;
       }
     }
+    // 猫头鹰园丁（每日任务链）
+    if (Math.hypot(p.x + 6.1, p.z - 19.1) < 2.4) {
+      ui.showPrompt('问猫头鹰园丁领今天的任务', this.isTouch ? '👆' : 'E');
+      this.promptAction = () => this._openOwl();
+      return;
+    }
     // 小火车站（主岛）与海岛返回台
     if (!this._islandAt(p) && Math.hypot(p.x + 9, p.z - 9.6) < 2.8) {
       ui.showPrompt('坐小火车去群岛', this.isTouch ? '👆' : 'E');
@@ -1959,6 +2049,7 @@ export class Game {
     if (save.bumpDaily('hatch2') === 'done') this._afterDaily();
     // “朗读 95 分”每日任务只认真正的朗读，拼字母块不算
     if (score >= 95 && via === 'voice' && save.bumpDaily('goodread') === 'done') this._afterDaily();
+    this._chainReward(save.bumpChain('hatch'));
     const golden = !!(eggObj && eggObj.golden);
     const eggPos = eggObj ? eggObj.group.position.clone() : this.player.position.clone().add(new THREE.Vector3(0, 0.6, 0));
     this.eggs.removeEgg(word.id);
@@ -2162,6 +2253,7 @@ export class Game {
           save.addStars(ui.isFever() ? 2 : 1);
           ui.updateStars(save.getStars());
           if (save.bumpDaily('feed2') === 'done') this._afterDaily();
+          this._chainReward(save.bumpChain('feed'));
           this.pets.setHungry(id, false);
           this.pets.celebrate(id);
           sfx.good();
@@ -2245,6 +2337,7 @@ export class Game {
     const word = WORD_MAP[id];
     speak(word.en);
     const pet = this.pets.get(id);
+    this._chainReward(save.bumpChain('summon'));
     if (save.bumpDaily('summon3') === 'done') this._afterDaily();
     if (!gate) {
       // 随便召唤：小家伙飞过来打个招呼

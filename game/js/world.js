@@ -568,6 +568,25 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     world.anim.clouds.push(c);
   }
 
+  // ---- 天气粒子（雨/雪，平时隐藏；由 game 层按天气轮换显示） ----
+  const makeFall = (n, size, color, opacity) => {
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 90;
+      pos[i * 3 + 1] = Math.random() * 24;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 90;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, transparent: true, opacity, depthWrite: false, sizeAttenuation: true }));
+    pts.visible = false;
+    scene.add(pts);
+    return pts;
+  };
+  world.anim.rain = makeFall(650, 0.14, 0xa8d0f0, 0.55);
+  world.anim.snow = makeFall(420, 0.22, 0xffffff, 0.85);
+  world.anim.sunLight = sun;
+
   // ---- 蝴蝶（草甸花丛间） ----
   world.anim.butterflies = [];
   const bfCenters = [[0, 20], [-10, 25], [8, 12], [-16, 30], [12, 28], [-4, 8]];
