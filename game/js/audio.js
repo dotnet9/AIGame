@@ -8,11 +8,29 @@ fetch('audio/manifest.json').then(r => r.ok ? r.json() : null).then(m => manifes
 const audioCache = {};
 let currentAudio = null;
 
+// 语音双轨互斥的总开关：<audio> 文件播放前停 TTS，TTS 播放前停 <audio>，
+// 否则"单词文件缺失走 TTS 兜底"和"喝彩兜底/回放录音"会叠出双声
+function stopTts() {
+  try { if ('speechSynthesis' in window && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+}
+
+function stopAllPlayback() {
+  if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
+  stopTts();
+}
+
+// 喇叭此刻是否在出声（录音层用来判断"缓冲是否可能被外放音污染"）
+export function isSpeaking() {
+  if (currentAudio && !currentAudio.paused) return true;
+  try { if ('speechSynthesis' in window && (speechSynthesis.speaking || speechSynthesis.pending)) return true; } catch (e) { /* ignore */ }
+  return false;
+}
+
 function playFile(url, { cache = true } = {}) {
   return new Promise(resolve => {
     try {
-      // 互斥：新播放立刻掐掉上一段，避免连点出现重音
-      if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
+      // 互斥：新播放立刻掐掉上一段（含 TTS），避免连点出现重音/双声
+      stopAllPlayback();
       let a = cache ? audioCache[url] : null;
       if (!a) { a = new Audio(url); if (cache) audioCache[url] = a; }
       const done = ok => { a.onended = a.onerror = null; a.onloadedmetadata = null; if (currentAudio === a) currentAudio = null; resolve(ok); };
@@ -29,7 +47,7 @@ function playFile(url, { cache = true } = {}) {
 function playFileMeta(url) {
   return new Promise(resolve => {
     try {
-      if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
+      stopAllPlayback();
       const a = new Audio(url);
       const finish = (ok, dur) => { a.onended = a.onerror = a.onloadedmetadata = null; if (currentAudio === a) currentAudio = null; resolve({ ok, dur: dur || 0 }); };
       a.onloadedmetadata = () => {
@@ -87,6 +105,8 @@ function tts(text, { rate = 0.8, pitch = 1.05, onEnd } = {}) {
       setTimeout(() => tts(text, { rate, pitch, onEnd }), 120);
       return;
     }
+    // 双轨互斥：TTS 出声前掐掉正在播的 <audio>，否则两路声音叠一起
+    if (currentAudio) { try { currentAudio.pause(); } catch (e) { /* ignore */ } currentAudio = null; }
   } catch (e) { /* ignore */ }
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'en-US';

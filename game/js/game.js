@@ -11,11 +11,16 @@ import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
 import { startListening, stopListening, matchAlt, voiceSupported, isVoiceBroken, markVoiceBroken } from './speech.js';
-import { speak, sfx, stopSpeaking, setBgmMood } from './audio.js';
+import { speak, sfx, stopSpeaking, setBgmMood, isSpeaking } from './audio.js';
 import { ensureWhisper, recognizeBlob, preloadWhisper, loadPercent } from './whisper.js';
 import { CURRICULUM } from './curriculum.js';
 
 const PLAYER_SPEED = 4.4;
+// 麦克风采集参数：回声消除 + 噪声抑制 + 自动增益 + 单声道。
+// 微信 WebView / 部分安卓默认不开这些处理，不显式要的话录音噪声大、识别明显不准
+const AUDIO_CONSTRAINTS = {
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+};
 const ISLE_CENTER = { x: -22, z: 27 };
 const CLIMB_TOP = { x: -22, z: 24.2, y: 14 };
 const CLIMB_BOTTOM = { x: -22, z: 28.6, y: 0 };
@@ -2112,13 +2117,30 @@ export class Game {
     const word = WORD_MAP[id];
     this.currentWord = word;
     this._maybePreloadWhisper(); this._warmMic();
-    // 本地识别为主时提前常开录音：孩子按下按钮的瞬间已在收音，不丢字头
-    if (this.preferWhisper || !voiceSupported || isVoiceBroken()) this._primeRec();
     ui.openChallenge({
       word, mode: 'hatch',
+      // 常开录音要等示范音播完再启动：开着录就起录的话，扬声器里的示范音会被录进缓冲，
+      // 孩子一开口识别到的就是"示范音+人声"的混合，得分自然不准
+      onDemoEnd: () => this._primeRecWhenSafe(),
       onSuccess: res => this._doHatch(word, res && res.score, res && res.via),
       onClose: () => { this.currentWord = null; this._stopPrimeRec(); },
     });
+    // 保险：万一示范音链路异常没触发 onDemoEnd，7 秒后兜底开录（识别慢一点总比录不进强）
+    clearTimeout(this._primeFallback);
+    this._primeFallback = setTimeout(() => {
+      if (!this._primeRecActive && this.currentWord
+        && (this.preferWhisper || !voiceSupported || isVoiceBroken())) this._primeRecWhenSafe();
+    }, 7000);
+  }
+
+  // 常开录音的启动时机：等喇叭彻底安静（示范音/喝彩都放完）再开录，避免外放音串进缓冲
+  _primeRecWhenSafe() {
+    clearTimeout(this._primeTimer);
+    this._primeTimer = setTimeout(() => {
+      if (!this.currentWord) return;
+      if (isSpeaking()) { this._primeRecWhenSafe(); return; }   // 还在出声就再等 300ms
+      this._primeRec();
+    }, 300);
   }
 
   _doHatch(word, score = 80, via = 'voice') {
@@ -3056,6 +3078,9 @@ export class Game {
   // 点击麦克风：开始录音（10 秒倒计时自动收）；再点一次：立即识别。返回 false 表示无法启动，UI 自动切字母块。
   _startVoice() {
     if (!this.currentWord) return false;
+    // 喇叭刚才还在出声（示范音/听一听被掐掉）：滚动缓冲里很可能录进了外放音，
+    // 置标记让本次收音清空缓冲只录按下之后的声音；没在响就保留 ~2 秒缓冲，字头不丢
+    this._purgeOnArm = isSpeaking();
     stopSpeaking();                    // 示范发音立刻停，别盖过孩子的声音
     ui.showReplay(null);               // 清掉上一轮的回放按钮
     // Web Speech 在支持的浏览器里几乎立即返回结果，避免第一次朗读先下载 40MB 模型；
@@ -3082,7 +3107,7 @@ export class Game {
     if (this._micWarmed) return;
     this._micWarmed = true;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS).then(stream => {
       stream.getTracks().forEach(t => t.stop());
     }).catch(() => { /* 权限没给：录音时再正式提示 */ });
   }
@@ -3098,7 +3123,7 @@ export class Game {
   _primeRec() {
     if (this._primeRecActive || !this._canRecord()) return;
     this._primeRecActive = true;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS).then(stream => {
       if (!this._primeRecActive) { try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ } return; }
       const live = stream.getAudioTracks().some(t => t.readyState === 'live');
       if (!live) { this._primeRecActive = false; try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ } return; }
@@ -3121,6 +3146,8 @@ export class Game {
     this._primeRecActive = false;
     this._armed = false;
     clearTimeout(this._recCap);
+    clearTimeout(this._primeTimer);
+    clearTimeout(this._primeFallback);
     if (this.recorder && this.recorder.state !== 'inactive') { try { this.recorder.stop(); } catch (e) { /* ignore */ } }
     if (this.mediaStream) { try { this.mediaStream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ } this.mediaStream = null; }
   }
@@ -3163,7 +3190,8 @@ export class Game {
     // 常开录音已在滚：按下即刻收音，零启动延迟
     if (this._primeRecActive && this.recorder && this.recorder.state === 'recording') {
       this._armed = true;
-      if (this.chunks.length > 2) this.chunks = this.chunks.slice(-2);   // 只留按下前 ~2 秒做缓冲
+      if (this._purgeOnArm) this.chunks = [];                            // 缓冲可能被外放音污染：全清，只录按下后
+      else if (this.chunks.length > 2) this.chunks = this.chunks.slice(-2);   // 只留按下前 ~2 秒做缓冲
       ui.voiceRecording();
       // 模型若还在准备中，顺带把下载进度显示出来
       clearInterval(this._loadTick);
@@ -3188,7 +3216,7 @@ export class Game {
     }, 400);
     ensureWhisper().finally(() => clearInterval(this._loadTick)).then(() => {
       if (!this.currentWord) return;
-      return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      return navigator.mediaDevices.getUserMedia(AUDIO_CONSTRAINTS).then(stream => {
         if (this.voiceCancelled || this.currentWord !== word) {
           try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* ignore */ }
           return;

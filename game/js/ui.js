@@ -161,8 +161,8 @@ const ch = {
   busy: false, listening: false, canVoice: false, replayUrl: null,
 };
 
-export function openChallenge({ word, mode, onSuccess, onClose, onSkip }) {
-  ch.open = true; ch.word = word; ch.mode = mode; ch.onSuccess = onSuccess; ch.onClose = onClose; ch.onSkip = onSkip;
+export function openChallenge({ word, mode, onSuccess, onClose, onSkip, onDemoEnd }) {
+  ch.open = true; ch.word = word; ch.mode = mode; ch.onSuccess = onSuccess; ch.onClose = onClose; ch.onSkip = onSkip; ch.onDemoEnd = onDemoEnd || null;
   ch.busy = false; ch.spellMode = false; ch.listening = false; ch.replayUrl = null;
   toggleHudMenu(false);   // 弹窗打开时收起菜单
   els.modalTitle.textContent = mode === 'feed' ? '🍖 词宠饿啦，喊它的名字喂它'
@@ -201,9 +201,10 @@ export function openChallenge({ word, mode, onSuccess, onClose, onSkip }) {
     setSpellMode(true);
   }
   els.modal.classList.remove('hidden');
-  // 自动示范两遍发音（正常速 + 童声慢速文件）
+  // 自动示范两遍发音（正常速 + 童声慢速文件）；示范全部放完回调 onDemoEnd
+  // （游戏层等这一刻才开常开录音，避免示范音被录进缓冲污染识别）
   setTimeout(() => speak(word.en), 400);
-  setTimeout(() => speakSlow(word.en), 1500);
+  setTimeout(() => speakSlow(word.en, () => { if (ch.onDemoEnd) ch.onDemoEnd(); }), 1500);
 }
 
 export function closeChallenge() {
