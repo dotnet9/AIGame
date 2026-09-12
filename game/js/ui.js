@@ -196,6 +196,9 @@ export function openChallenge({ word, mode, onSuccess, onClose, onSkip, onDemoEn
   els.spellArea.classList.add('hidden');
   els.modalFoot.classList.remove('hidden');
   els.btnSkip.classList.toggle('hidden', mode !== 'practice');
+  // 详细按钮只在喂养时显示：孵化/练习时孩子专注朗读拼块，词义详情留到喂养时专注看
+  els.btnDetail.classList.toggle('hidden', mode !== 'feed');
+  if (mode === 'feed') setTimeout(() => els.btnDetail.click(), 600);   // 喂养时自动弹出词义详情
   // 能不能“读”：在线识别可用，或设备能录音（改走自带的本地识别模型）
   const canRecord = typeof MediaRecorder !== 'undefined'
     && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
