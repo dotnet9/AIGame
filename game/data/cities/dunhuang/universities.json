@@ -1,0 +1,18 @@
+{
+  "city": "dunhuang",
+  "source": "各高校官网与教育部全国高等学校名单",
+  "unis": [
+    {
+      "zh": "敦煌学院",
+      "en": "Dunhuang College",
+      "tag": null,
+      "founded": 2000,
+      "site": "https://www.dhu.edu.cn",
+      "globalRank": null,
+      "nationalRank": null,
+      "bearing": "C",
+      "history": "",
+      "campusNote": null
+    }
+  ]
+}
