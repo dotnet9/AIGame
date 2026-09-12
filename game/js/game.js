@@ -2692,11 +2692,19 @@ export class Game {
     else go();
   }
 
-  // 本册全部通关：烟花秀 + 收尾横幅
+  // 本册全部通关：烟花秀 + 走遍祖国成就卡 + 收尾横幅
   _bookDone() {
     this._fireworks();
     ui.chapterBanner('🏆 本册全部唤醒，你就是词宠岛传奇！');
     this.lockInput = false;
+    if (this.cityTour) {
+      const visited = this.cityRouteList.map(id => {
+        const c = CITY_MAP[id];
+        const v = (save.getSave().cityVisits?.[this.sem + ':' + id]) || 0;
+        return { name: c.name, emoji: cityVariant(c, Math.max(0, v - 1)).emoji };
+      });
+      setTimeout(() => ui.showTravelBadge(visited), 1800);
+    }
   }
 
   // 镜头 cinematic：飞到目标上空环视 1 秒，再回到玩家机位（与轨道相机公式一致，落回不跳变）

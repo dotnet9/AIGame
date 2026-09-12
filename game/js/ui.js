@@ -2,6 +2,8 @@
 import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice, updateBgm, isBgmMuted, setBgmMuted, setBgmFever, getAccent, setAccent } from './audio.js';
 import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.js';
 import { CURRICULUM, gradeKey } from './curriculum.js';
+import { CITIES } from './cities.js';
+import { setHomeCity } from './save.js';
 
 const $ = id => document.getElementById(id);
 const els = {};
@@ -534,6 +536,22 @@ const LANDMARK_ZH = {
   grotto: '千年石窟大佛', harbor: '船来船往的大港口',
 };
 
+// ---------- 北京终章成就卡：这一册带着词宠走过的城市 ----------
+export function showTravelBadge(cities) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '130';
+  ov.innerHTML = `<div id="travel-card">
+    <div class="tb-t">🏆 走遍祖国之旅完成！</div>
+    <div class="tb-sub">这一册你带着词宠走过了 ${cities.length} 座城市：</div>
+    <div class="tb-list">${cities.map(c => `<span class="tb-city">${c.emoji} ${c.name}</span>`).join('')}</div>
+    <div class="tb-sub">下一册，新的城市在等你～</div>
+    <button class="tb-ok">太棒了！</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('.tb-ok').onclick = () => { sfx.great(); ov.remove(); };
+}
+
 // ---------- 二选一询问卡（换册"接着玩/重新出发"等） ----------
 export function askChoice(title, sub, yesText, noText, onYes, onNo) {
   const ov = document.createElement('div');
@@ -1057,6 +1075,17 @@ export function showProfile(onDone, profile = {}, options = {}) {
     grade.value = profile.semKey[0];
     term.value = profile.semKey[1] === 'a' ? 'up' : 'down';
   }
+  // 我的城市下拉（城市巡游的起点；IP 自动定位会帮着填，这里可手动改）
+  const citySel = document.getElementById('profile-city');
+  if (citySel && !citySel.options.length) {
+    for (const c of CITIES) {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = `${c.name} ${c.en}`;
+      citySel.appendChild(o);
+    }
+  }
+  if (citySel && profile.city) citySel.value = profile.city;
+  citySel && (citySel.onchange = () => { sfx.pop(); setHomeCity(citySel.value); });
   const paint = () => {
     error.textContent = '';
     title.textContent = editing ? '我的档案' : (mode === 'login' ? '欢迎回来' : '开始前先设置学习档案');

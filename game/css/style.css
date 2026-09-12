@@ -276,6 +276,24 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 }
 #city-card #cc-go:active { transform: scale(.96); }
 
+/* ---------- 北京终章成就卡 ---------- */
+#travel-card {
+  width: min(420px, 92vw); max-height: calc(100dvh - 28px); overflow-y: auto;
+  background: linear-gradient(180deg, #FFF3D8, #FFFDF8 60%);
+  border-radius: 26px; border: 3px solid #FFD34E;
+  box-shadow: 0 20px 60px rgba(180, 130, 40, .35);
+  padding: 20px; text-align: center;
+}
+#travel-card .tb-t { font-size: 20px; font-weight: 900; color: #B47514; }
+#travel-card .tb-sub { color: #8A6B4A; font-size: 13px; font-weight: bold; margin: 8px 0; }
+#travel-card .tb-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+#travel-card .tb-city { background: #FFFDF8; border: 2px solid #FFE08A; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: bold; color: #6B5844; }
+#travel-card .tb-ok {
+  margin-top: 14px; width: 100%; padding: 11px; font-size: 15px; font-weight: 900; font-family: inherit;
+  color: #FFF; background: linear-gradient(180deg, #FFC94E, #F0A83E); border: none; border-radius: 999px; cursor: pointer;
+}
+#travel-card .tb-ok:active { transform: scale(.96); }
+
 /* ---------- 二选一询问卡 ---------- */
 #ask-card {
   width: min(360px, 90vw); background: #FFFDF8; border-radius: 22px; border: 3px solid #FFE0B8;

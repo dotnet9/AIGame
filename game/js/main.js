@@ -8,6 +8,7 @@ import * as ui from './ui.js';
 import { CURRICULUM } from './curriculum.js';
 import { AUTO_SPECS, WORDS } from './words.js';
 import { setAutoSpecs, buildPet, petThumbnail } from './models.js';
+import { CITIES } from './cities.js';
 
 setAutoSpecs(AUTO_SPECS); // 海岛词宠的参数化模型配方
 
@@ -64,6 +65,26 @@ async function begin(name, semKey, gender, password, serverScore) {
     }
   }
 }
+
+// IP 定位家乡城市：免费接口识别到城市池里的城市就自动填上（失败静默，档案卡里可手改）
+async function autoLocateCity() {
+  const cur = save.getHomeCity();
+  if (cur && cur !== 'beijing') return;   // 已经选过非默认家乡，不覆盖
+  try {
+    const ctl = new AbortController();
+    setTimeout(() => ctl.abort(), 6000);
+    const res = await fetch('https://ipapi.co/json/', { signal: ctl.signal });
+    const d = await res.json();
+    const key = String(d.city || '').toLowerCase().replace(/\s+/g, '');
+    const hit = CITIES.find(c => c.en.toLowerCase().replace(/\s+/g, '') === key || c.name === d.city);
+    if (hit) {
+      save.setHomeCity(hit.id);
+      const sel = document.getElementById('profile-city');
+      if (sel) sel.value = hit.id;
+    }
+  } catch (e) { /* 定位失败/无网络：用档案里的手动选择 */ }
+}
+autoLocateCity();
 
 // 建过档案（有昵称、选好课本）就直接续玩；否则弹窗：有昵称的走登录，没有的走注册
 if (save.getUsername() && save.isRegistered() && CURRICULUM[save.getBookSem()]) begin();
