@@ -384,6 +384,32 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 .item-card .it-name { font-size: 12px; font-weight: 900; color: #6B5844; padding: 6px 8px 0; }
 .item-card .it-name i { font-style: normal; font-weight: normal; color: #A0907E; font-size: 10px; margin-left: 4px; }
 .item-card .it-desc { font-size: 11px; color: #9C8C7A; padding: 2px 8px 8px; line-height: 1.5; }
+
+/* ---------- 牌子详情弹卡 ---------- */
+#sign-card {
+  position: relative; width: min(360px, 90vw); max-height: calc(100dvh - 40px); overflow-y: auto;
+  background: #FFFDF8; border-radius: 20px; border: 3px solid #FFE0B8;
+  box-shadow: 0 16px 40px rgba(150, 90, 50, .3); padding: 14px; text-align: center;
+}
+#sign-card .sg-img { width: 100%; height: 150px; object-fit: cover; border-radius: 12px; display: block; }
+#sign-card .sg-fb {
+  display: none; align-items: center; justify-content: center; height: 150px;
+  background: linear-gradient(135deg, #FFF3D6, #FFE3EC); border-radius: 12px; margin-bottom: 8px;
+}
+#sign-card .sg-fb span { font-size: 48px; }
+#sign-card .sg-fb:not([style*='display: none']) { margin-bottom: 8px; }
+#sign-card .sg-head { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+#sign-card .sg-head b { font-size: 18px; color: #6B5844; }
+#sign-card .sg-head .tag { font-style: normal; font-size: 11px; background: #FFF3D6; border-radius: 8px; padding: 2px 6px; }
+#sign-card .sg-en { font-size: 12px; color: #A0907E; margin-top: 2px; }
+#sign-card .sg-desc { font-size: 12px; color: #8A6B4A; line-height: 1.6; margin-top: 8px; text-align: justify; }
+#sign-card .sg-site {
+  display: inline-block; margin-top: 10px; font-size: 12px; font-weight: 900; color: #3E7CB1;
+  background: #EAF3FC; border-radius: 999px; padding: 5px 12px; text-decoration: none;
+}
+#sign-card .sg-meta { font-size: 11px; color: #9C8C7A; margin-top: 8px; }
+#sign-card .sg-hist { font-size: 11px; color: #9C8C7A; line-height: 1.6; margin-top: 6px; text-align: justify; }
+#sign-card .sg-tip { font-size: 10px; color: #B8A890; margin-top: 10px; }
 #city-card .cc-tab.on { color: #FFF; background: linear-gradient(180deg, #FFB86B, #F79A3E); border-color: #F79A3E; }
 #city-card .cc-body { min-height: 120px; }
 #city-card .cc-scene { font-weight: 900; color: #4E7A46; font-size: 14px; margin-bottom: 6px; }

@@ -621,6 +621,32 @@ const LANDMARK_ZH = {
   grotto: '千年石窟大佛', harbor: '船来船往的大港口',
 };
 
+// ---------- 牌子详情弹卡：点击城市里的大学/美食/风景立牌弹出 ----------
+const SIGN_TYPE_ZH = { uni: ['🎓', '大学'], food: ['🍜', '美食'], scene: ['🏞️', '风景名胜'] };
+export function showSignDetail(it) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '118';
+  const [emoji, typeName] = SIGN_TYPE_ZH[it.type] || ['📍', '城市名片'];
+  ov.innerHTML = `<div id="sign-card">
+    <button class="round-btn small" id="sign-close" style="position:absolute;top:12px;right:12px">✕</button>
+    ${it.img
+      ? `<img class="sg-img" src="${it.img}" alt="${it.name || it.zh || ''}"
+           onerror="this.style.display='none';this.parentElement.querySelector('.sg-fb').style.display='flex'">`
+      : ''}
+    <div class="sg-fb"><span>${emoji}</span></div>
+    <div class="sg-head"><i class="tag">${emoji} ${typeName}</i><b>${it.name || it.zh || ''}</b></div>
+    ${it.en ? `<div class="sg-en">${it.en}</div>` : ''}
+    ${it.desc ? `<div class="sg-desc">${it.desc}</div>` : ''}
+    ${it.site ? `<a class="sg-site" href="${it.site}" target="_blank" rel="noopener noreferrer">🌐 打开官网</a>` : ''}
+    ${it.founded ? `<div class="sg-meta">📅 创建于 ${it.founded} 年</div>` : ''}
+    ${it.history ? `<div class="sg-hist">${it.history}</div>` : ''}
+    <div class="sg-tip">🔊 点读英文 · 在地图上按方位探索更多牌子</div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'sign-close') ov.remove(); });
+}
+
 // ---------- 北京终章成就卡：这一册带着词宠走过的城市 ----------
 export function showTravelBadge(cities) {
   const ov = document.createElement('div');

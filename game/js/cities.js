@@ -84,6 +84,7 @@ export async function initCities({ homeId, semKey, count = 10, username = '' } =
     // 轻量列表：选择器与定位只需 id/name/en
     CITIES.length = 0;
     for (const c of _index.cities) CITIES.push({ id: c.id, name: c.name, en: c.en, region: c.region });
+    window.dispatchEvent(new Event('cities-ready'));   // 通知 UI（档案卡城市下拉等）填充
     // 巡游路线城市的完整数据
     const route = cityRoute(homeId, semKey, count, username);
     const datas = await Promise.all(route.map(id => loadCityData(id)));

@@ -247,6 +247,7 @@ export class Game {
   _initEntities() {
     this.eggs = new EggManager(this.scene);
     this.pets = new PetManager(this.scene);
+    if (this.cityTour) this._buildSigns(this._currentStage());   // 城市牌子先立好，蛋才有"牌子旁"可依
     this._spawnProgress();
     this.planted = save.hasGate('planted');
     this._refreshHungry();
@@ -287,6 +288,13 @@ export class Game {
         egg.group.userData.wordId = w.id;
         // 本关有一颗蛋放上跳跳石高台：要跳上去才够得着，加点小挑战
         if (perchId === w.id) this._putEggOnPerch(egg);
+        else if (this.cityTour && this._signEggSpots && this._signEggSpots.length && w.zone !== 'sky') {
+          // 一部分蛋按 seed 放到牌子旁边：找牌子=找蛋，探索感更强
+          const st = this._currentStage();
+          const spot = this._signEggSpots[this._hashStr(this.sem + ':' + st.key + ':' + w.id) % this._signEggSpots.length];
+          egg.group.position.set(spot.x, 0, spot.z);
+          egg.baseY = 0;
+        }
       } else if (this._pendingGateWord(w.id)) {
         if (this.cityTour) {
           // 纯城市链条：没有农场机关，剧情词蛋按普通粉蛋处理（保证本关可完成）
@@ -560,8 +568,17 @@ export class Game {
     const groundY = this.onIsle ? 14 : 0;
     const pt = new THREE.Vector3();
     if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY), pt)) return;
-    const dc = Math.hypot(pt.x, pt.z);
-    if (dc > 48) { pt.x *= 48 / dc; pt.z *= 48 / dc; }   // 别点到世界外面去
+    // 钳制范围：城市模式=当前城市岛（此前按世界原点半径 48 钳，城市岛在 80 外，
+    // 圈内点击落点必被拉到圈外——这就是"点击圈在圈外"的根因）
+    if (this.cityTour) {
+      const st = this._currentStage();
+      const dx = pt.x - st.cx, dz = pt.z - st.cz;
+      const d = Math.hypot(dx, dz), max = st.r - 0.5;
+      if (d > max) { pt.x = st.cx + dx / d * max; pt.z = st.cz + dz / d * max; }
+    } else {
+      const dc = Math.hypot(pt.x, pt.z);
+      if (dc > 48) { pt.x *= 48 / dc; pt.z *= 48 / dc; }   // 别点到世界外面去
+    }
     this.moveTarget = { x: pt.x, z: pt.z };
     this.moveMarker.position.set(pt.x, groundY + 0.06, pt.z);
     this.moveMarker.visible = true;
@@ -1526,6 +1543,7 @@ export class Game {
   _switchCity(stageIdx) {
     const cur = this.islands[stageIdx];
     if (!cur) return;
+    this._buildSigns(cur);                          // 每座城市重建自己的牌子
     for (const isl of this.islands) if (isl.grp) isl.grp.visible = isl.uid === cur.uid;
     for (const pt of this.pets.all()) {
       const c2 = this._cityPos(pt.word, cur);
@@ -1537,6 +1555,74 @@ export class Game {
     this.onIsle = false;
     this._clearMoveTarget();
   }
+  // ================= 城市牌子系统 =================
+  // 大学/美食/风景按方位(bearing)立牌，一块城市几十块；点击牌子弹出详情卡。
+  // 牌子与蛋解耦：只有一部分蛋按 seed 放在牌子旁，其余散布全城。
+  _hashStr(str) {
+    let h = 2166136261;
+    for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  _buildSigns(stage) {
+    if (!this.signGroup) { this.signGroup = new THREE.Group(); this.scene.add(this.signGroup); }
+    const grp = this.signGroup;
+    while (grp.children.length) grp.remove(grp.children[0]);
+    this._signEggSpots = [];
+    this._signList = [];
+    if (!this.cityTour || !stage || !stage.city) return;
+    const city = stage.city;
+    const DIRS = { N: [0, -1], NE: [0.7, -0.7], E: [1, 0], SE: [0.7, 0.7], S: [0, 1], SW: [-0.7, 0.7], W: [-1, 0], NW: [-0.7, -0.7] };
+    const BEARINGS = Object.keys(DIRS);
+    const buckets = {};
+    const push = (items, type, emoji) => {
+      for (const it of items || []) {
+        const b = DIRS[it.bearing] ? it.bearing : BEARINGS[this._hashStr(stage.key + it.name || it.zh) % 8];
+        (buckets[b] = buckets[b] || []).push({ ...it, type, emoji });
+      }
+    };
+    push(city.unis, 'uni', '🎓');
+    push(city.foods, 'food', '🍜');
+    push(city.scenes, 'scene', '🏞️');
+    const colorOf = { uni: '#7EC4F2', food: '#FFB46B', scene: '#8FD08F' };
+    for (const [b, items] of Object.entries(buckets)) {
+      const [dx, dz] = DIRS[b];
+      items.forEach((it, i) => {
+        const rr = stage.r * Math.min(0.85, 0.5 + i * 0.09);   // 同方位多条目按半径错开
+        const x = stage.cx + dx * rr, z = stage.cz + dz * rr;
+        const sign = this._makeSign(it, colorOf[it.type]);
+        sign.position.set(x, 0, z);
+        sign.lookAt(stage.cx, 0, stage.cz);                    // 牌面朝向城中心
+        grp.add(sign);
+        this._signList.push({ ...it, x, z });
+        if (this._signEggSpots.length < 26) {
+          this._signEggSpots.push({ x: x - dx * 1.3 + dz * 1.1, z: z - dz * 1.3 - dx * 1.1 });   // 牌子侧后方
+        }
+      });
+    }
+  }
+
+  // 低模立牌：木杆 + 类别色板 + 类别 emoji + 中文名牌（共享材质，几十块开销可控）
+  _makeSign(it, color) {
+    const g = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.5, 8),
+      new THREE.MeshStandardMaterial({ color: 0xC89A6B, roughness: 0.9 }));
+    pole.position.y = 0.75; pole.castShadow = true; g.add(pole);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.8, 0.1),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+    board.position.y = 1.75; board.castShadow = true; g.add(board);
+    const em = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: letterTexture(it.emoji || '📍', '#5B4632', '#FFFDF4'), transparent: true, depthWrite: false,
+    }));
+    em.scale.setScalar(0.6); em.position.set(0, 1.75, 0.1); g.add(em);
+    const name = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: letterTexture(it.name || it.zh || '', '#5B4632', '#FFFDF4'), transparent: true, depthWrite: false,
+    }));
+    name.scale.set(2.3, 0.62, 1); name.position.set(0, 2.55, 0); g.add(name);
+    g.traverse(o => { o.userData.sign = it; });
+    return g;
+  }
+
   // 坐小火车回当前城市（主岛火车站触发）
   _trainToCity() {
     if (this.riding || this.mount) return;
@@ -2452,6 +2538,20 @@ export class Game {
     const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
+    // 城市牌子优先：点牌看介绍（顺手读一遍英文名）
+    if (this.cityTour && this.signGroup && this.signGroup.children.length) {
+      const sh = ray.intersectObjects(this.signGroup.children, true);
+      if (sh.length) {
+        const it = sh[0].object.userData.sign;
+        if (it) {
+          sfx.pop();
+          ui.showSignDetail(it);
+          const en = it.en || (it.name || it.zh || '');
+          speak(en);
+          return;
+        }
+      }
+    }
     const targets = [];
     for (const eg of this.eggs.eggs.values()) targets.push(eg.group);
     for (const pt of this.pets.all()) targets.push(pt.group);   // 饿的喂食，饱的摸头
