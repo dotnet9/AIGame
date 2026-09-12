@@ -29,6 +29,7 @@ function fresh() {
     profile: { username: '', password: '', registered: false, score: 0, sessionScore: 0, gender: 'boy', stars: 0,
       wear: { hat: '', hatOwned: [], balloon: false, balloonOwned: false, wand: false, wandOwned: false } },
     daily: { day: '', idx: 0, n: 0, done: false },
+    milestones: {},    // 已领取的里程碑（collect1=孵满10只、enrolled3b=换过这册）
   };
 }
 
@@ -53,6 +54,7 @@ function load() {
     if (typeof merged.profile.password !== 'string') merged.profile.password = '';
     // 是否已建过档案（用来决定是否直接续玩）；老存档默认 false，下次填一次名字即可
     if (typeof merged.profile.registered !== 'boolean') merged.profile.registered = false;
+    merged.milestones = d.milestones || {};
     merged.daily = Object.assign({ day: '', idx: 0, n: 0, done: false }, d.daily || {});
     if (!merged.player) merged.player = null;
     return merged;
@@ -128,6 +130,37 @@ function mergeSave(r) {
   if (rw.wandOwned) data.profile.wear.wandOwned = true;
   if (!data.profile.wear.hat && rw.hat) data.profile.wear.hat = rw.hat;
   if (r.intro) data.intro = true;
+  data.milestones = Object.assign({}, r.milestones || {}, data.milestones);
+}
+
+// ---------- 收集里程碑：每孵满 10 只词宠解锁一份礼物（全有时送星星） ----------
+export function checkCollectReward() {
+  const count = Object.keys(data.pets).length;
+  const step = Math.floor(count / 10);
+  if (step < 1) return null;
+  data.milestones = data.milestones || {};
+  if (data.milestones['collect' + step]) return null;
+  data.milestones['collect' + step] = true;
+  const wear = data.profile.wear;
+  wear.hatOwned = wear.hatOwned || [];
+  let gift = null;
+  if (!wear.hatOwned.includes('wizard')) { wear.hatOwned.push('wizard'); gift = { emoji: '🎩', name: '魔法师帽' }; }
+  else if (!wear.hatOwned.includes('flower')) { wear.hatOwned.push('flower'); gift = { emoji: '👑', name: '花朵王冠' }; }
+  else if (!wear.balloonOwned) { wear.balloonOwned = true; gift = { emoji: '🎈', name: '红气球' }; }
+  else if (!wear.wandOwned) { wear.wandOwned = true; gift = { emoji: '🪄', name: '星星魔法棒' }; }
+  if (!gift) { data.profile.stars += 5; gift = { emoji: '⭐', name: '5 颗星星' }; }
+  save();
+  return { count, gift };
+}
+
+// 换册入学仪式：每个学期只在第一次进岛时欢迎一次；返回是否该办仪式
+export function markEnrolled(sem) {
+  data.milestones = data.milestones || {};
+  const key = 'enrolled' + sem;
+  if (data.milestones[key]) return false;
+  data.milestones[key] = true;
+  save();
+  return true;
 }
 
 export function getSave() { return data; }

@@ -606,6 +606,14 @@ export class Game {
     }
     this._initEvents();
     this._loop();
+    // 换册入学仪式：新学期第一次进岛撒花欢迎（每个学期只办一次）
+    if (save.markEnrolled(this.sem)) {
+      setTimeout(() => {
+        sfx.great();
+        ui.confettiBurst(90);
+        ui.chapterBanner(`🎒 欢迎来到 ${BOOK_LABEL(this.sem)}！新的单词之旅出发啦`);
+      }, 900);
+    }
     setInterval(() => this._refreshHungry(), 1500);
     // 指一条路：最近的可孵蛋
     setTimeout(() => {
@@ -2244,6 +2252,13 @@ export class Game {
     ui.confettiBurst(golden ? 110 : 70);
     ui.vibrate([20, 40, 20, 40, 60]);
     ui.toast(`🎉 孵化成功！「${word.en}」${word.zh} 加入图鉴啦 +${earned}⭐${golden ? ' ✨金蛋孕育的稀有词宠！' : ''}`, 3400);
+    // 收集里程碑：每孵满 10 只词宠解锁一份礼物（帽子/气球/魔棒，全有时送星星）
+    const milestone = save.checkCollectReward();
+    if (milestone) setTimeout(() => {
+      sfx.evolve();
+      ui.confettiBurst(90);
+      ui.toast(`🎁 第 ${Math.floor(milestone.count / 10) * 10} 只词宠达成！解锁${milestone.gift.name} ${milestone.gift.emoji} 快去装扮吧`, 5200);
+    }, 2200);
     speak(word.en);
     this._refreshHungry();
     this._checkFirstHatchHint();
