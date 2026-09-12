@@ -459,7 +459,7 @@ export class Game {
   // ================= 跳跃 =================
   // 最多连跳两次：地面起跳算第 1 跳，空中再按一次空格/跳 = 第 2 跳（稍微矮一点），之后只能等落地
   _jump() {
-    if (this.climbing || this.riding) return;
+    if (this.climbing || this.riding || this.mount) return;   // 骑乘时不跳（词宠驮着呢）
     if (ui.challengeOpen()) return;
     if (document.querySelector('.overlay:not(.hidden)')) return;  // 弹窗打开时不跳
     const el = document.activeElement;
@@ -1408,6 +1408,26 @@ export class Game {
   }
 
   // ================= 玩家 =================
+  // 骑词宠：跑得更快、视野更高；飞行词宠驮着飘半空。再触发一次下来
+  _ridePet(id) {
+    if (this.mount === id) {   // 下骑
+      this.mount = null; this.mountPet = null; this.mountFly = false;
+      this.player.position.y = this.onIsle ? 14 : 0;
+      this.onGround = true; this.vy = 0;
+      sfx.pop();
+      ui.hidePrompt();
+      return;
+    }
+    const pet = this.pets.get(id);
+    if (!pet) return;
+    this.mount = id;
+    this.mountPet = pet;
+    this.mountFly = !!pet.flying;
+    this.onGround = true; this.vy = 0; this.jumps = 0;
+    sfx.boing();
+    ui.toast(`骑上「${pet.word.en}」啦！${this.mountFly ? '它驮着你飘在半空' : '跑得更快了'}，再点它下来`, 3000);
+  }
+
   _updatePlayer(dt) {
     if (this.lockInput || this.climbing || this.riding) return;
     const move = this._mv = this._mv || new THREE.Vector3();
@@ -1451,8 +1471,8 @@ export class Game {
       }
     }
     const moving = move.lengthSq() > 0;
-    // 空中保留操控且带一点冲劲：方向键+空格 = 向前跳
-    const speed = PLAYER_SPEED * (this.onGround ? 1 : 1.38);
+    // 空中保留操控且带一点冲劲：方向键+空格 = 向前跳；骑词宠快 60%
+    const speed = PLAYER_SPEED * (this.mount ? 1.6 : 1) * (this.onGround ? 1 : 1.38);
     if (moving) {
       if (cameraRelative) {
         // 绕 Y 轴转 camYaw（等价于原 applyAxisAngle，不建临时对象）
@@ -1471,6 +1491,19 @@ export class Game {
     } else this.walkT += dt * 1.5;
     // 跳跃物理：support = 脚下最高的支撑面（地面或跳跳石台面）
     const pp = this.player.position;
+    // 骑词宠：贴在词宠背上（飞行词宠驮着飘），接管高度、不参与跳跃物理
+    if (this.mount && this.mountPet) {
+      const base = this.mountFly ? 1.6 : 0.72;
+      pp.y = (this.onIsle ? 14 : 0) + base + Math.sin(performance.now() / 280) * (this.mountFly ? 0.14 : 0.045);
+      this.mountPet.group.position.set(
+        pp.x - Math.sin(this.player.rotation.y) * 0.15,
+        pp.y - base + (this.mountFly ? 0.1 : 0.06),
+        pp.z - Math.cos(this.player.rotation.y) * 0.15
+      );
+      this.mountPet.group.rotation.y = this.player.rotation.y;
+      this.onGround = true; this.vy = 0; this.jumps = 0;
+      return;
+    }
     const support = this._supportAt(pp.x, pp.z);
     if (!this.onGround) {
       this.vy -= 20 * dt;
@@ -1998,6 +2031,27 @@ export class Game {
       const nearTop = this.onIsle && Math.hypot(p.x - CLIMB_TOP.x, p.z - CLIMB_TOP.z) < 2.2;
       if (nearBase) { ui.showPrompt('顺着豆藤爬上天空岛', 'E'); this.promptAction = () => this._climb(true); return; }
       if (nearTop) { ui.showPrompt('顺着豆藤滑回农场', 'E'); this.promptAction = () => this._climb(false); return; }
+    }
+    // 骑乘中：最优先提示下骑（要喂词宠/坐船先下来）
+    if (this.mount && this.mountPet) {
+      ui.showPrompt(`从「${this.mountPet.word.en}」背上下来`, this.isTouch ? '👆' : 'E');
+      this.promptAction = () => this._ridePet(this.mount);
+      return;
+    }
+    // 骑词宠：靠近自己孵化的词宠就能骑（跑得更快，飞行词宠驮着飘半空）
+    {
+      let ride = null, bd = 2.2;
+      for (const pt of this.pets.all()) {
+        if (!save.isHatched(pt.word.id) || save.isHungry(pt.word.id)) continue;
+        if (pt.group.position.y > 2) continue;
+        const d = Math.hypot(p.x - pt.group.position.x, p.z - pt.group.position.z);
+        if (d < bd) { bd = d; ride = pt; }
+      }
+      if (ride) {
+        ui.showPrompt(`骑上「${ride.word.en}」跑得更快！`, this.isTouch ? '👆' : 'E');
+        this.promptAction = () => this._ridePet(ride.word.id);
+        return;
+      }
     }
     // 坐船过河：船就停在渡口，点一下（或按 E）直接坐过去，不用自己找路
     if (save.hasGate('boat') && !this.riding
