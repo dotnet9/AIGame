@@ -29,7 +29,7 @@ window.addEventListener('error', e => {
 });
 
 let started = false;
-function begin(name, semKey, gender, password, serverScore) {
+async function begin(name, semKey, gender, password, serverScore) {
   if (started) return;
   started = true;
   try {
@@ -42,6 +42,8 @@ function begin(name, semKey, gender, password, serverScore) {
       save.setRegistered(true);
     }
     if (serverScore != null) save.syncScore(serverScore);   // 换设备登录时补上账号里的分数
+    // 换设备/重新登录：拉取服务器存档合并本地（词宠/星星/进度），失败静默走本地
+    try { await save.pullSave(); } catch (e) { /* ignore */ }
     if (semKey) save.setBookSem(semKey);
     if (gender) save.setGender(gender);
     save.resetSessionScore();

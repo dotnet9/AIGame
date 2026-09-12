@@ -422,7 +422,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   isleTree.scale.setScalar(0.8);
   isle.add(isleTree);
   isle.position.set(-22, 14, 27);
-  isle.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  isle.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });   // 不投影子：否则菜园一整片被大黑斑盖住
   scene.add(isle);
   world.gates.skyIsle = isle;
   // ---- 悬浮砖块（超级马里奥式）：跳起来用头顶爆，藏在里面的词宠蛋会掉下来 ----
@@ -671,6 +671,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     const cols = [];
     for (let i = 0; i < 6; i++) {
       const d = PROPS.dune(3.1 + Math.random() * 0.5);
+      d.scale.y *= 0.5;   // 压扁：沙墙仍挡路，但孩子能越过它看到海滩和远处，不再被大沙包糊一脸
       const dx = -27.5 + i * 11, dz = 38.2 + (i % 2) * 0.5;
       d.position.set(dx, 0, dz);
       d.rotation.y = Math.random();

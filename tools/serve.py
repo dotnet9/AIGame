@@ -102,6 +102,10 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return self._login()
         if path == "/api/update":
             return self._update()
+        if path == "/api/push-save":
+            return self._push_save()
+        if path == "/api/pull-save":
+            return self._pull_save()
         if path != "/api/score":
             return self._json(404, {"error": "not found"})
         try:
@@ -131,9 +135,53 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             write_board(rows)
         return self._json(200, row)
 
-    def _read_json_body(self):
-        length = min(int(self.headers.get("Content-Length", "0")), 4096)
+    def _read_json_body(self, max_len=4096):
+        length = min(int(self.headers.get("Content-Length", "0")), max_len)
         return json.loads(self.rfile.read(length) or b"{}")
+
+    def _check_creds(self, body):
+        """校验用户名+密码，返回账户 dict 或 None"""
+        username = str(body.get("username") or "").strip()[:20]
+        password = str(body.get("password") or "")
+        accounts = read_accounts()
+        acc = accounts.get(username)
+        if not acc or acc.get("pwd") != hash_pwd(username, password):
+            return None
+        return acc
+
+    def _push_save(self):
+        """上传完整存档（换设备同步用）"""
+        try:
+            body = self._read_json_body(max_len=131072)
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "invalid json"})
+        acc = self._check_creds(body)
+        if not acc:
+            return self._json(401, {"error": "请先登录"})
+        save = body.get("save")
+        if not isinstance(save, dict):
+            return self._json(400, {"error": "invalid save"})
+        raw = json.dumps(save, ensure_ascii=False)
+        if len(raw) > 131072:
+            return self._json(413, {"error": "存档太大"})
+        username = str(body.get("username") or "").strip()[:20]
+        with BOARD_LOCK:
+            accounts = read_accounts()
+            if username in accounts:
+                accounts[username]["save_data"] = save
+                write_accounts(accounts)
+        return self._json(200, {"ok": True})
+
+    def _pull_save(self):
+        """拉取完整存档（换设备登录时补齐历史进度）"""
+        try:
+            body = self._read_json_body()
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "invalid json"})
+        acc = self._check_creds(body)
+        if not acc:
+            return self._json(401, {"error": "请先登录"})
+        return self._json(200, {"save": acc.get("save_data") or None})
 
     def _register(self):
         try:

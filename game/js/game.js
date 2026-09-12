@@ -1639,7 +1639,8 @@ export class Game {
       }
     }
     // 河流（碰撞带 3.8 贴着水面视觉边缘 3.5，站岸滩上不再有"明明是地面却被推"的错愕感）
-    if (Math.abs(p.z) < 3.8) {
+    // 只对主岛生效：外圈海岛跨在 z=0 一带的横置岛（沙洲）不该被"虚拟河流"推回，否则成死局
+    if (!this.onIsle && !isl && Math.abs(p.x) < 34 && Math.abs(p.z) < 3.8) {
       const canCross = save.hasGate('boat') && Math.abs(p.x) < 2.0;
       if (!canCross) {
         p.z = p.z >= 0 ? 3.8 : -3.8;
@@ -2120,6 +2121,7 @@ export class Game {
   // ---------- 孵化 ----------
   _openEgg(id) {
     const word = WORD_MAP[id];
+    if (!word) return;   // 非法/过期 id 静默忽略，别让整局崩掉
     this.currentWord = word;
     this._maybePreloadWhisper(); this._warmMic();
     ui.openChallenge({

@@ -63,6 +63,71 @@ function load() {
 
 export function save() {
   try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* 隐身模式等 */ }
+  schedulePush();
+}
+
+// ---------- 跨设备存档同步：本地与服务器双写，同用户名换设备登录拉回全部进度 ----------
+let pushTimer = null;
+let lastPush = 0;
+function schedulePush() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushSaveNow, 3000);   // 防抖：一波操作只推一次
+}
+// 静默上传完整存档（离线/静态站失败就留本地，下次再推）
+export function pushSaveNow() {
+  const p = data.profile;
+  if (!p.registered || !p.username) return;
+  if (Date.now() - lastPush < 10000) return;   // 至少间隔 10 秒
+  lastPush = Date.now();
+  try {
+    fetch('/api/push-save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ username: p.username, password: p.password, save: data }),
+    }).catch(() => {});
+  } catch (e) { /* ignore */ }
+}
+// 登录时拉取服务器存档并与本地合并（换设备不丢词宠/星星/进度）；返回是否拉到了
+export async function pullSave() {
+  const p = data.profile;
+  if (!p.registered || !p.username) return false;
+  try {
+    const res = await fetch('/api/pull-save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: p.username, password: p.password }),
+    });
+    if (!res.ok) return false;
+    const out = await res.json();
+    if (!out.save || typeof out.save !== 'object') return false;
+    mergeSave(out.save);
+    save();
+    return true;
+  } catch (e) { return false; }
+}
+// 合并策略：两边都不丢——词宠并集（同 id 取更早孵化时间+喂养进度多的一边）、
+// 机关/区域/课本成绩并集、分数/星星取较大值、装扮并集
+function mergeSave(r) {
+  for (const [id, pet] of Object.entries(r.pets || {})) {
+    const local = data.pets[id];
+    if (!local) data.pets[id] = pet;
+    else {
+      local.hatchedAt = Math.min(local.hatchedAt || 0, pet.hatchedAt || 0);
+      if ((pet.feeds || 0) > (local.feeds || 0)) {
+        local.feeds = pet.feeds; local.feedStage = pet.feedStage; local.fedAt = pet.fedAt;
+      }
+    }
+  }
+  data.gates = Object.assign({}, r.gates || {}, data.gates);
+  data.visited = [...new Set([...(r.visited || []), ...(data.visited || [])])];
+  data.book.units = Object.assign({}, r.book?.units || {}, data.book.units);
+  if (!data.book.sem && r.book?.sem) data.book.sem = r.book.sem;
+  if ((r.profile?.score || 0) > getScore()) data.profile.score = Math.floor(r.profile.score);
+  if ((r.profile?.stars || 0) > getStars()) data.profile.stars = r.profile.stars;
+  const rw = r.profile?.wear || {};
+  data.profile.wear.hatOwned = [...new Set([...(rw.hatOwned || []), ...(data.profile.wear.hatOwned || [])])];
+  if (rw.balloonOwned) data.profile.wear.balloonOwned = true;
+  if (rw.wandOwned) data.profile.wear.wandOwned = true;
+  if (!data.profile.wear.hat && rw.hat) data.profile.wear.hat = rw.hat;
+  if (r.intro) data.intro = true;
 }
 
 export function getSave() { return data; }
