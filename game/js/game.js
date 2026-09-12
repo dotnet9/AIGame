@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
 import { CITY_MAP, cityRoute, cityVariant, getCityQuiz, DECO_EMOJI } from './cities.js';
 import { getCityShape } from './city-shape.js';
+import { NPCManager } from './npcs.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail, speechBubbleTexture, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -254,7 +255,7 @@ export class Game {
   _initEntities() {
     this.eggs = new EggManager(this.scene);
     this.pets = new PetManager(this.scene);
-    if (this.cityTour) this._buildSigns(this._currentStage());   // 城市牌子先立好，蛋才有"牌子旁"可依
+    if (this.cityTour) this._initCityNPCs();   // 城市牌子先立好，蛋才有"牌子旁"可依
     this._spawnProgress();
     this.planted = save.hasGate('planted');
     this._refreshHungry();
@@ -269,6 +270,17 @@ export class Game {
     // 续玩时按当前关卡恢复区域主题换装（通关演出时也会实时布置）
     const curIdx = this.chapterIndex(this.hatchedInScope());
     if (curIdx >= 0) this._dressChapter(curIdx);
+  }
+
+  // 城市NPC配角：游客/小贩/学生…走近打招呼，偶尔讲卫生安全/世界之谜小知识（问题+自答）
+  _initCityNPCs() {
+    this._buildSigns(this._currentStage());
+    this.npcs = new NPCManager(this.scene);
+    this.npcs.spawnForCity(this._currentStage(), (q, st) => this._clampCityPos(q, st));
+    import('./data.js').then(m => m.loadJson('knowledge.json')).then(k => {
+      if (!k || !this.npcs) return;
+      this.npcs.setKnowledge([...(k.hygiene || []), ...(k.world || [])]);
+    }).catch(() => {});
   }
 
   // 关卡制出蛋：已孵化的变词宠；蛋只出"当前关卡的 6 个"（粉光柱）+ 剧情还没用掉的钥匙词蛋（蓝光柱带 🔑，不算本关进度）
@@ -1551,7 +1563,8 @@ export class Game {
   _switchCity(stageIdx) {
     const cur = this.islands[stageIdx];
     if (!cur) return;
-    this._buildSigns(cur);                          // 每座城市重建自己的牌子
+    this._buildSigns(cur);
+    if (this.npcs) this.npcs.spawnForCity(cur, (q, st) => this._clampCityPos(q, st));                          // 每座城市重建自己的牌子
     for (const isl of this.islands) if (isl.grp) isl.grp.visible = isl.uid === cur.uid;
     for (const pt of this.pets.all()) {
       const c2 = this._cityPos(pt.word, cur);
@@ -2373,6 +2386,10 @@ export class Game {
       this.moveMarker.material.opacity = 0.55 + Math.sin(t * 8) * 0.3;
     }
     this.riverHintCd -= dt;
+    if (this.npcs) {
+      this.npcs.update(dt, this.player.position);
+      if (!this.npcs._bubble && Math.random() < dt * 0.12) this.npcs.tellKnowledge(this.player.position);
+    }
   }
 
   // 城市任务牌：钥匙词孵化后出现在孵出点（📍），机关解开自动收起
