@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
 import { buildWorld } from './world.js';
-import { buildPlayer, letterTexture, petThumbnail } from './models.js';
+import { buildPlayer, letterTexture, petThumbnail, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
@@ -531,6 +531,7 @@ export class Game {
     if (!save.getIntro()) {
       setTimeout(() => ui.playIntro(() => save.setIntro(true), this.isTouch, BOOK_LABEL(this.sem), this.total), 600);
     }
+    this._initEvents();
     this._loop();
     setInterval(() => this._refreshHungry(), 1500);
     // 指一条路：最近的可孵蛋
@@ -550,6 +551,7 @@ export class Game {
     this._updateCamera(dt);
     this._updateWorldAnim(dt, t);
     this._updateIdleLife(dt, t);
+    this._updateEvents(dt);
     this._updateGuide(t);
     this._updateZoneHint(dt);
     this._updateFx(dt);
@@ -766,6 +768,210 @@ export class Game {
       const want = idle ? Math.sin(t * 0.7) * 0.15 : 0;
       parts.head.rotation.y += (want - parts.head.rotation.y) * Math.min(1, dt * 5);
     }
+  }
+
+  // ================= 岛屿随机事件 =================
+  // 每隔几分钟全岛来一个限时小事件（流星雨/苹果雨/…），给“上线看看今天有什么”的期待感
+  _initEvents() {
+    this._event = { next: 40 + Math.random() * 40, active: null, items: [] };
+    this._eventKinds = {
+      meteor: { dur: 30, label: '🌠 流星雨！星星掉落在草地上了，限时去捡～' },
+      apple: { dur: 30, label: '🍎 苹果熟透掉了一地——限时去果园捡苹果！' },
+      escape: { dur: 75, label: '❗ 词宠大逃走！快去把它们找回来（跟着❗走）' },
+      merchant: { dur: 95, label: '🛒 神秘货郎来村里啦——5⭐ 一个神秘盲盒，限时开张！' },
+    };
+  }
+
+  _updateEvents(dt) {
+    const ev = this._event;
+    // 拾取：小人走近掉落物就收进兜里（+1⭐）
+    for (let i = ev.items.length - 1; i >= 0; i--) {
+      const it = ev.items[i];
+      it.life -= dt;
+      if (it.life <= 0) { this.scene.remove(it.obj); ev.items.splice(i, 1); continue; }
+      const d = Math.hypot(it.x - this.player.position.x, it.z - this.player.position.z);
+      if (d < 1.15) {
+        save.addStars(1);
+        ui.updateStars(save.getStars());
+        const vp = it.obj.position.clone().add(new THREE.Vector3(0, 0.7, 0)).project(this.camera);
+        ui.floatPlusOne((vp.x * 0.5 + 0.5) * innerWidth, (-vp.y * 0.5 + 0.5) * innerHeight, '+1⭐');
+        sfx.pop();
+        this._starBurst(it.obj.position.clone().add(new THREE.Vector3(0, 0.25, 0)), 2);
+        this.scene.remove(it.obj);
+        ev.items.splice(i, 1);
+      }
+    }
+    if (!ev.active) {
+      ev.next -= dt;
+      if (ev.next <= 0 && !ui.challengeOpen()) this._startRandomEvent();
+      return;
+    }
+    ev.active.t -= dt;
+    ev.active.spawnT -= dt;
+    if (ev.active.id === 'escape') this._escapeTick(dt);
+    if (ev.active && ev.active.spawnT <= 0 && ev.active.id !== 'escape') this._eventSpawnTick();
+    if (ev.active && ev.active.t <= 0) {
+      this._endEvent();
+      ui.toast('这一波结束啦～过一会儿还有新节目！', 2400);
+    }
+  }
+
+  _startRandomEvent() {
+    const kinds = Object.keys(this._eventKinds);
+    const id = kinds[Math.floor(Math.random() * kinds.length)];
+    this._startEvent(id);
+  }
+
+  _startEvent(id) {
+    const cfg = this._eventKinds[id];
+    if (!cfg) return;
+    const active = { id, t: cfg.dur, spawnT: 0, data: {} };
+    this._event.active = active;
+    if (id === 'escape') {
+      // 挑两只已孵化的词宠离家出走，头上顶个❗，追上去就乖乖回来
+      const cands = this.pets.all().filter(p => p.word.id !== 'boat' && !p.rewardPending);
+      for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
+      const runaways = cands.slice(0, Math.min(2, cands.length));
+      active.data.need = runaways.map(p => p.word.id);
+      for (const p of runaways) {
+        p.escape = true;
+        p.wait = 0;
+        const a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 8;
+        p.target.set(p.home.x + Math.cos(a) * r, p.home.y + Math.sin(a) * r);
+        const mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('❗', '#E85A4B', '#FFF0E0'), transparent: true, depthWrite: false }));
+        mark.position.set(0, 1.55, 0);
+        mark.scale.setScalar(0.42);
+        p.group.add(mark);
+        active.data['mark_' + p.word.id] = mark;
+      }
+      if (!runaways.length) { this._event.active = null; return; }
+    }
+    if (id === 'merchant') {
+      const cart = PROPS.merchantCart();
+      cart.position.set(0, 0, 20.8);
+      this.scene.add(cart);
+      active.data.cart = { x: 0, z: 20.8 };
+      active.data.cartGroup = cart;
+      const gift = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('🎁', '#E85A4B', '#FFF0E0'), transparent: true, depthWrite: false }));
+      gift.position.set(0, 2.35, 20.8);
+      gift.scale.setScalar(0.55);
+      this.scene.add(gift);
+      active.data.gift = gift;
+    }
+    ui.toast(cfg.label, 3600);
+    sfx.magic();
+  }
+
+  // 结束事件：清场
+  _endEvent() {
+    const ev = this._event;
+    const id = ev.active && ev.active.id;
+    for (const it of ev.items) this.scene.remove(it.obj);
+    ev.items = [];
+    if (id === 'escape') {
+      for (const p of this.pets.all()) {
+        if (p.escape) {
+          p.escape = false;
+          const mark = ev.active.data['mark_' + p.word.id];
+          if (mark) p.group.remove(mark);
+        }
+      }
+    }
+    if (id === 'merchant' && ev.active.data.cartGroup) {
+      this.scene.remove(ev.active.data.cartGroup);
+      if (ev.active.data.gift) this.scene.remove(ev.active.data.gift);
+    }
+    ev.active = null;
+    ev.next = 80 + Math.random() * 100;
+  }
+
+  // 大逃走的每帧检查：走到❗词宠身边就是“找回”
+  _escapeTick(dt) {
+    const ev = this._event;
+    const need = ev.active.data.need || [];
+    for (const id of [...need]) {
+      const pet = this.pets.get(id);
+      if (!pet || !pet.escape) continue;
+      const d = Math.hypot(pet.group.position.x - this.player.position.x, pet.group.position.z - this.player.position.z);
+      if (d < 1.5) {
+        pet.escape = false;
+        const mark = ev.active.data['mark_' + id];
+        if (mark) pet.group.remove(mark);
+        save.addStars(1);
+        ui.updateStars(save.getStars());
+        pet.jumping = true; pet.jt = 0;
+        sfx.good();
+        ui.toast(`找回了「${pet.word.en}」！它开心地蹦了起来 +1⭐`, 2600);
+        need.splice(need.indexOf(id), 1);
+      }
+    }
+    if (!need.length) { ui.toast('全部词宠都找回啦，你们真棒！', 2800); this._endEvent(); }
+  }
+
+  // 神秘盲盒：5⭐ 开一次，星星/稀有装扮随机
+  _buyMysteryBox() {
+    if (ui.challengeOpen()) return;
+    if (!save.spendStars(5)) { ui.toast('星星还不够哦——读单词就能赚星星！', 2600); return; }
+    ui.updateStars(save.getStars());
+    sfx.magic();
+    const roll = Math.random();
+    if (roll < 0.5) {
+      const n = 3 + Math.floor(Math.random() * 3);
+      save.addStars(n); ui.updateStars(save.getStars());
+      ui.toast(`🎁 拆开盲盒：+${n}⭐！`, 3000);
+    } else if (roll < 0.8) {
+      const n = 5 + Math.floor(Math.random() * 4);
+      save.addStars(n); ui.updateStars(save.getStars());
+      ui.toast(`🎁 拆开盲盒：+${n}⭐！发财啦！`, 3200);
+    } else {
+      const wear = save.getWear();
+      const pool = [];
+      if (!wear.hatOwned.includes('wizard')) pool.push({ patch: { hatOwned: [...wear.hatOwned, 'wizard'], hat: 'wizard' }, label: '魔法师帽' });
+      if (!wear.hatOwned.includes('flower')) pool.push({ patch: { hatOwned: [...wear.hatOwned, 'flower'], hat: 'flower' }, label: '花朵王冠' });
+      if (!wear.balloonOwned) pool.push({ patch: { balloonOwned: true, balloon: true }, label: '红气球' });
+      if (!wear.wandOwned) pool.push({ patch: { wandOwned: true, wand: true }, label: '星星魔法棒' });
+      if (pool.length) {
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        save.updateWear(pick.patch);
+        this._refreshPlayerLook();
+        ui.toast(`🎁 稀有好礼！抽中了${pick.label}！马上给你戴上！`, 3800);
+      } else {
+        save.addStars(6); ui.updateStars(save.getStars());
+        ui.toast('🎁 拆开盲盒：+6⭐！（装扮都集齐了呢）', 3000);
+      }
+    }
+  }
+
+  _eventSpawnTick() {
+    const ev = this._event;
+    ev.active.spawnT = ev.active.id === 'meteor' ? 1.6 : 1.3;
+    if (ev.items.length > 10) return;   // 场上够多了，先不刷
+    let x, z, tries = 0;
+    do {
+      if (ev.active.id === 'apple') { x = -30 + Math.random() * 24; z = -28 + Math.random() * 22; }
+      else { const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * 36; x = Math.cos(a) * r; z = Math.sin(a) * r; }
+      tries++;
+    } while (Math.abs(z) < 4.6 && tries < 8);
+    if (ev.active.id === 'meteor') {
+      // 流星划落的小动画
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('✦', '#FFE97A', '#FFF7D0'), transparent: true, depthWrite: false }));
+      m.position.set(x + 4, 13, z - 5);
+      m.scale.setScalar(0.9);
+      this.scene.add(m);
+      this.addTween(0.8, k => {
+        m.position.set(x + 4 * (1 - k), 13 - k * 12.4, z - 5 + k * 5);
+        m.material.rotation = k * 5;
+        m.material.opacity = 1 - k * 0.3;
+      }, () => this.scene.remove(m));
+    }
+    // 掉落物在地上等你 14 秒
+    const it = ev.active.id === 'apple'
+      ? new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), new THREE.MeshStandardMaterial({ color: '#FF9A3C', roughness: 0.5 }))
+      : new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('⭐', '#FFE24E', '#FFFDF0'), transparent: true, depthWrite: false }));
+    it.position.set(x, ev.active.id === 'apple' ? 0.22 : 0.5, z);
+    if (it.isSprite) it.scale.setScalar(0.5);
+    this.scene.add(it);
+    ev.items.push({ obj: it, x, z, life: 14 });
   }
 
   // 词宠溜达的碰撞：与小人同一套世界规则（被挡住就换个目标，不顶着墙较劲）
@@ -1463,6 +1669,15 @@ export class Game {
       ui.showPrompt('看看今日任务', this.isTouch ? '👆' : 'E');
       this.promptAction = () => this._openDailyBoard();
       return;
+    }
+    // 神秘货郎（限时事件）
+    if (this._event.active && this._event.active.id === 'merchant') {
+      const c = this._event.active.data.cart;
+      if (c && Math.hypot(p.x - c.x, p.z - c.z) < 2.6) {
+        ui.showPrompt('神秘盲盒 5⭐（按 E 拆开）', this.isTouch ? '👆' : 'E');
+        this.promptAction = () => this._buyMysteryBox();
+        return;
+      }
     }
     // 小火车站（主岛）与海岛返回台
     if (!this._islandAt(p) && Math.hypot(p.x + 9, p.z - 9.6) < 2.8) {
