@@ -638,6 +638,7 @@ export class Game {
     this._updateGuide(t);
     this._updateZoneHint(dt);
     this._updateFx(dt);
+    this._updateIslandLOD();
     this.eggs.update(dt, t);
     this.pets.update(dt, t, this.player.position);
     // 词宠溜达守规矩：不穿墙、不下河、不出世界（boat 词宠本来就漂在河里，跳过）
@@ -1988,6 +1989,17 @@ export class Game {
       this.moveMarker.material.opacity = 0.55 + Math.sin(t * 8) * 0.3;
     }
     this.riverHintCd -= dt;
+  }
+
+  // 外圈海岛懒加载：雾外的岛整组隐藏（省 draw call），走近再显示，视觉无感
+  _updateIslandLOD() {
+    this._lodT = (this._lodT || 0) - 1;
+    if (this._lodT > 0) return;
+    this._lodT = 30;   // 约每半秒检查一次
+    const p = this.player.position;
+    for (const isl of this.world.islands) {
+      if (isl.grp) isl.grp.visible = Math.hypot(p.x - isl.cx, p.z - isl.cz) < 95;
+    }
   }
 
   _updateFx(dt) {

@@ -751,10 +751,14 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       if (isl.style === 'pine') obj = PROPS.pine(0.9 + Math.random() * 0.4);
       else if (isl.style === 'house') obj = PROPS.bush(0.9 + Math.random() * 0.4);
       else obj = PROPS.tree(false);
-      place(scene, obj, x, z, Math.random() * 3);
+      // 装饰树收进岛组（局部坐标）：整岛可一键显隐（远处雾里看不清就隐藏，省 draw call）
+      obj.position.set(x - cx, 0, z - cz);
+      obj.rotation.y = Math.random() * 3;
+      obj.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      grp.add(obj);
       colC(x, z, 0.55);
     }
-    // 返回台：发光圆环 + 小信标
+    // 返回台：发光圆环 + 小信标（也收进岛组）
     const pad = new THREE.Group();
     const ringP = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.5, 32).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0xFFC94E, transparent: true, opacity: 0.65, depthWrite: false }));
@@ -763,14 +767,14 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       M('#FFD34E', { emissive: '#FFC94E', ei: 0.7 }));
     beacon.position.y = 1.1;
     pad.add(ringP, beacon);
-    pad.position.set(cx, 0, cz - 2.5);
-    scene.add(pad);
+    pad.position.set(0, 0, -2.5);
+    grp.add(pad);
     world.anim.islandPads = world.anim.islandPads || [];
     world.anim.islandPads.push({ ring: ringP, beacon });
     colC(cx, cz - 2.5, 0.8);
     grp.position.set(cx, 0, cz);
     scene.add(grp);
-    world.islands.push({ ...isl, pad: { x: cx, z: cz - 2.5 } });
+    world.islands.push({ ...isl, grp, pad: { x: cx, z: cz - 2.5 } });
   }
 
   // ---- 小火车站（主岛，去群岛的入口） ----
