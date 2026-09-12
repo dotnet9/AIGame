@@ -443,43 +443,90 @@ export function setCityPill(text, onOpen) {
   els.cityPill.onclick = () => { sfx.pop(); onOpen && onOpen(); };
 }
 
-// ---------- 城市介绍卡：分 Tab（首页/大学/美食/风景）+ 小问答 ----------
-export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
+// ---------- 城市介绍卡：顶部幻灯片图集 + 配置化 Tab（首页/大学/美食/风景/自定义）+ 小问答 ----------
+// 内容全部来自城市 JSON（gallery/unis/foods/scenes/customTabs），程序只负责渲染
+export function showCityCard({ city, variant, visit, quiz, onStar, onDone, isFinal }) {
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.style.zIndex = '120';
-  const unis = (city.unis || []).map(u =>
-    `<button type="button" class="cu-chip" data-en="${u.en}"><i class="tag ${u.tag === '985' ? 't985' : u.tag === '211' ? 't211' : 't0'}">${u.tag || '🎓'}</i>${u.zh}<i class="en">${u.en}</i></button>`).join('');
+  const age = y => y ? (new Date().getFullYear() - y) : null;
+  const tagCls = t => t === '985' ? 't985' : t === '211' ? 't211' : 't0';
+
+  // 幻灯片图集：懒加载 + 单图失败隐藏 + 全挂时回退 emoji 横幅
+  const gallery = (city.gallery || []).filter(g => g && g.img);
+  const slideHtml = gallery.length
+    ? `<div class="cc-gallery${isFinal ? ' final' : ''}" data-emoji="${variant.emoji}">
+        ${gallery.map((g, i) => `<img class="cc-slide${i === 0 ? ' on' : ''}" src="${g.img}" alt="${g.caption || city.name}"
+            loading="${i === 0 ? 'eager' : 'lazy'}"
+            onerror="this.dataset.err='1';this.classList.remove('on');if(![...this.parentElement.querySelectorAll('.cc-slide')].some(s=>!s.dataset.err))this.parentElement.classList.add('dead')">`).join('')}
+        <button type="button" class="cc-g-btn prev" aria-label="上一张">‹</button>
+        <button type="button" class="cc-g-btn next" aria-label="下一张">›</button>
+        <div class="cc-dots">${gallery.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>
+        <div class="cc-cap">${gallery[0].caption || ''}</div>
+        <div class="cc-g-fallback"><span>${variant.emoji}</span>${city.en}</div>
+      </div>`
+    : `<div class="cc-banner bn-home"><span class="cc-bn-emoji">${variant.emoji}</span><span class="cc-bn-city">${city.en}</span></div>`;
+
+  // 首页 Tab：城市历史 + 到访介绍 + 关联词点读
   const cwords = (variant.words || []).map(w =>
     `<button type="button" class="cu-chip cw" data-en="${w}">${w}</button>`).join('');
-  const foods = (city.specialties || []).map((f, i) =>
-    `<button type="button" class="cu-chip cw" data-en="${variant.words[i] || variant.words[0] || ''}">🍜 ${f}</button>`).join('');
   const q = quiz ? `<div class="cc-quiz"><b>🤔 小问答：${quiz.q}</b><div class="cc-opts">${
     quiz.opts.map((o, i) => `<button type="button" data-i="${i}">${o}</button>`).join('')
   }</div><div class="cc-quiz-rs"></div></div>` : '';
-  const banner = (emoji, cls) => `<div class="cc-banner ${cls}"><span class="cc-bn-emoji">${emoji}</span><span class="cc-bn-city">${city.en}</span></div>`;
+  const homeHtml = `
+    ${city.history ? `<div class="cc-hist">${city.history}</div>` : ''}
+    <p class="cc-p">欢迎来到 <b>${city.name} ${city.en}</b>！${variant.intro}</p>
+    <button class="cc-intro-en" data-en="${variant.introEn}">🔊 ${variant.introEn}</button>
+    ${city.importance ? `<div class="cc-imp">⭐ ${city.importance}</div>` : ''}
+    ${cwords ? `<div class="cc-sec">🗣️ 城市英文词（点点读）</div><div class="cc-chips">${cwords}</div>` : ''}
+    ${q}`;
+
+  // 大学 Tab：富卡片（点校名跳官网 + 建校年份实时算年龄 + 排名参考值）
+  const unis = (city.unis || []).map(u => {
+    const a = age(u.founded);
+    return `<div class="uni-card">
+      <button type="button" class="uni-name" data-site="${u.site || ''}" data-en="${u.en}">
+        <i class="tag ${tagCls(u.tag)}">${u.tag || '🎓'}</i>${u.zh}
+      </button>
+      <div class="uni-en">${u.en}${u.campusNote ? ` · ${u.campusNote}` : ''}</div>
+      <div class="uni-grid">
+        <span>📅 ${u.founded || '—'} 年创建</span>
+        <span class="hot">🎉 建校 ${a != null ? a : '—'} 年</span>
+        <span>🌍 全球${u.globalRank != null ? '第 ' + u.globalRank : ' —'}</span>
+        <span>🇨🇳 全国${u.nationalRank != null ? '第 ' + u.nationalRank : ' —'}</span>
+      </div>
+      ${u.history ? `<div class="uni-hist">${u.history}</div>` : ''}
+    </div>`;
+  }).join('');
+  const uniHtml = unis
+    ? `<p class="cc-p">点大学名字，去它们的官网看看（排名为公开榜单参考值）：</p><div class="uni-list">${unis}</div>`
+    : `<p class="cc-p">这座城市更出名的是风景，去看看「风景」页吧！</p>`;
+
+  // 图片卡片网格生成器（美食/风景共用）
+  const itemsHtml = (items, emoji, tip) => {
+    const cards = (items || []).map(it => `
+      <div class="item-card" data-emoji="${emoji}">
+        ${it.img ? `<img src="${it.img}" alt="${it.name}" loading="lazy"
+             onerror="this.style.display='none';this.parentElement.classList.add('noimg')">` : ''}
+        <div class="it-name">${it.name}<i>${it.en || ''}</i></div>
+        ${it.desc ? `<div class="it-desc">${it.desc}</div>` : ''}
+      </div>`).join('');
+    return cards
+      ? `<p class="cc-p">${tip}</p><div class="cc-grid">${cards}</div>`
+      : `<p class="cc-p">这座城市的秘密等你亲自去发现！</p>`;
+  };
+
+  // Tab 栏：配置数组驱动，city.customTabs 可无代码扩展
   const tabs = [
-    { id: 'home', name: '🏠 首页', html: `
-      ${banner(variant.emoji, 'bn-home')}
-      <p class="cc-p">欢迎来到 <b>${city.name} ${city.en}</b>！${variant.intro}</p>
-      <button class="cc-intro-en" data-en="${variant.introEn}">🔊 ${variant.introEn}</button>
-      ${cwords ? `<div class="cc-sec">🗣️ 城市英文词（点点读）</div><div class="cc-chips">${cwords}</div>` : ''}
-      ${q}` },
-    { id: 'uni', name: '🎓 大学', html: `
-      ${banner('🎓', 'bn-uni')}
-      <p class="cc-p">${city.name}有好多了不起的学府——点大学名字听英文发音，从小种下一颗大学梦：</p>
-      ${unis ? `<div class="cc-chips col">${unis}</div>` : `<p class="cc-p">这座城市更出名的是风景，去看看"风景"页吧！</p>`}` },
-    { id: 'food', name: '🍜 美食', html: `
-      ${banner('🍜', 'bn-food')}
-      <p class="cc-p">来到${city.name}，一定要尝尝这些特色美味：</p>
-      ${foods ? `<div class="cc-chips">${foods}</div>` : '<p class="cc-p">这座城市的秘密美食，等你亲自去发现！</p>'}` },
-    { id: 'scene', name: '🏞️ 风景', html: `
-      ${banner(variant.emoji, 'bn-scene')}
-      <p class="cc-p"><b>${LANDMARK_ZH[city.landmark] || '城市舞台'}</b>是${city.name}的名片。</p>
-      <div class="cc-intro">${variant.intro}</div>
-      ${cwords ? `<div class="cc-sec">🗣️ 风景英文词</div><div class="cc-chips">${cwords}</div>` : ''}` },
+    { id: 'home', name: '🏠 首页', html: homeHtml },
+    { id: 'uni', name: '🎓 大学', html: uniHtml },
+    { id: 'food', name: '🍜 美食', html: itemsHtml(city.foods, '🍜', `来到${city.name}，一定要尝尝这些特色美味：`) },
+    { id: 'scene', name: '🏞️ 风景', html: itemsHtml(city.scenes, '🏞️', `${city.name}的风景名胜（${LANDMARK_ZH[city.landmark] || '城市舞台'}是它的名片）：`) },
+    ...(city.customTabs || []).map(t => ({ id: t.name, name: t.name, html: t.html || '' })),
   ];
-  ov.innerHTML = `<div id="city-card">
+  ov.innerHTML = `<div id="city-card" class="${isFinal ? 'final' : ''}">
+    ${isFinal ? '<div class="cc-final-badge">🏁 终点站 · 首都</div>' : ''}
+    ${slideHtml}
     <div class="cc-emoji">${variant.emoji}</div>
     <div class="cc-name">${city.name}</div>
     <div class="cc-en">${city.en} · 第 ${visit + 1} 次到访</div>
@@ -488,6 +535,31 @@ export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
     <button id="cc-go">出发探索 →</button>
   </div>`;
   document.body.appendChild(ov);
+
+  // ---- 幻灯片逻辑：4 秒自动轮播 + 箭头 + 圆点，卡片关闭时停止 ----
+  let slideIdx = 0, slideTimer = null;
+  const gal = ov.querySelector('.cc-gallery');
+  const paintSlide = () => {
+    if (!gal) return;
+    gal.querySelectorAll('.cc-slide').forEach((s, i) => s.classList.toggle('on', i === slideIdx));
+    gal.querySelectorAll('.cc-dots i').forEach((d, i) => d.classList.toggle('on', i === slideIdx));
+    const cur = gallery[slideIdx];
+    gal.querySelector('.cc-cap').textContent = (cur && cur.caption) || '';
+    const nx = gallery[(slideIdx + 1) % gallery.length];
+    if (nx) { const pre = new Image(); pre.src = nx.img; }   // 预加载下一张
+  };
+  const moveSlide = d => {
+    if (!gallery.length) return;
+    slideIdx = (slideIdx + d + gallery.length) % gallery.length;
+    paintSlide(); sfx.pop();
+  };
+  if (gal && gallery.length > 1) {
+    slideTimer = setInterval(() => { slideIdx = (slideIdx + 1) % gallery.length; paintSlide(); }, 4000);
+    gal.querySelector('.cc-g-btn.prev').onclick = () => moveSlide(-1);
+    gal.querySelector('.cc-g-btn.next').onclick = () => moveSlide(1);
+    gal.querySelectorAll('.cc-dots i').forEach((d, i) => d.onclick = () => { slideIdx = i; paintSlide(); });
+  } else if (gal) gal.querySelector('.cc-g-btn.prev').style.display = gal.querySelector('.cc-g-btn.next').style.display = 'none';
+
   const body = ov.querySelector('.cc-body');
   ov.querySelectorAll('.cc-tab').forEach(b => {
     b.onclick = () => {
@@ -502,6 +574,18 @@ export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
   const bindChips = () => {
     body.querySelectorAll('.cu-chip, .cc-intro-en').forEach(b => {
       b.onclick = () => { sfx.pop(); if (b.dataset.en) speak(b.dataset.en); };
+    });
+    // 大学名 → 新窗口打开官网（触屏先确认，防误触离开游戏）
+    body.querySelectorAll('.uni-name').forEach(b => {
+      b.onclick = () => {
+        sfx.pop();
+        if (b.dataset.en) speak(b.dataset.en);
+        if (!b.dataset.site) return;
+        const go = () => window.open(b.dataset.site, '_blank', 'noopener,noreferrer');
+        if (matchMedia('(pointer: coarse)').matches) {
+          if (confirm(`要在新窗口打开「${b.textContent.trim()}」的官网吗？`)) go();
+        } else go();
+      };
     });
   };
   const bindQuiz = () => {
@@ -527,7 +611,7 @@ export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
   };
   bindChips();
   bindQuiz();
-  ov.querySelector('#cc-go').onclick = () => { sfx.pop(); ov.remove(); onDone && onDone(); };
+  ov.querySelector('#cc-go').onclick = () => { if (slideTimer) clearInterval(slideTimer); sfx.pop(); ov.remove(); onDone && onDone(); };
 }
 // 地标类型中文名（风景 Tab 用）
 const LANDMARK_ZH = {
@@ -1093,9 +1177,12 @@ export function showProfile(onDone, profile = {}, options = {}) {
   };
   if (citySel && !fillCityOptions()) {
     let tries = 0;
+    window.__cityFillTries = 0;
     const t = setInterval(() => {
-      if (fillCityOptions() || ++tries > 40) clearInterval(t);
+      window.__cityFillTries = ++tries;
+      if (fillCityOptions() || tries > 40) clearInterval(t);
     }, 250);
+    addEventListener('cities-ready', () => fillCityOptions(), { once: true });
   }
   citySel && (citySel.onchange = () => { sfx.pop(); setHomeCity(citySel.value); });
   const paint = () => {

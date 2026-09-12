@@ -1547,6 +1547,7 @@ export class Game {
     const visit = Math.max(0, (save.getSave().cityVisits?.[vkey] || 1) - 1);
     ui.showCityCard({
       city: st.city, variant: cityVariant(st.city, visit), visit, quiz: getCityQuiz(st.key),
+      isFinal: st.key === this.cityRouteList[this.cityRouteList.length - 1],
       onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
     });
   }
@@ -2666,6 +2667,7 @@ export class Game {
         ui.showCityCard({
           city: st.city, variant: cityVariant(st.city, visit), visit,
           quiz: getCityQuiz(st.key),
+          isFinal: st.key === this.cityRouteList[this.cityRouteList.length - 1],
           onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
           onDone: () => {
             const egg = ch.words.map(id => this.eggs.get(id)).find(e => e && e.group && e.group.visible);
