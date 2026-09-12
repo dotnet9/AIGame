@@ -6,9 +6,20 @@ import { Game } from './game.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
 import { CURRICULUM } from './curriculum.js';
-import { AUTO_SPECS, WORDS } from './words.js';
+import { AUTO_SPECS, WORDS, chaptersFor } from './words.js';
 import { setAutoSpecs, buildPet, petThumbnail } from './models.js';
-import { CITIES } from './cities.js';
+import { CITIES, initCities } from './cities.js';
+import { loadAppConfig } from './data.js';
+
+// 应用名从 game/data/app.json 读（fork 换皮不用改代码）：加载屏文案随之更新
+loadAppConfig().then(app => {
+  if (!app) return;
+  document.title = `${app.appName} ${app.appNameEn || ''}`.trim();
+  const t = document.querySelector('#loading .loading-text');
+  if (t && !document.getElementById('loading').classList.contains('done')) {
+    t.textContent = `${app.appName}正在靠岸…`;
+  }
+}).catch(() => {});
 
 setAutoSpecs(AUTO_SPECS); // 海岛词宠的参数化模型配方
 
@@ -48,6 +59,13 @@ async function begin(name, semKey, gender, password, serverScore) {
     if (semKey) save.setBookSem(semKey);
     if (gender) save.setGender(gender);
     save.resetSessionScore();
+    // 城市数据加载（路线=家乡→随机→北京，seed 稳定可续）：必须先于 Game 构造
+    await initCities({
+      homeId: save.getHomeCity(),
+      semKey: save.getBookSem() || '3a',
+      count: chaptersFor(save.getBookSem() || '3a').length,
+      username: save.getUsername(),
+    });
     const game = new Game(canvas);
     game.start();
     window.__game = game; // 调试句柄
@@ -68,8 +86,7 @@ async function begin(name, semKey, gender, password, serverScore) {
 
 // IP 定位家乡城市：免费接口识别到城市池里的城市就自动填上（失败静默，档案卡里可手改）
 async function autoLocateCity() {
-  const cur = save.getHomeCity();
-  if (cur && cur !== 'beijing') return;   // 已经选过非默认家乡，不覆盖
+  if (save.hasHomeCity()) return;   // 已经设置过家乡（含手动选择），不覆盖
   try {
     const ctl = new AbortController();
     setTimeout(() => ctl.abort(), 6000);
@@ -85,6 +102,8 @@ async function autoLocateCity() {
   } catch (e) { /* 定位失败/无网络：用档案里的手动选择 */ }
 }
 autoLocateCity();
+// 启动即预热城市索引（档案卡的城市选择器要用）；begin() 里会按确切参数再初始化一次
+initCities({ homeId: save.getHomeCity(), semKey: save.getBookSem() || '3a', count: 10, username: save.getUsername() }).catch(() => {});
 
 // 建过档案（有昵称、选好课本）就直接续玩；否则弹窗：有昵称的走登录，没有的走注册
 if (save.getUsername() && save.isRegistered() && CURRICULUM[save.getBookSem()]) begin();

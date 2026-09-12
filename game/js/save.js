@@ -348,8 +348,9 @@ export function addPlaySeconds(s) { data.playSeconds += s; save(); }
 
 export function getUsername() { return data.profile.username || ''; }
 // 家乡城市：城市巡游的起点（IP 定位或档案卡选择）
-export function getHomeCity() { return data.profile.city || 'beijing'; }
-export function setHomeCity(id) { data.profile.city = id || 'beijing'; save(); }
+export function getHomeCity() { return data.profile.city || 'chengdu'; }   // 首次未定位到城市默认成都
+export function hasHomeCity() { return !!data.profile.city; }
+export function setHomeCity(id) { data.profile.city = id || 'chengdu'; save(); }
 // 城市到访计数：返回本次是第几次到（0 起）——决定介绍版本
 export function visitCity(id) {
   data.cityVisits = data.cityVisits || {};

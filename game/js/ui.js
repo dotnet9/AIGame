@@ -4,6 +4,7 @@ import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.
 import { CURRICULUM, gradeKey } from './curriculum.js';
 import { CITIES } from './cities.js';
 import { setHomeCity } from './save.js';
+import { loadAppConfig } from './data.js';
 
 const $ = id => document.getElementById(id);
 const els = {};
@@ -1076,15 +1077,26 @@ export function showProfile(onDone, profile = {}, options = {}) {
     term.value = profile.semKey[1] === 'a' ? 'up' : 'down';
   }
   // 我的城市下拉（城市巡游的起点；IP 自动定位会帮着填，这里可手动改）
+  // CITIES 由 cities.js 异步填充：若打开瞬间还没就绪，短轮询自愈
   const citySel = document.getElementById('profile-city');
-  if (citySel && !citySel.options.length) {
+  const fillCityOptions = () => {
+    // 注意：占位 option（value=""）也算一个 option，不能用 options.length 判断
+    if (!citySel || [...citySel.options].some(o => o.value)) return true;   // 无需处理/已填好
+    if (!CITIES.length) return false;                      // 城市列表未就绪，等下一轮
     for (const c of CITIES) {
       const o = document.createElement('option');
       o.value = c.id; o.textContent = `${c.name} ${c.en}`;
       citySel.appendChild(o);
     }
+    if (profile.city) citySel.value = profile.city;
+    return true;
+  };
+  if (citySel && !fillCityOptions()) {
+    let tries = 0;
+    const t = setInterval(() => {
+      if (fillCityOptions() || ++tries > 40) clearInterval(t);
+    }, 250);
   }
-  if (citySel && profile.city) citySel.value = profile.city;
   citySel && (citySel.onchange = () => { sfx.pop(); setHomeCity(citySel.value); });
   const paint = () => {
     error.textContent = '';
@@ -1704,24 +1716,26 @@ export function toggleHudMenu(show) {
   if (els.btnMenu) els.btnMenu.textContent = open ? '✕' : '☰';
 }
 
-// ---------- 关于 ----------
-export function showAbout() {
+// ---------- 关于：品牌信息全部来自 game/data/app.json，fork 换皮不用改代码 ----------
+export async function showAbout() {
+  const app = await loadAppConfig();
   const ov = document.createElement('div');
   ov.className = 'overlay';
-  const link = (href, label) => `<a class="about-link" href="${href}" target="_blank" rel="noopener">${label}</a>`;
+  const link = (s) => s && s.url ? `<a class="about-link" href="${s.url}" target="_blank" rel="noopener">${s.label || s.url}</a>` : '';
+  const row = (icon, label, val) => val ? `<div class="about-row"><span>${icon} ${label}</span>${val}</div>` : '';
   ov.innerHTML = `
     <div id="about-card">
       <button class="round-btn small" id="about-close" style="position:absolute;top:14px;right:14px">✕</button>
-      <div class="about-emoji">🥚</div>
-      <h3>词宠岛 WordPet Island</h3>
-      <div class="about-sub">在玩中学会开口说英文 · 永无失败惩罚</div>
+      <div class="about-emoji">${app.emoji || '🥚'}</div>
+      <h3>${app.appName} ${app.appNameEn || ''}</h3>
+      <div class="about-sub">${app.tagline || ''}</div>
       <div class="about-rows">
-        <div class="about-row"><span>🎮 游戏地址</span>${link('https://qtzu.com/', 'qtzu.com')}</div>
-        <div class="about-row"><span>🧩 开源仓库</span>${link('https://github.com/dotnet9/AIGame', 'github.com/dotnet9/AIGame')}</div>
-        <div class="about-row"><span>✍️ 作者</span><b>沙漠尽头的狼</b></div>
-        <div class="about-row"><span>🌏 官方网站</span>${link('https://codewf.com/zh-CN', 'codewf.com')}</div>
+        ${row('🎮', '游戏地址', link(app.site))}
+        ${row('🧩', '开源仓库', link(app.repo))}
+        ${row('✍️', '作者', app.author ? `<b>${app.author}</b>` : '')}
+        ${row('🌏', '官方网站', link(app.authorSite))}
       </div>
-      <div class="about-tip">词宠岛 · 农场/海滩/森林与群岛，在玩中学会小学英语单词</div>
+      <div class="about-tip">${app.appName} · ${app.slogan || ''}${app.license ? ` · ${app.license} License` : ''}</div>
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'about-close') ov.remove(); });
   document.body.appendChild(ov);
