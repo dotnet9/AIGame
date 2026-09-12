@@ -1534,16 +1534,42 @@ export function buildPlayer(gender = 'boy', wear = {}) {
     armR.add(core);
     wandTip = tip;
   }
+  const eyes = [];
   for (const sx of [-1, 1]) {
-    sph(head, 0.03, '#4A4046', 0.068 * sx, 0.012, 0.158, 1, 1.35, 0.55);
+    const eye = sph(head, 0.03, '#4A4046', 0.068 * sx, 0.012, 0.158, 1, 1.35, 0.55);
+    eye.userData.eyeH = eye.scale.y;
+    eyes.push(eye);
     sph(head, 0.01, '#FFFFFF', 0.079 * sx, 0.044, 0.172);
     sph(head, 0.036, '#FFB3C1', 0.118 * sx, -0.048, 0.138, 1, 0.7, 0.4);
   }
-  return { group: g, parts: { legL, legR, armL, armR, body, head, balloon, wandTip } };
+  return { group: g, parts: { legL, legR, armL, armR, body, head, eyes, balloon, wandTip } };
 }
 
 // ================= 场景物 =================
 export const PROPS = {};
+// 地标：果园的鸟窝（两颗小小的蛋）
+PROPS.nest = () => {
+  const g = G();
+  tor(g, 0.3, 0.09, '#B98A5A', 0, 0.07, 0, Math.PI / 2);
+  sph(g, 0.065, '#FFF6EC', -0.08, 0.11, 0.02, 1, 1.25, 1);
+  sph(g, 0.065, '#BFE3F5', 0.09, 0.11, -0.03, 1, 1.25, 1);
+  return g;
+};
+// 地标：海滩的贝壳堆与小海星
+PROPS.shells = () => {
+  const g = G();
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI * 2 * i / 4 + 0.4;
+    cone(g, 0.09, 0.16, i % 2 ? '#FFE7D6' : '#FFD9E8', Math.cos(a) * 0.18, 0.07, Math.sin(a) * 0.18, -0.5, 0, a);
+  }
+  for (const [sx, sz, col] of [[0, 0, '#FF9A5C'], [0.32, 0.18, '#FFE24E']]) {
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI * 2 * i / 5;
+      box(g, 0.15, 0.028, 0.05, col, sx + Math.cos(a) * 0.085, 0.03, sz + Math.sin(a) * 0.085, 0, -a, 0);
+    }
+  }
+  return g;
+};
 
 PROPS.tree = (blossom = false) => {
   const g = G();

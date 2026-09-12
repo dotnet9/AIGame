@@ -524,6 +524,7 @@ export class Game {
     this._updatePlayer(dt);
     this._updateCamera(dt);
     this._updateWorldAnim(dt, t);
+    this._updateIdleLife(dt, t);
     this._updateGuide(t);
     this._updateZoneHint(dt);
     this._updateFx(dt);
@@ -688,6 +689,40 @@ export class Game {
   }
 
   // 区域进入提示
+  // 小人的小生命感：随机眨眼；站着不动时轻轻歪头张望
+  _updateIdleLife(dt, t) {
+    const parts = this.playerParts;
+    if (parts.eyes && parts.eyes.length) {
+      this._blinkT = (this._blinkT ?? 1.2 + Math.random() * 2) - dt;
+      if (this._blinkT <= 0) {
+        this._blinkT = 2.4 + Math.random() * 3.4;
+        this.addTween(0.18, k => {
+          const s = k < 0.5 ? 1 - k * 2 : (k - 0.5) * 2;
+          for (const e of parts.eyes) e.scale.y = (e.userData.eyeH || 1) * Math.max(0.08, s);
+        }, () => { for (const e of parts.eyes) e.scale.y = e.userData.eyeH || 1; });
+      }
+    }
+    if (parts.head) {
+      const idle = !this._mv || this._mv.lengthSq() < 0.02;
+      const want = idle ? Math.sin(t * 0.7) * 0.15 : 0;
+      parts.head.rotation.y += (want - parts.head.rotation.y) * Math.min(1, dt * 5);
+    }
+  }
+
+  // 碰撞提示：顶到什么东西时给一句小朋友听得懂的话（按类型限频，不会刷屏）
+  _showBumpHint(kind) {
+    const now = performance.now();
+    this._hintCd = this._hintCd || {};
+    if (now - (this._hintCd[kind] || 0) < 7000) return;
+    this._hintCd[kind] = now;
+    const texts = {
+      rail: '🚧 栏杆过不去哦——跳一下就能翻过去！',
+      wall: '🧱 这里过不去哦，换个方向走走～',
+      sea: '🌊 前面就是大海啦，小心别掉下去咯～',
+    };
+    ui.toast(texts[kind], 2400);
+  }
+
   _updateZoneHint(dt) {
     this._zoneTimer = (this._zoneTimer || 0) + dt;
     if (this._zoneTimer < 0.6) return;
@@ -704,7 +739,9 @@ export class Game {
         sky: '天空岛 · 传说中的金色词宠蛋！',
         beach: '阳光海滩 · 听！是海浪的声音', forest: '神秘森林 · 树后面好像有眼睛在眨',
       };
-        ui.toast('📍 ' + (names[z] || z), 3200);
+        // 海岛区域不在 names 里，用小火车站点登记的名字
+        const isl = this.islands.find(i => i.key === z);
+        ui.toast('📍 ' + (names[z] || (isl ? `${isl.name} · 跳跳云梯或小火车都能到` : z)), 3200);
       }
     }
   }
@@ -911,6 +948,8 @@ export class Game {
   _collide() {
     const p = this.player.position;
     const R = 0.42;
+    const trying = this._mv && this._mv.lengthSq() > 0.02;   // 正在主动移动才提示
+    let bump = null;
     // 世界边界：玩家只能待在陆地（主岛或某座海岛）上，海面过不去
     const isl = this._islandAt(p);
     if (!this.onIsle) {
@@ -920,10 +959,14 @@ export class Game {
           const k = (isl.r - 0.4) / dc;
           p.x = isl.cx + (p.x - isl.cx) * k;
           p.z = isl.cz + (p.z - isl.cz) * k;
+          if (trying) bump = 'sea';   // 岛边就是海
         }
       } else {
         const dc = Math.hypot(p.x, p.z);
-        if (dc > WORLD_R) { p.x *= WORLD_R / dc; p.z *= WORLD_R / dc; }
+        if (dc > WORLD_R) {
+          p.x *= WORLD_R / dc; p.z *= WORLD_R / dc;
+          if (trying) bump = 'sea';
+        }
       }
     }
     // 河流
@@ -956,6 +999,7 @@ export class Game {
         if (d < c.r + R && d > 0.001) {
           p.x = c.x + dx / d * (c.r + R);
           p.z = c.z + dz / d * (c.r + R);
+          if (trying && !(c.top !== undefined && p.y > c.top - 0.25)) bump = bump || (c.top !== undefined && c.top <= 0.9 ? 'rail' : c.r >= 1.5 ? 'wall' : null);
         }
       } else {
         const cx = THREE.MathUtils.clamp(p.x, c.x1, c.x2);
@@ -965,9 +1009,11 @@ export class Game {
         if (d < R) {
           if (d > 0.001) { p.x = cx + dx / d * R; p.z = cz + dz / d * R; }
           else p.z = c.z2 + R; // 正好在矩形内，往南推
+          if (trying) bump = bump || (c.top !== undefined && c.top <= 0.9 ? 'rail' : 'wall');
         }
       }
     }
+    if (bump) this._showBumpHint(bump);
   }
 
   _updateCamera(dt) {
@@ -1074,6 +1120,12 @@ export class Game {
     }
     for (const f of a.foam || []) f.material.opacity = 0.4 + Math.sin(t * 2.2 + f.position.z) * 0.2;
     for (const s2 of a.islandSurf || []) s2.material.opacity = 0.28 + Math.sin(t * 1.6 + s2.position.x) * 0.14;
+    // 云朵阶梯轻轻上下漂浮，平台高度同步跟随（站上去的 userinfo 会一起起伏）
+    for (const cs of a.cloudStair || []) {
+      const dy = cs.pf.bob.amp * Math.sin(t * cs.pf.bob.speed + cs.pf.bob.phase);
+      cs.pf.top = cs.pf.baseTop + dy;
+      cs.mesh.position.y = cs.baseY + dy;
+    }
     for (const pd of a.islandPads || []) {
       pd.beacon.rotation.y = t * 1.5;
       pd.beacon.position.y = 1.1 + Math.sin(t * 2.2 + pd.ring.position.x) * 0.15;

@@ -316,6 +316,8 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     place(scene, PROPS.tree(!!bl), x, z, Math.random() * 3);
     colC(x, z, 0.6);
   }
+  // 果园地标：大树下的鸟窝（两颗小小的蛋）
+  place(scene, PROPS.nest(), -23.4, 9.0, Math.random() * 3);
   // 果园里散落的小苹果
   for (let i = 0; i < 6; i++) {
     const x = -30 + Math.random() * 22, z = -26 + Math.random() * 14;
@@ -341,6 +343,14 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   const windmill = place(scene, PROPS.windmill(), 27, -18, 0.4);
   world.anim.windmill = windmill.userData.blades;
   colC(27, -18, 2.0);
+  // 风车田地标：小干草垛（跳上去站站看）
+  place(scene, PROPS.haybale(0.6), 18, -20, Math.random() * 3);
+  colTop(18, -20, 0.85, 0.95);
+  // 谷仓前院地标：干草垛兄弟俩
+  place(scene, PROPS.haybale(0.7), 29.5, 27.5, Math.random() * 3);
+  colTop(29.5, 27.5, 0.95, 1.1);
+  place(scene, PROPS.haybale(0.5), 30.9, 28.7, Math.random() * 3);
+  colTop(30.9, 28.7, 0.7, 0.8);
 
   // ---- 谷仓（黑黑的里面） ----
   const barn = place(scene, PROPS.barn(), 24, 22, Math.PI); // 门朝北（面向草甸）
@@ -404,11 +414,16 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       [-18.0, 33.1, 10.4],
       [-21.3, 33.4, 12.4],
     ];
+    world.anim.cloudStair = [];
     for (const [x, z, top] of stair) {
       const c = PROPS.cloud(1.3);
       c.position.set(x, top - 0.6, z);
       scene.add(c);
       addPlatform(x, z, 1.35, top);
+      const pf = world.platforms[world.platforms.length - 1];
+      pf.baseTop = top;
+      pf.bob = { amp: 0.14, speed: 1.05, phase: Math.random() * Math.PI * 2 };
+      world.anim.cloudStair.push({ mesh: c, pf, baseY: top - 0.6 });
     }
   }
 
@@ -470,6 +485,9 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     place(scene, PROPS.log(0.9), x, z, ry);
     colTop(x, z, 0.5, 0.7);
   }
+
+  // 海滩地标：贝壳堆与小海星
+  place(scene, PROPS.shells(), 8.2, 45.4, Math.random() * 3);
 
   // ---- 神秘森林（拨开荆棘后）：松树、灌木、蘑菇、萤火虫 ----
   const pineSpots = [
