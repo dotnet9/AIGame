@@ -773,12 +773,13 @@ export class Game {
   // ================= 岛屿随机事件 =================
   // 每隔几分钟全岛来一个限时小事件（流星雨/苹果雨/…），给“上线看看今天有什么”的期待感
   _initEvents() {
-    this._event = { next: 40 + Math.random() * 40, active: null, items: [] };
+    this._event = { next: 40 + Math.random() * 40, active: null, items: [], bubbles: [] };
     this._eventKinds = {
       meteor: { dur: 30, label: '🌠 流星雨！星星掉落在草地上了，限时去捡～' },
       apple: { dur: 30, label: '🍎 苹果熟透掉了一地——限时去果园捡苹果！' },
       escape: { dur: 75, label: '❗ 词宠大逃走！快去把它们找回来（跟着❗走）' },
       merchant: { dur: 95, label: '🛒 神秘货郎来村里啦——5⭐ 一个神秘盲盒，限时开张！' },
+      bubbles: { dur: 45, label: '🎈 泡泡词球！跳起来顶破泡泡，念出里面的单词！' },
     };
   }
 
@@ -809,6 +810,11 @@ export class Game {
     ev.active.t -= dt;
     ev.active.spawnT -= dt;
     if (ev.active.id === 'escape') this._escapeTick(dt);
+    // 泡泡轻轻浮动
+    for (const bb of ev.bubbles || []) {
+      bb.t = (bb.t || 0) + dt;
+      bb.group.position.y = bb.yBase + Math.sin(bb.t * 2 + bb.phase) * 0.22;
+    }
     if (ev.active && ev.active.spawnT <= 0 && ev.active.id !== 'escape') this._eventSpawnTick();
     if (ev.active && ev.active.t <= 0) {
       this._endEvent();
@@ -868,6 +874,8 @@ export class Game {
     const id = ev.active && ev.active.id;
     for (const it of ev.items) this.scene.remove(it.obj);
     ev.items = [];
+    for (const bb of ev.bubbles || []) this.scene.remove(bb.group);
+    ev.bubbles = [];
     if (id === 'escape') {
       for (const p of this.pets.all()) {
         if (p.escape) {
@@ -942,8 +950,38 @@ export class Game {
     }
   }
 
+  _bubbleWord() {
+    const GATES = ['boat', 'light', 'wind', 'seed', 'rain', 'banana'];
+    const skip = new Set(GATES);
+    if (this._perchEggId()) skip.add(this._perchEggId());
+    const bid = (this.world.brickSpots || []).find(bb => bb.eggId);
+    if (bid && bid.eggId) skip.add(bid.eggId);
+    const ids = this.currentChapter.words.filter(id => !save.isHatched(id) && !skip.has(id) && WORD_MAP[id].zone !== 'sky');
+    return ids.length ? ids[Math.floor(Math.random() * ids.length)] : null;
+  }
+
   _eventSpawnTick() {
     const ev = this._event;
+    if (ev.active.id === 'bubbles') {
+      ev.active.spawnT = 3;
+      if (ev.bubbles.length >= 3) return;
+      const id = this._bubbleWord();
+      if (!id) return;
+      const w = WORD_MAP[id];
+      const a = Math.random() * Math.PI * 2, r = 3.5 + Math.random() * 4.5;
+      const x = this.player.position.x + Math.cos(a) * r, z = this.player.position.z + Math.sin(a) * r;
+      const yBase = 2.2 + Math.random() * 0.9;
+      const group = new THREE.Group();
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 14), new THREE.MeshStandardMaterial({ color: '#A8D8F0', transparent: true, opacity: 0.4, roughness: 0.15 }));
+      group.add(ball);
+      const txt = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture(w.zh, '#2E5E86', '#FFFFFF'), transparent: true, depthWrite: false }));
+      txt.scale.setScalar(0.85);
+      group.add(txt);
+      group.position.set(x, yBase, z);
+      this.scene.add(group);
+      ev.bubbles.push({ group, word: w, yBase, phase: Math.random() * 6 });
+      return;
+    }
     ev.active.spawnT = ev.active.id === 'meteor' ? 1.6 : 1.3;
     if (ev.items.length > 10) return;   // 场上够多了，先不刷
     let x, z, tries = 0;
@@ -1197,6 +1235,19 @@ export class Game {
     } else {
       this.player.position.y = support;
     }
+    // 顶泡泡词球：跳起来头碰到泡泡 → 顶破并弹出该词的朗读挑战
+    if (this.vy > 0 && this._event.active && this._event.active.id === 'bubbles') {
+      const headY2 = pp.y + 1.25;
+      for (let i = (this._event.bubbles || []).length - 1; i >= 0; i--) {
+        const bb = this._event.bubbles[i];
+        const by = bb.group.position.y;
+        if (Math.hypot(pp.x - bb.group.position.x, pp.z - bb.group.position.z) > 0.95) continue;
+        if (headY2 < by - 0.35 || headY2 > by + 0.5) continue;
+        this.vy = -1;
+        this._popBubble(bb);
+        break;
+      }
+    }
     // 顶砖块：上升时头碰到悬浮砖底 → 顶爆它（藏在里面的蛋会掉下来）
     if (this.vy > 0) {
       const headY = pp.y + 1.25;
@@ -1243,6 +1294,27 @@ export class Game {
       const d = Math.hypot(this.player.position.x - ISLE_CENTER.x, this.player.position.z - ISLE_CENTER.z);
       if (d > 5.1 && !this.climbing) this._climb(false); // 走出边缘 → 滑下去
     }
+  }
+
+  // 顶破泡泡：弹出这个单词的朗读挑战，念对 +1⭐
+  _popBubble(bb) {
+    sfx.pop();
+    this._letterBurst(bb.group.position.clone(), bb.word.en);
+    this.scene.remove(bb.group);
+    this._event.bubbles = this._event.bubbles.filter(x => x !== bb);
+    const w = bb.word;
+    ui.openChallenge({
+      word: w, mode: 'hatch',
+      onSuccess: () => {
+        ui.closeChallenge();
+        save.addStars(1);
+        ui.updateStars(save.getStars());
+        ui.floatPlusOne(innerWidth / 2, innerHeight / 2 - 70, '+1⭐');
+        ui.toast(`🎈 泡泡挑战成功！「${w.en}」${w.zh} +1⭐`, 3000);
+        sfx.magic();
+      },
+      onClose: () => {},
+    });
   }
 
   // 顶砖：砖块上顶晃动；第一次顶出藏在里面的词宠蛋，蛋掉到地上等小朋友去孵
