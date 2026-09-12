@@ -177,7 +177,7 @@ export class Game {
         this.composer.addPass(this.bloom);
       } catch (e) { this.composer = null; }
     }
-    this.camYaw = 0; this.camPitch = 0.42; this.camDist = 8.5;
+    this.camYaw = 0; this.camPitch = 0.42; this.camDist = 8.5; this.camDistTarget = 8.5;   // 缩放目标值：滚轮/键盘改它，每帧平滑趋近
     this.gateTries = {};   // 每个机关猜错的次数（一次答对有星星奖励）
     this.lockInput = false;   // 通关卡/演出期间锁操作
     this.cinematic = false;   // 镜头动画接管中（不再按轨道公式覆盖机位）
@@ -392,6 +392,9 @@ export class Game {
       this.keys.add(e.code);
       if (/^Key[WASD]$|^Arrow/.test(e.code)) this._clearMoveTarget(); // 手动方向一按，自动走路让位
       if (e.code === 'KeyE') this._interact();
+      // 键盘缩放视角：+/= 拉近，-/_ 拉远（滚轮之外的第二种手感）
+      if (e.code === 'Equal' || e.code === 'NumpadAdd') this.camDistTarget = THREE.MathUtils.clamp(this.camDistTarget - 2.2, 2.8, 60);
+      if (e.code === 'Minus' || e.code === 'NumpadSubtract') this.camDistTarget = THREE.MathUtils.clamp(this.camDistTarget + 2.2, 2.8, 60);
       if (e.code === 'Tab') { e.preventDefault(); this._openSummon(); }
       if (e.code === 'Space') {
         e.preventDefault();
@@ -410,7 +413,7 @@ export class Game {
     this.canvas.addEventListener('contextmenu', e => e.preventDefault());
     this.canvas.addEventListener('pointerdown', e => {
       if (this.lockInput) return;   // 通关卡/演出期间不响应世界交互
-      if (e.pointerType === 'touch') {
+      if (e.pointerType === 'touch') { // eslint-disable-line
         this.touchCam.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (this.touchCam.size === 2) {
           const [a, b] = [...this.touchCam.values()];
@@ -418,13 +421,9 @@ export class Game {
         }
         this.tapInfo = { x: e.clientX, y: e.clientY, t: performance.now() };
       } else if (e.button === 2) { e.preventDefault(); dragging = true; lx = e.clientX; ly = e.clientY; }
-      else if (e.button === 0) { this._click(e); this._holdWalk = e.pointerId; }   // 按住不放=持续走向指针
+      else if (e.button === 0) { this._click(e); }   // 点一下走一步（不再按住持续跟随）
     });
     addEventListener('pointermove', e => {
-      // 按住左键拖动 = 持续走向指针指着的地面（点哪走哪的连续版）；点了蛋/词宠的寻路不抢
-      if (this._holdWalk === e.pointerId && !this.moveThenEgg && (e.buttons & 1) === 1 && !ui.challengeOpen()) {
-        this._setMoveTarget(e);
-      }
       if (dragging) {
         this.camYaw -= (e.clientX - lx) * 0.006;
         this.camPitch = THREE.MathUtils.clamp(this.camPitch + (e.clientY - ly) * 0.004, 0.08, 1.1);
@@ -442,13 +441,12 @@ export class Game {
         if (this.touchCam.size === 2) {
           const [a, b] = [...this.touchCam.values()];
           const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (this.pinchDist > 0) this.camDist = THREE.MathUtils.clamp(this.camDist * this.pinchDist / d, 3.2, 60);
+          if (this.pinchDist > 0) this.camDistTarget = THREE.MathUtils.clamp(this.camDistTarget * this.pinchDist / d, 2.8, 60);
           this.pinchDist = d;
         }
       }
     });
     const endPointer = e => {
-      if (this._holdWalk === e.pointerId) this._holdWalk = null;
       if (this.touchCam.has(e.pointerId)) {
         this.touchCam.delete(e.pointerId);
         this.pinchDist = 0;
@@ -467,7 +465,7 @@ export class Game {
     addEventListener('pointercancel', endPointer);
     this.canvas.addEventListener('wheel', e => {
       if (this.lockInput) return;
-      this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.012, 3.2, 60);
+      this.camDistTarget = THREE.MathUtils.clamp(this.camDistTarget + e.deltaY * 0.0075, 2.8, 60);
     }, { passive: true });
 
     // ---- 虚拟摇杆 ----
@@ -580,6 +578,12 @@ export class Game {
       const dc = Math.hypot(pt.x, pt.z);
       if (dc > 48) { pt.x *= 48 / dc; pt.z *= 48 / dc; }   // 别点到世界外面去
     }
+    // 点一下走一步：目标点最远只取距玩家 2.2 米处，走完这步再点下一步（孩子自己探索）
+    const pp = this.player.position;
+    const ddx = pt.x - pp.x, ddz = pt.z - pp.z;
+    const dd = Math.hypot(ddx, ddz);
+    const STEP = 2.2;
+    if (dd > STEP) { pt.x = pp.x + ddx / dd * STEP; pt.z = pp.z + ddz / dd * STEP; }
     this.moveTarget = { x: pt.x, z: pt.z };
     this.moveMarker.position.set(pt.x, groundY + 0.06, pt.z);
     this.moveMarker.visible = true;
@@ -2156,6 +2160,7 @@ export class Game {
     }
     // 镜头动画（通关后飞向新一关蛋区）接管期间：轨道机位公式不覆盖 tween 的机位
     if (this.cinematic) return;
+    this.camDist += (this.camDistTarget - this.camDist) * Math.min(1, dt * 7);   // 缩放丝滑过渡
     const target = this.player.position;
     // 复用临时向量：相机每帧跑 60 次，不能每次都 new（GC 卡顿元凶）
     const v = this._cv = this._cv || new THREE.Vector3();

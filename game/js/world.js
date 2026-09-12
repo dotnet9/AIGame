@@ -862,8 +862,9 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       grp.add(top, rock);
     }
     // 岛边浪花：圆环兜底；多边形轮廓暂不撒环（沿边浪花后续做）
+    let surf2 = null;
     if (!isl.shape) {
-      const surf2 = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r + 0.7, 40).rotateX(-Math.PI / 2),
+      surf2 = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r + 0.7, 40).rotateX(-Math.PI / 2),
         new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.4, depthWrite: false }));
       surf2.position.y = 0.03;
       grp.add(surf2);
