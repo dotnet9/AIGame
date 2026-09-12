@@ -184,6 +184,14 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(200, 160, 40, .3);
 }
 
+/* ---------- 换册翻课本转场 ---------- */
+.book-flip { display: flex; justify-content: center; gap: 4px; }
+.bf-page { font-size: 88px; display: inline-block; animation: bfTurn .75s ease-in-out; filter: drop-shadow(0 10px 18px rgba(150,90,60,.25)); }
+.bf-page.bf-r { transform-origin: left center; animation-name: bfTurnR; }
+@keyframes bfTurn { 0% { transform: perspective(600px) rotateY(0) } 50% { transform: perspective(600px) rotateY(-70deg) } 100% { transform: perspective(600px) rotateY(0) } }
+@keyframes bfTurnR { 0% { transform: perspective(600px) rotateY(0) } 50% { transform: perspective(600px) rotateY(70deg) } 100% { transform: perspective(600px) rotateY(0) } }
+.bf-text { text-align: center; margin-top: 18px; color: #B47514; font-weight: 900; letter-spacing: 2px; animation: fadeIn .3s; }
+
 /* ---------- 口音切换按钮 ---------- */
 .accent-btn {
   font-family: inherit; font-weight: 900; font-size: 13px; cursor: pointer;

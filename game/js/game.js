@@ -3310,7 +3310,7 @@ export class Game {
       onSelect: k => {
         if (k === this.sem) { this._openBook(k); return; }
         save.setBookSem(k);
-        location.reload();
+        ui.playBookFlip(() => location.reload());   // 翻课本转场，别让孩子看白屏
       },
       onStart: i => this._startPractice(semKey, i),
       onQuickRound: () => this._startQuickRound(semKey),

@@ -431,6 +431,17 @@ export function showUpdateBar({ onUpdate, onLater } = {}) {
   els.updateLater.onclick = () => { sfx.pop(); els.updateBar.classList.add('hidden'); onLater && onLater(); };
 }
 
+// ---------- 换册转场：全屏"翻课本"动画后再刷新（替代白屏 reload） ----------
+export function playBookFlip(cb) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '200';
+  ov.style.background = '#FFF7E8';
+  ov.innerHTML = `<div class="book-flip"><span class="bf-page bf-l">📖</span><span class="bf-page bf-r">📗</span></div><div class="bf-text">翻开新的一册…</div>`;
+  document.body.appendChild(ov);
+  setTimeout(cb, 780);
+}
+
 // ---------- 家长周报：本周读了多少词、平均分、时长（可复制分享） ----------
 export function showParentReport(rep, name = '') {
   const ov = document.createElement('div');
