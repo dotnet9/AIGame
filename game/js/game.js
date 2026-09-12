@@ -510,6 +510,8 @@ export class Game {
     // PERFECT 庆祝的镜头微震（ui 层发事件，这里只管震）
     addEventListener('wordpet:shake', () => { this.shakeT = 0.3; });
     // 读出 95+：全场词宠一起跳起来欢呼（错开起跳更像“此起彼伏”）
+    // 挑战卡上的 📖 详细 → 打开词典详情卡
+    addEventListener('wordpet:detail', e => this._openWordDetail(e.detail.word));
     addEventListener('wordpet:cheer', () => {
       for (const pt of this.pets.all()) {
         if (pt.flying || pt.group.position.distanceTo(this.player.position) > 14) continue;
@@ -1141,6 +1143,73 @@ export class Game {
       ui.updateStars(save.getStars());
       ui.toast('🦉 猫头鹰园丁：这一件干得漂亮！+2⭐', 3000);
     }
+  }
+
+  // ================= 词典详情卡 =================
+  // 本地内容立刻显示（中文/音节/小妙招/音标），联网词典（英英释义+例句）查到后追加
+  _detailLocalHTML(w) {
+    const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    let html = '';
+    const ipa = ui.ipaFor(w.en);
+    if (ipa) html += `<div class="dt-ipa"><span>🔊 /${esc(ipa)}/</span></div>`;
+    if (Array.isArray(w.syl) && w.syl.length) {
+      html += `<div class="dt-sec">🧩 音节拆分</div><div class="dt-row dt-syl">${w.syl.map(x => `<span>${esc(x)}</span>`).join('')}</div>`;
+    }
+    html += `<div class="dt-sec">🀄 中文意思</div><div class="dt-row">${esc(w.zh)}</div>`;
+    html += `<div class="dt-sec">💡 记忆小妙招</div><div class="dt-row">${esc(w.hint || '')}</div>`;
+    if (typeof w.story === 'string' && w.story) {
+      html += `<div class="dt-sec">📖 词宠小故事</div><div class="dt-row">${esc(w.story)}</div>`;
+    }
+    return html;
+  }
+
+  // 词典数据：ECDICT 开源英汉词典精简版（data/dict.json，本地加载无网络依赖）
+  async _loadDict() {
+    if (this._dictData || this._dictFail) return this._dictData || null;
+    this._dictData = await new Promise(resolve => {
+      fetch('data/dict.json')
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then(d => { this._dictFail = !d; resolve(d || null); });
+    });
+    return this._dictData;
+  }
+
+  _openWordDetail(w) {
+    if (!w) return;
+    stopListening();
+    window.__detailWord = w.en;
+    ui.showWordDetail(`📖 详细 · ${w.en}`, this._detailLocalHTML(w));
+    speak(w.en);   // 自动朗读
+    this._loadDict().then(dict => {
+      if (window.__detailWord !== w.en) return;   // 已切到别的词就不追加
+      const d = dict && dict[w.en.toLowerCase().trim()];
+      if (!d) {
+        ui.detailAppendHTML('<div class="dt-note">📖 这是一个词组——按课本的中文意思和例句记就好啦</div>');
+        return;
+      }
+      const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      let html = '';
+      if (d.p) html += `<div class="dt-ipa"><span>📘 ${esc(d.p)}</span></div>`;
+      if (d.t) {
+        html += '<div class="dt-sec">🀄 核心释义（开源词典 ECDICT）</div>';
+        for (const line of d.t.split(/\\n|\n/).filter(Boolean)) html += `<div class="dt-row">${esc(line)}</div>`;
+      }
+      if (d.d) {
+        html += '<div class="dt-sec">📘 英文释义</div>';
+        for (const line of d.d.split(/\\n|\n/).filter(Boolean).slice(0, 3)) html += `<div class="dt-row">${esc(line)}</div>`;
+      }
+      if (d.x) {
+        const NAMES = { s: '复数', p: '过去式', d: '过去分词', i: '现在分词', '3': '三单', r: '比较级', t: '最高级' };
+        const parts = d.x.split('/').map(kv => kv.split(':')).filter(kv => kv.length === 2 && NAMES[kv[0]]);
+        if (parts.length) {
+          html += '<div class="dt-sec">🔁 词形变化</div><div class="dt-row">';
+          for (const [k, v] of parts) html += `<span style="margin-right:12px">${NAMES[k]}：${esc(v)}</span>`;
+          html += '</div>';
+        }
+      }
+      ui.detailAppendHTML(html);
+    });
   }
 
   // ---- 天气轮换：晴/雨/雪，纯氛围不拦玩法 ----

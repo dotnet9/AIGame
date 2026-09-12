@@ -8,7 +8,7 @@ const els = {};
 for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'star-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
   'quest', 'quest-text', 'quest-close', 'daily', 'daily-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
   'mic-label', 'btn-replay', 'voice-feedback', 'score-panel', 'cheer', 'cheer-emoji', 'cheer-word', 'score-ring', 'score-num', 'score-stars', 'score-msg',
-  'pet-fact', 'pet-fact-title', 'pet-fact-text', 'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
+  'pet-fact', 'pet-fact-title', 'pet-fact-text', 'detail-card', 'detail-title', 'detail-body', 'detail-close', 'btn-detail', 'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
   'btn-skip',
   'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-title', 'picker-grid', 'picker-close',
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-head', 'map-canvas', 'map-close',
@@ -20,6 +20,9 @@ for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'sta
 // 音标表（tools/gen_ipa.py 生成，可选：404 时静默跳过）
 let ipaMap = null;
 fetch('data/ipa.json').then(r => r.ok ? r.json() : null).then(m => ipaMap = m).catch(() => { ipaMap = null; });
+export function ipaFor(en) {
+  return (ipaMap && ipaMap[String(en).toLowerCase()]) || null;
+}
 
 // ---------- 通用 ----------
 let toastTimer = null;
@@ -364,6 +367,26 @@ export function homeStars(x, y, n = 3) {
     }, 420 + i * 130);
     setTimeout(() => s.remove(), 1500 + i * 130);
   }
+}
+
+// ---------- 词典详情卡 ----------
+export function showWordDetail(title, bodyHTML) {
+  els.detailTitle.textContent = title;
+  els.detailBody.innerHTML = bodyHTML;
+  els.detailBody.scrollTop = 0;
+  els.detailCard.classList.remove('hidden');
+}
+export function hideWordDetail() {
+  els.detailCard.classList.add('hidden');
+}
+export function detailAppendHTML(html) {
+  const loading = els.detailBody.querySelector('.dt-loading');
+  if (loading) loading.remove();
+  els.detailBody.insertAdjacentHTML('beforeend', html);
+  els.detailBody.scrollTop = els.detailBody.scrollHeight;
+}
+export function detailWord() {
+  return ch.word || null;
 }
 
 // 爪印归航：孵化奖励的小物品从词宠身边飞进 HUD 的词宠胶囊（同星星归航的手感）
@@ -920,6 +943,16 @@ els.btnShowHelpWord.addEventListener('click', () => {
   if (tileIdx >= 0) tileClick(tileIdx, els.spellTiles.children[tileIdx]);
 });
 els.modalClose.addEventListener('click', () => { sfx.pop(); closeChallenge(); });
+els.detailClose.addEventListener('click', () => { sfx.pop(); hideWordDetail(); });
+els.detailBody.addEventListener('click', e => {
+  const ex = e.target.closest('.dt-ex');
+  if (ex && ex.dataset.say) speak(ex.dataset.say);
+});
+els.btnDetail.addEventListener('click', () => {
+  if (!ch.open || !ch.word) return;
+  sfx.pop();
+  dispatchEvent(new CustomEvent('wordpet:detail', { detail: { word: ch.word } }));
+});
 
 // ---------- 召唤面板 ----------
 export function openPicker(list, onPick, onClose, opts = {}) {

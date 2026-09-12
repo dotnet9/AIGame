@@ -111,6 +111,7 @@
   <div id="modal-card">
     <div id="modal-head">
       <span id="modal-title">遇见词宠蛋！</span>
+      <button id="btn-detail" class="mini-btn" type="button">📖 详细</button>
       <button id="modal-close" class="round-btn small">✕</button>
     </div>
     <div id="word-display">
@@ -190,6 +191,15 @@
 
 <!-- 提示气泡 -->
 <div id="toast" class="hidden"></div>
+
+<!-- 词典详情卡：竖直滚动查看音标/释义/例句/小妙招 -->
+<div id="detail-card" class="hidden">
+  <div class="detail-head">
+    <span id="detail-title">📖 详细</span>
+    <button id="detail-close" class="round-btn small" type="button" aria-label="关闭">✕</button>
+  </div>
+  <div id="detail-body"></div>
+</div>
 
 <!-- 喝彩大字：弹窗之外的屏幕层，飘起后消失 -->
 <div id="cheer"><span id="cheer-emoji">🌟</span><span id="cheer-word">PERFECT!</span></div>

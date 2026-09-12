@@ -184,6 +184,43 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(200, 160, 40, .3);
 }
 
+/* ---------- 词典详情卡（竖直滚动） ---------- */
+.mini-btn {
+  border: 2px solid #F2C98C; background: #FFF7EA; color: #7A5C22; font-weight: bold;
+  border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; font-family: inherit;
+}
+.mini-btn:hover { background: #FFF0D6; }
+#detail-card {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(440px, 94vw); max-height: min(560px, 92vh);
+  z-index: 60; background: #FFFDF8; border: 3px solid #FFE0B8; border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(150, 90, 60, .3); display: flex; flex-direction: column;
+  animation: popIn .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+#detail-card.hidden { display: none; }
+.detail-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px 8px; border-bottom: 2px dashed #FFE0B8;
+}
+#detail-title { color: #C4788F; font-weight: bold; font-size: 15px; }
+#detail-body {
+  padding: 8px 16px 14px; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: #F0BFCE transparent;
+}
+.dt-sec { margin: 12px 0 4px; font-weight: bold; color: #7A5C22; font-size: 14px; }
+.dt-row { margin: 5px 0; font-size: 13.5px; color: #4A4032; line-height: 1.55; }
+.dt-row .pos { color: #2E6B4F; font-weight: bold; }
+.dt-ipa { display: flex; gap: 12px; margin: 6px 0 2px; font-size: 14px; color: #2E5E86; font-weight: bold; flex-wrap: wrap; }
+.dt-ipa span { background: #EFF6FF; border-radius: 8px; padding: 2px 10px; }
+.dt-ex { cursor: pointer; }
+.dt-ex:hover { background: #FFF7EA; border-radius: 8px; }
+.dt-ex .zh { color: #8A7A5C; }
+.dt-loading { text-align: center; color: #8A7A5C; padding: 14px 0; font-size: 13px; }
+.dt-syl span {
+  display: inline-block; background: #FFF0F5; border: 1.5px solid #FFC9DD;
+  border-radius: 8px; padding: 2px 10px; margin: 2px 4px 2px 0; color: #A0566F; font-weight: bold;
+}
+
 /* 词宠小知识气泡：摸摸头弹出来的小故事 */
 #pet-fact {
   position: fixed; left: 0; top: 0; z-index: 15; max-width: 252px;
