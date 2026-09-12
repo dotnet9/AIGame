@@ -654,6 +654,7 @@ export class Game {
       }, 900);
     }
     this._spawnNaughty();
+    this._refreshCityPill();
     setInterval(() => this._refreshHungry(), 1500);
     // 指一条路：最近的可孵蛋
     setTimeout(() => {
@@ -2628,7 +2629,34 @@ export class Game {
   // 点了"继续冒险"：猫头鹰送奖说话 + 镜头飞向新一关第一颗蛋 → 开始横幅
   _enterChapter(doneCount) {
     const ch = this.chapters[doneCount];
-    if (this.cityTour) this._switchCity(doneCount);   // 城市巡游：直接搬到下一城
+    if (this.cityTour) {
+      // 城市巡游：搬进新城 → 城市介绍卡（介绍/名校/美食/风景 Tab + 小问答）→ 出发探索
+      this._switchCity(doneCount);
+      const st = this._currentStage();
+      const visit = save.visitCity(this.sem + ':' + st.key);
+      const moods = ['farm', 'beach', 'forest'];
+      setBgmMood(moods[st.key.length % 3]);   // 每座城市换一种背景音乐情绪
+      this._refreshCityPill();
+      this._owlDeliver(`下一站：${st.name}！出发！`);
+      setTimeout(() => {
+        ui.showCityCard({
+          city: st.city, variant: cityVariant(st.city, visit), visit,
+          quiz: getCityQuiz(st.key),
+          onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
+          onDone: () => {
+            const egg = ch.words.map(id => this.eggs.get(id)).find(e => e && e.group && e.group.visible);
+            const go = () => {
+              ui.chapterBanner(`🚩 第 ${doneCount + 1} 关「${ch.name}」开始！欢迎来到 ${st.name} ${st.emoji}`);
+              this.lockInput = false;
+              this._clearMoveTarget();
+            };
+            if (egg) this._flyTo(egg.group.position, go);
+            else go();
+          },
+        });
+      }, 1200);
+      return;
+    }
     this._owlDeliver(`第 ${doneCount + 1} 关「${ch.name}」的蛋我都备好啦，出发！`);
     const egg = ch.words.map(id => this.eggs.get(id)).find(e => e && e.group && e.group.visible);
     const go = () => {
@@ -2977,7 +3005,23 @@ export class Game {
   // 猜错不惩罚（词宠摇头回家），第一次就猜对额外奖 3 颗星星。
   _activeGate() {
     const p = this.player.position;
-    // 城市巡游：机关任务牌跟着钥匙蛋走——玩家靠近任务牌（蛋的孵化点）就地解谜
+    // 顶部城市胶囊 + 重弹介绍卡
+  _refreshCityPill() {
+    if (!this.cityTour) { ui.setCityPill(null); return; }
+    const st = this._currentStage();
+    ui.setCityPill(`${st.name} ${st.emoji}`, () => this._openCityIntro());
+  }
+  _openCityIntro() {
+    const st = this._currentStage();
+    const vkey = this.sem + ':' + st.key;
+    const visit = Math.max(0, (save.getSave().cityVisits?.[vkey] || 1) - 1);
+    ui.showCityCard({
+      city: st.city, variant: cityVariant(st.city, visit), visit, quiz: getCityQuiz(st.key),
+      onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
+    });
+  }
+
+  // 城市巡游：机关任务牌跟着钥匙蛋走——玩家靠近任务牌（蛋的孵化点）就地解谜
     if (this.cityTour && this._cityGatePos) {
       const needMap = { boat: 'boat', light: 'light', wind: 'wind', seed: 'planted', rain: 'beanstalk', banana: 'vines' };
       for (const [wid, pt] of Object.entries(this._cityGatePos)) {
@@ -3460,8 +3504,17 @@ export class Game {
       // 换一册：3D 场景/海岛/关卡整册重建，所以存好后重载一次
       onSelect: k => {
         if (k === this.sem) { this._openBook(k); return; }
-        save.setBookSem(k);
-        ui.playBookFlip(() => location.reload());   // 翻课本转场，别让孩子看白屏
+        // 每册的城市之旅进度独立保存：换册时有记录就问问孩子"接着玩还是重新出发"
+        const hasRecord = Object.keys(save.getSave().cityVisits || {}).some(v => v.startsWith(k + ':'));
+        const go = fresh => {
+          if (fresh) save.resetCityVisits(k);
+          save.setBookSem(k);
+          ui.playBookFlip(() => location.reload());
+        };
+        if (hasRecord) {
+          ui.askChoice(`《${BOOK_LABEL(k)}》有你的旅行记录`, '接着上次的城市之旅，还是重新出发？', '▶️ 接着上次玩', '🔄 重新出发',
+            () => go(false), () => go(true));
+        } else go(false);
       },
       onStart: i => this._startPractice(semKey, i),
       onQuickRound: () => this._startQuickRound(semKey),

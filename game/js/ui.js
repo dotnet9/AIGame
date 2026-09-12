@@ -16,7 +16,7 @@ for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'sta
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
   'levelup', 'levelup-burst', 'levelup-title', 'levelup-sub', 'levelup-stars', 'levelup-words-tip', 'levelup-words', 'levelup-next',
   'chapter-banner', 'chapter-banner-text',
-  'update-bar', 'update-now', 'update-later',
+  'update-bar', 'update-now', 'update-later', 'city-pill', 'city-pill-text',
   'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout', 'btn-report',
   'hud-menu', 'btn-menu']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
 
@@ -431,38 +431,76 @@ export function showUpdateBar({ onUpdate, onLater } = {}) {
   els.updateLater.onclick = () => { sfx.pop(); els.updateBar.classList.add('hidden'); onLater && onLater(); };
 }
 
-// ---------- 城市介绍卡：中英介绍+名校+城市词+小问答（换城演出主角） ----------
+// ---------- 顶部城市胶囊：显示当前城市名，点击重弹介绍卡 ----------
+export function setCityPill(text, onOpen) {
+  if (!els.cityPill) return;
+  if (!text) { els.cityPill.classList.add('hidden'); return; }
+  els.cityPillText.textContent = text;
+  els.cityPill.classList.remove('hidden');
+  els.cityPill.onclick = () => { sfx.pop(); onOpen && onOpen(); };
+}
+
+// ---------- 城市介绍卡：分 Tab（首页/大学/美食/风景）+ 小问答 ----------
 export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.style.zIndex = '120';
   const unis = (city.unis || []).map(u =>
-    `<button type="button" class="cu-chip" data-en="${u.en}"><i class="tag ${u.tag === '985' ? 't985' : u.tag === '211' ? 't211' : 't0'}">${u.tag || '🎓'}</i>${u.zh}</button>`).join('');
+    `<button type="button" class="cu-chip" data-en="${u.en}"><i class="tag ${u.tag === '985' ? 't985' : u.tag === '211' ? 't211' : 't0'}">${u.tag || '🎓'}</i>${u.zh}<i class="en">${u.en}</i></button>`).join('');
   const cwords = (variant.words || []).map(w =>
     `<button type="button" class="cu-chip cw" data-en="${w}">${w}</button>`).join('');
+  const foods = (city.specialties || []).map((f, i) =>
+    `<button type="button" class="cu-chip cw" data-en="${variant.words[i] || variant.words[0] || ''}">🍜 ${f}</button>`).join('');
   const q = quiz ? `<div class="cc-quiz"><b>🤔 小问答：${quiz.q}</b><div class="cc-opts">${
     quiz.opts.map((o, i) => `<button type="button" data-i="${i}">${o}</button>`).join('')
   }</div><div class="cc-quiz-rs"></div></div>` : '';
+  const tabs = [
+    { id: 'home', name: '🏠 首页', html: `
+      <button class="cc-intro-en" data-en="${variant.introEn}">🔊 ${variant.introEn}</button>
+      <div class="cc-intro">${variant.intro}</div>
+      ${cwords ? `<div class="cc-sec">🗣️ 城市英文词（点点读）</div><div class="cc-chips">${cwords}</div>` : ''}
+      ${q}` },
+    { id: 'uni', name: '🎓 大学', html: unis
+      ? `<div class="cc-chips col">${unis}</div><div class="cc-sub">点大学名字听英文发音，种下一颗大学梦</div>`
+      : '<div class="cc-sub">这座城市更出名的是风景，去看看"风景"页吧！</div>' },
+    { id: 'food', name: '🍜 美食', html: foods
+      ? `<div class="cc-chips">${foods}</div><div class="cc-sub">来到这里一定要尝尝当地特色～</div>`
+      : '<div class="cc-sub">这座城市有自己的秘密美食，等你去发现！</div>' },
+    { id: 'scene', name: '🏞️ 风景', html: `
+      <div class="cc-scene">${variant.emoji} ${city.name}的地标：${LANDMARK_ZH[city.landmark] || '城市舞台'}</div>
+      <div class="cc-sub">${variant.intro}</div>
+      ${cwords ? `<div class="cc-chips">${cwords}</div>` : ''}` },
+  ];
   ov.innerHTML = `<div id="city-card">
     <div class="cc-emoji">${variant.emoji}</div>
     <div class="cc-name">${city.name}</div>
-    <div class="cc-en">${city.en}</div>
-    <button class="cc-intro-en" data-en="${variant.introEn}">🔊 ${variant.introEn}</button>
-    <div class="cc-intro">${variant.intro}</div>
-    ${unis ? `<div class="cc-sec">🎓 这里的大学</div><div class="cc-chips">${unis}</div>` : ''}
-    ${cwords ? `<div class="cc-sec">🗣️ 城市英文词（点点读）</div><div class="cc-chips">${cwords}</div>` : ''}
-    ${q}
+    <div class="cc-en">${city.en} · 第 ${visit + 1} 次到访</div>
+    <div class="cc-tabs">${tabs.map((t, i) => `<button type="button" class="cc-tab${i === 0 ? ' on' : ''}" data-t="${i}">${t.name}</button>`).join('')}</div>
+    <div class="cc-body">${tabs[0].html}</div>
     <button id="cc-go">出发探索 →</button>
   </div>`;
   document.body.appendChild(ov);
-  const close = () => { ov.remove(); onDone && onDone(); };
-  ov.querySelector('#cc-go').onclick = () => { sfx.pop(); close(); };
-  ov.querySelectorAll('.cu-chip, .cc-intro-en').forEach(b => {
-    b.onclick = () => { sfx.pop(); speak(b.dataset.en); };
+  const body = ov.querySelector('.cc-body');
+  ov.querySelectorAll('.cc-tab').forEach(b => {
+    b.onclick = () => {
+      sfx.pop();
+      ov.querySelectorAll('.cc-tab').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      body.innerHTML = tabs[Number(b.dataset.t)].html;
+      bindChips();
+      bindQuiz();
+    };
   });
-  if (quiz) {
-    const rs = ov.querySelector('.cc-quiz-rs');
-    ov.querySelectorAll('.cc-opts button').forEach(b => {
+  const bindChips = () => {
+    body.querySelectorAll('.cu-chip, .cc-intro-en').forEach(b => {
+      b.onclick = () => { sfx.pop(); if (b.dataset.en) speak(b.dataset.en); };
+    });
+  };
+  const bindQuiz = () => {
+    const quizBox = body.querySelector('.cc-quiz');
+    if (!quizBox) return;
+    const rs = quizBox.querySelector('.cc-quiz-rs');
+    quizBox.querySelectorAll('.cc-opts button').forEach(b => {
       b.onclick = () => {
         const ok = Number(b.dataset.i) === quiz.a;
         b.classList.add(ok ? 'right' : 'wrong');
@@ -471,14 +509,40 @@ export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
           rs.className = 'cc-quiz-rs good';
           sfx.great();
           onStar && onStar();
-          ov.querySelectorAll('.cc-opts button').forEach(x => x.disabled = true);
+          quizBox.querySelectorAll('.cc-opts button').forEach(x => x.disabled = true);
         } else {
           rs.textContent = '再想一想～';
           rs.className = 'cc-quiz-rs bad';
         }
       };
     });
-  }
+  };
+  bindChips();
+  bindQuiz();
+  ov.querySelector('#cc-go').onclick = () => { sfx.pop(); ov.remove(); onDone && onDone(); };
+}
+// 地标类型中文名（风景 Tab 用）
+const LANDMARK_ZH = {
+  gate: '古老的城楼和城墙', tower: '高高的塔尖直插云霄', wall: '一眼望不到头的古城墙',
+  panda: '憨态可掬的大熊猫', ice: '闪闪发光的冰雕世界', palm: '椰林树影的海滩',
+  dome: '圆顶的草原帐篷', mountain: '连绵起伏的青山', pavilion: '飞檐翘角的亭台楼阁',
+  grotto: '千年石窟大佛', harbor: '船来船往的大港口',
+};
+
+// ---------- 二选一询问卡（换册"接着玩/重新出发"等） ----------
+export function askChoice(title, sub, yesText, noText, onYes, onNo) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '150';
+  ov.innerHTML = `<div id="ask-card">
+    <div class="ak-t">${title}</div>
+    <div class="ak-s">${sub}</div>
+    <button class="ak-yes">${yesText}</button>
+    <button class="ak-no">${noText}</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('.ak-yes').onclick = () => { sfx.pop(); ov.remove(); onYes && onYes(); };
+  ov.querySelector('.ak-no').onclick = () => { sfx.pop(); ov.remove(); onNo && onNo(); };
 }
 
 // ---------- 换册转场：全屏"翻课本"动画后再刷新（替代白屏 reload） ----------

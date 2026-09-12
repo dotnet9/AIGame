@@ -184,6 +184,18 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(200, 160, 40, .3);
 }
 
+/* ---------- 顶部城市胶囊 ---------- */
+#city-pill {
+  position: fixed; top: calc(8px + var(--sat)); left: 50%; transform: translateX(-50%);
+  z-index: 22; cursor: pointer;
+  background: linear-gradient(90deg, rgba(255,159,190,.9), rgba(255,209,102,.9));
+  border-radius: 999px; padding: 6px 18px; font-size: 14px; font-weight: 900; color: #FFF;
+  text-shadow: 0 1px 2px rgba(120,50,80,.4); white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(200,100,130,.35);
+  animation: fadeIn .3s;
+}
+#city-pill:active { transform: translateX(-50%) scale(.95); }
+
 /* ---------- 城市介绍卡 ---------- */
 #city-card {
   width: min(430px, 94vw); max-height: calc(100dvh - 28px); overflow-y: auto;
@@ -230,6 +242,34 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   box-shadow: 0 5px 14px rgba(220, 90, 130, .4);
 }
 #city-card #cc-go:active { transform: scale(.96); }
+
+/* ---------- 二选一询问卡 ---------- */
+#ask-card {
+  width: min(360px, 90vw); background: #FFFDF8; border-radius: 22px; border: 3px solid #FFE0B8;
+  box-shadow: 0 18px 50px rgba(150,90,60,.28); padding: 20px; text-align: center;
+}
+#ask-card .ak-t { font-weight: 900; color: #C4577E; font-size: 17px; }
+#ask-card .ak-s { color: #8A6B4A; font-size: 13px; margin: 8px 0 16px; }
+#ask-card button {
+  display: block; width: 100%; margin-top: 10px; padding: 11px; font-family: inherit;
+  font-size: 15px; font-weight: 900; border-radius: 999px; cursor: pointer;
+  transition: transform .15s;
+}
+#ask-card button:active { transform: scale(.96); }
+#ask-card .ak-yes { color: #FFF; background: linear-gradient(180deg, #FF9FBE, #F76E9C); border: none; }
+#ask-card .ak-no { color: #934C64; background: #FFF0F5; border: 2px solid #FFD3E0; }
+.cu-chip .en { font-style: normal; font-size: 10px; color: #A08A6E; }
+.cc-chips.col { flex-direction: column; }
+.cc-chips.col .cu-chip { justify-content: flex-start; }
+#city-card .cc-tabs { display: flex; gap: 6px; justify-content: center; margin: 10px 0; }
+#city-card .cc-tab {
+  cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 900;
+  color: #A08A6E; background: #FFF6E8; border: 2px solid #FFE0B8; border-radius: 999px; padding: 5px 12px;
+}
+#city-card .cc-tab.on { color: #FFF; background: linear-gradient(180deg, #FFB86B, #F79A3E); border-color: #F79A3E; }
+#city-card .cc-body { min-height: 120px; }
+#city-card .cc-scene { font-weight: 900; color: #4E7A46; font-size: 14px; margin-bottom: 6px; }
+#city-card .cc-sub { color: #8A6B4A; font-size: 12px; margin-top: 6px; }
 
 /* ---------- 换册翻课本转场 ---------- */
 .book-flip { display: flex; justify-content: center; gap: 4px; }
