@@ -1348,6 +1348,7 @@ export class Game {
       this.lastZone = z;
       setBgmMood(z === 'beach' ? 'beach' : z === 'forest' ? 'forest' : 'farm'); // 分区音乐：换区下一小节自然过渡
       if (save.addVisited(z)) {
+        sfx.zone();   // 新区域亮相音
       const names = {
         meadow: '出生草甸 · 词宠蛋的家', orchard: '阳光果园 · 过河就能摘果子',
         windmill: '风车田 · 大风车的秘密', barnyard: '谷仓前院 · 马和绵羊的家',
@@ -2095,7 +2096,7 @@ export class Game {
       const pet = this.pets.get(id);
       pet.jumping = true; pet.jt = 0;
       this._letterBurst(pet.group.position.clone().add(new THREE.Vector3(0, 1, 0)), '💗');
-      sfx.good();
+      sfx.pat();
       const w = pet.word || WORD_MAP[id];
       if (w) speak(w.en);
       // 摸摸头，它把自己的小故事告诉你（词条里现成的 story/hint）
