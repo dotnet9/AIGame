@@ -83,7 +83,7 @@ export class Game {
     // 本册范围：当前选了哪一册，就只关心那一册（序章农场 + 本册课本词/岛）
     this.sem = save.getBookSem() || '3a';
     this.scopeWords = allWordsForSem(this.sem);
-    this.chapters = chaptersFor(this.sem);
+    this.chapters = chaptersFor(this.sem, save.getUsername());   // 动态组关：seed=昵称+册，跨会话一致
     // 城市巡游：海岛替换为城市舞台（路线=家乡→随机→北京，seed=昵称+册 固定可续）
     this.cityTour = true;
     this.homeCity = save.getHomeCity();
@@ -103,8 +103,11 @@ export class Game {
         shape,
         landmark: c.landmark, decos: c.variants.map(v => DECO_EMOJI[v.deco] || '🏮'),
         startChapter: i, unis: c.unis, city: c, level: lv,
+        chapterName: c.name,
       };
     });
+    // 一关一城：关卡名用城市名（通关卡/横幅显示城市）
+    this.chapters.forEach((ch, i) => { if (this.islands[i]) ch.name = this.islands[i].name; });
     this.scopeIds = new Set(this.scopeWords.map(w => w.id));
     this.total = this.scopeIds.size;
     this.riverHintCd = 0;
@@ -299,7 +302,7 @@ export class Game {
           egg.group.position.set(spot.x, 0, spot.z);
           egg.baseY = 0;
         }
-      } else if (this._pendingGateWord(w.id)) {
+      } else if (!this.cityTour && this._pendingGateWord(w.id)) {
         if (this.cityTour) {
           // 纯城市链条：没有农场机关，剧情词蛋按普通粉蛋处理（保证本关可完成）
           const egg = this.eggs.spawnEgg(w, false, false, this.currentChapter.words.indexOf(w.id) + 1, this._cityPos(w));
@@ -2719,6 +2722,7 @@ export class Game {
       word, mode: 'hatch',
       // 常开录音要等示范音播完再启动：开着录就起录的话，扬声器里的示范音会被录进缓冲，
       // 孩子一开口识别到的就是"示范音+人声"的混合，得分自然不准
+      easy: (this.currentChapter.review || []).includes(word.id),   // 复习蛋简单模式：读一遍就过
       onDemoEnd: () => this._primeRecWhenSafe(),
       onSuccess: res => this._doHatch(word, res && res.score, res && res.via),
       onClose: () => { this.currentWord = null; this._stopPrimeRec(); },

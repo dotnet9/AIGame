@@ -173,12 +173,13 @@ const ch = {
   busy: false, listening: false, canVoice: false, replayUrl: null,
 };
 
-export function openChallenge({ word, mode, onSuccess, onClose, onSkip, onDemoEnd }) {
-  ch.open = true; ch.word = word; ch.mode = mode; ch.onSuccess = onSuccess; ch.onClose = onClose; ch.onSkip = onSkip; ch.onDemoEnd = onDemoEnd || null;
+export function openChallenge({ word, mode, onSuccess, onClose, onSkip, onDemoEnd, easy }) {
+  ch.open = true; ch.word = word; ch.mode = mode; ch.onSuccess = onSuccess; ch.onClose = onClose; ch.onSkip = onSkip; ch.onDemoEnd = onDemoEnd || null; ch.easy = !!easy;   // 复习蛋简单模式：读一遍就过
   ch.busy = false; ch.spellMode = false; ch.listening = false; ch.replayUrl = null;
   toggleHudMenu(false);   // 弹窗打开时收起菜单
   els.modalTitle.textContent = mode === 'feed' ? '🍖 词宠饿啦，喊它的名字喂它'
     : mode === 'practice' ? '📖 跟读练习 · 大声读给词宠听'
+    : ch.easy ? '🔁 复习蛋 · 大声读一遍就唤醒'
     : '🥚 遇见词宠蛋！念出单词唤醒它';
   els.wordEn.textContent = word.en;
   els.wordEn.classList.remove('spell-hidden');
@@ -195,7 +196,7 @@ export function openChallenge({ word, mode, onSuccess, onClose, onSkip, onDemoEn
   els.micLabel.textContent = '点我开始读';
   els.spellArea.classList.add('hidden');
   els.modalFoot.classList.remove('hidden');
-  els.btnSkip.classList.toggle('hidden', mode !== 'practice');
+  els.btnSkip.classList.toggle('hidden', mode !== 'practice' && !ch.easy);
   // 详细按钮只在喂养时显示：孵化/练习时孩子专注朗读拼块，词义详情留到喂养时专注看
   els.btnDetail.classList.toggle('hidden', mode !== 'feed');
   if (mode === 'feed') setTimeout(() => els.btnDetail.click(), 600);   // 喂养时自动弹出词义详情
@@ -907,7 +908,8 @@ function showScore(score, heard, opts = {}) {
   else if (score >= 60) sfx.pop();
   else sfx.miss();
 
-  if (score >= 70) {
+  const passAt = ch.easy ? 1 : 70;   // 复习蛋简单模式：重在巩固不卡人
+  if (score >= passAt) {
     // 过关就要爽快：1.4 秒内自动关卡，不让孩子干等
     setTimeout(() => {
       els.scorePanel.classList.add('hidden');

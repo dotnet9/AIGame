@@ -738,14 +738,47 @@ function wordsZoneName(ids) {
 export function wordsForSem(sem) { return islandWords.filter(w => w.vols.includes(sem)); }
 // 本册可玩词表 = 固定序章 + 本册课本词
 export function allWordsForSem(sem) { return [...BASE_WORDS, ...wordsForSem(sem)]; }
-// 本册关卡（每 6 词一关，序章在最前）
-export function chaptersFor(sem) {
-  const ws = allWordsForSem(sem);
-  return Array.from({ length: Math.ceil(ws.length / PER_CHAPTER) }, (_, i) => {
-    const words = ws.slice(i * PER_CHAPTER, (i + 1) * PER_CHAPTER).map(w => w.id);
-    return { name: wordsZoneName(words), words };
-  });
+// 本册关卡（动态组关）：每关 6 个新词（单词+短语混合）+ 6 个复习词（之前关学过，seed 稳定跨会话一致）。
+// 城市链条一关一城：words 附带 review 数组标记复习蛋（简单模式：读一遍就过）。
+function makeRand(seedStr) {
+  let h = 2166136261;
+  for (const ch of String(seedStr)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return () => { h = (Math.imul(h, 1664525) + 1013904223) >>> 0; return h / 4294967296; };
 }
+function seededShuffle(arr, rand) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+export function chaptersFor(sem, username = '') {
+  const rand = makeRand((username || '') + '|' + sem);
+  const pool = seededShuffle(allWordsForSem(sem).map(w => w.id), rand);
+  const chapters = [];
+  const learned = [];
+  let i = 0;
+  while (i < pool.length) {
+    const fresh = pool.slice(i, i + 6);
+    i += 6;
+    let review;
+    if (learned.length >= 6) {
+      // 复习词：从之前关学过的词里 seeded 抽 6 个
+      const bag = seededShuffle(learned, makeRand((username || '') + '|' + sem + '#' + chapters.length));
+      review = bag.slice(0, 6);
+    } else {
+      // 开头没有旧词可复习：多学 6 个新词垫满一关
+      review = pool.slice(i, i + 6);
+      i += 6;
+    }
+    const words = [...fresh, ...review];
+    chapters.push({ name: wordsZoneName(fresh), words, review });
+    learned.push(...fresh);
+  }
+  return chapters;
+}
+
 // 本册海岛（带 startChapter：序章占掉前面的关，之后按本册词序解锁）
 export function islandsForSem(sem) {
   const ws = wordsForSem(sem);
