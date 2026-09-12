@@ -32,6 +32,7 @@ function fresh() {
     milestones: {},    // 已领取的里程碑（collect1=孵满10只、enrolled3b=换过这册）
     weekly: [],        // 家长周报流水：{t: 时间戳, s: 朗读分} / {t, h:1 孵化}，只留最近 7 天
     naughty: {},       // 错词本：wordId -> {misses, lastMiss, caughtOn}，读错的词隔天变"淘气词宠"回来复习
+    cityVisits: {},    // 城市到访次数：id -> 次数（决定介绍版本，常来常新）
   };
 }
 
@@ -59,6 +60,7 @@ function load() {
     merged.milestones = d.milestones || {};
     merged.weekly = Array.isArray(d.weekly) ? d.weekly : [];
     merged.naughty = d.naughty || {};
+    merged.cityVisits = d.cityVisits || {};
     merged.daily = Object.assign({ day: '', idx: 0, n: 0, done: false }, d.daily || {});
     if (!merged.player) merged.player = null;
     return merged;
@@ -348,6 +350,14 @@ export function getUsername() { return data.profile.username || ''; }
 // 家乡城市：城市巡游的起点（IP 定位或档案卡选择）
 export function getHomeCity() { return data.profile.city || 'beijing'; }
 export function setHomeCity(id) { data.profile.city = id || 'beijing'; save(); }
+// 城市到访计数：返回本次是第几次到（0 起）——决定介绍版本
+export function visitCity(id) {
+  data.cityVisits = data.cityVisits || {};
+  const v = data.cityVisits[id] || 0;
+  data.cityVisits[id] = v + 1;
+  save();
+  return v;
+}
 export function getScore() { return Number(data.profile.score) || 0; }
 export function getSessionScore() { return Number(data.profile.sessionScore) || 0; }
 // 登录时用服务端分数补上本机（换设备登录时本地是 0，但账号其实有分）；只升不降，避免抹掉离线攒的分

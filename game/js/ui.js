@@ -431,6 +431,56 @@ export function showUpdateBar({ onUpdate, onLater } = {}) {
   els.updateLater.onclick = () => { sfx.pop(); els.updateBar.classList.add('hidden'); onLater && onLater(); };
 }
 
+// ---------- 城市介绍卡：中英介绍+名校+城市词+小问答（换城演出主角） ----------
+export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '120';
+  const unis = (city.unis || []).map(u =>
+    `<button type="button" class="cu-chip" data-en="${u.en}"><i class="tag ${u.tag === '985' ? 't985' : u.tag === '211' ? 't211' : 't0'}">${u.tag || '🎓'}</i>${u.zh}</button>`).join('');
+  const cwords = (variant.words || []).map(w =>
+    `<button type="button" class="cu-chip cw" data-en="${w}">${w}</button>`).join('');
+  const q = quiz ? `<div class="cc-quiz"><b>🤔 小问答：${quiz.q}</b><div class="cc-opts">${
+    quiz.opts.map((o, i) => `<button type="button" data-i="${i}">${o}</button>`).join('')
+  }</div><div class="cc-quiz-rs"></div></div>` : '';
+  ov.innerHTML = `<div id="city-card">
+    <div class="cc-emoji">${variant.emoji}</div>
+    <div class="cc-name">${city.name}</div>
+    <div class="cc-en">${city.en}</div>
+    <button class="cc-intro-en" data-en="${variant.introEn}">🔊 ${variant.introEn}</button>
+    <div class="cc-intro">${variant.intro}</div>
+    ${unis ? `<div class="cc-sec">🎓 这里的大学</div><div class="cc-chips">${unis}</div>` : ''}
+    ${cwords ? `<div class="cc-sec">🗣️ 城市英文词（点点读）</div><div class="cc-chips">${cwords}</div>` : ''}
+    ${q}
+    <button id="cc-go">出发探索 →</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); onDone && onDone(); };
+  ov.querySelector('#cc-go').onclick = () => { sfx.pop(); close(); };
+  ov.querySelectorAll('.cu-chip, .cc-intro-en').forEach(b => {
+    b.onclick = () => { sfx.pop(); speak(b.dataset.en); };
+  });
+  if (quiz) {
+    const rs = ov.querySelector('.cc-quiz-rs');
+    ov.querySelectorAll('.cc-opts button').forEach(b => {
+      b.onclick = () => {
+        const ok = Number(b.dataset.i) === quiz.a;
+        b.classList.add(ok ? 'right' : 'wrong');
+        if (ok) {
+          rs.textContent = '答对啦 +1⭐';
+          rs.className = 'cc-quiz-rs good';
+          sfx.great();
+          onStar && onStar();
+          ov.querySelectorAll('.cc-opts button').forEach(x => x.disabled = true);
+        } else {
+          rs.textContent = '再想一想～';
+          rs.className = 'cc-quiz-rs bad';
+        }
+      };
+    });
+  }
+}
+
 // ---------- 换册转场：全屏"翻课本"动画后再刷新（替代白屏 reload） ----------
 export function playBookFlip(cb) {
   const ov = document.createElement('div');

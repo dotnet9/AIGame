@@ -5,7 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
-import { CITY_MAP, cityRoute, cityVariant, DECO_EMOJI } from './cities.js';
+import { CITY_MAP, cityRoute, cityVariant, getCityQuiz, DECO_EMOJI } from './cities.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail, speechBubbleTexture, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -94,7 +94,7 @@ export class Game {
       const dist = 66 + (i % 3) * 13;
       const v0 = cityVariant(c, 0);
       return {
-        key: cid, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
+        key: cid, uid: cid + '#' + i, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
         cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: 13 + (i % 2) * 2,
         landmark: c.landmark, decos: c.variants.map(v => DECO_EMOJI[v.deco] || '🏮'),
         startChapter: i, unis: c.unis, city: c,
@@ -1494,7 +1494,7 @@ export class Game {
   _switchCity(stageIdx) {
     const cur = this.islands[stageIdx];
     if (!cur) return;
-    for (const isl of this.islands) if (isl.grp) isl.grp.visible = isl === cur;
+    for (const isl of this.islands) if (isl.grp) isl.grp.visible = isl.uid === cur.uid;
     for (const pt of this.pets.all()) {
       const c2 = this._cityPos(pt.word, cur);
       pt.group.position.set(c2.x, c2.y || 0, c2.z);
@@ -2233,7 +2233,7 @@ export class Game {
     const p = this.player.position;
     if (this.cityTour) {
       const cur = this._currentStage();
-      for (const isl of this.world.islands) if (isl.grp) isl.grp.visible = isl === cur;
+      for (const isl of this.world.islands) if (isl.grp) isl.grp.visible = isl.uid === cur.uid;
       return;
     }
     for (const isl of this.world.islands) {
