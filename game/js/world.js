@@ -1,4 +1,4 @@
-// 农场岛屿世界搭建：地形彩绘、河流、果园、风车田、谷仓、菜园、天空岛、阳光海滩、神秘森林、环形群岛
+﻿// 农场岛屿世界搭建：地形彩绘、河流、果园、风车田、谷仓、菜园、天空岛、阳光海滩、神秘森林、环形群岛
 import * as THREE from 'three';
 import { PROPS, badge, letterTexture } from './models.js';
 import { ISLANDS } from './words.js';
@@ -747,7 +747,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     }
   }
 
-  // ---- 群岛：只建当前册的海岛（选了哪一册就只出现哪一册的岛，小火车往返） ----
+  // ---- 城市巡游舞台：每关一个城市（地标+名牌+特产装饰），小火车往返 ----
   world.islands = [];
   for (const isl of semIslands) {
     const { cx, cz, r, color, key } = isl;
@@ -768,10 +768,33 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     grp.add(surf2);
     world.anim.islandSurf = world.anim.islandSurf || [];
     world.anim.islandSurf.push(surf2);
-    // 岛上装饰
+    // 岛上装饰：城市舞台先摆地标+名牌+特产，再补少量绿树
+    const isCity = !!isl.landmark;
+    if (isCity) {
+      const lm = cityLandmark(isl.landmark, color);
+      grp.add(lm);
+      colC(cx, cz, 1.4);
+      // 中英文城市名牌
+      const sign = new THREE.Sprite(letterTexture(isl.name || '', color, '#FFFDF4'));
+      sign.scale.set(3.4, 0.95, 1);
+      sign.position.set(0, 3.1, r * 0.42);
+      const signEn = new THREE.Sprite(letterTexture((isl.en || '').toUpperCase(), '#FFFDF4', '#6B5844'));
+      signEn.scale.set(2.6, 0.55, 1);
+      signEn.position.set(0, 2.35, r * 0.42);
+      grp.add(sign, signEn);
+      // 特产装饰 emoji 撒一圈（随到访版本的城市特色）
+      (isl.decos || ['🏮']).forEach((em, i) => {
+        const a = Math.PI * 2 * i / Math.max(1, isl.decos.length) + 0.4;
+        const s = new THREE.Sprite(letterTexture(em, '#FFFDF4', '#6B5844'));
+        s.scale.setScalar(0.9);
+        s.position.set(Math.cos(a) * (r - 3), 0.6, Math.sin(a) * (r - 3));
+        grp.add(s);
+      });
+    }
     const decoSpots = [];
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI * 2 * i / 7 + (r % 3);
+    const treeN = isCity ? 3 : 7;
+    for (let i = 0; i < treeN; i++) {
+      const a = Math.PI * 2 * i / treeN + (r % 3) + 0.8;
       decoSpots.push([cx + Math.cos(a) * (r - 3), cz + Math.sin(a) * (r - 3)]);
     }
     for (const [x, z] of decoSpots) {
@@ -917,5 +940,97 @@ function bigMushroom(s = 1) {
     g.add(dot);
   }
   g.scale.setScalar(s);
+  return g;
+}
+
+// ============ 城市地标原型：9 种程序化低模拼装（cities.js 按 landmark 类型选用） ============
+function cityLandmark(type, color) {
+  const g = new THREE.Group();
+  const glow = () => M(color, { emissive: color, ei: 0.35 });
+  if (type === 'gate') {
+    // 城楼：城墙台 + 门洞 + 两层飞檐（北京/西安）
+    box(g, 6, 2.2, 2.4, '#B08858', 0, 1.1, 0);
+    box(g, 1.8, 1.5, 0.25, '#4A3626', 0, 0.75, 1.2);
+    box(g, 7, 0.35, 3, '#8A5A38', 0, 2.4, 0);
+    box(g, 5, 1.5, 2.2, '#B0483A', 0, 3.3, 0);
+    box(g, 5.8, 0.3, 2.8, '#E8C86A', 0, 4.25, 0);
+    box(g, 3.6, 0.9, 1.6, '#B0483A', 0, 4.85, 0);
+    box(g, 4.2, 0.28, 2, '#E8C86A', 0, 5.45, 0);
+  } else if (type === 'tower') {
+    // 球串塔（上海/广州/合肥）
+    cyl(g, 0.55, 1, 6.5, '#C8D8E8', 0, 3.25, 0, 10);
+    sph(g, 1.6, glow(), 0, 4.6, 0);
+    cyl(g, 0.35, 0.5, 3.4, '#C8D8E8', 0, 8, 0, 8);
+    sph(g, 1.15, glow(), 0, 10.1, 0);
+    cyl(g, 0.14, 0.14, 1.6, '#C8D8E8', 0, 11.4, 0, 6);
+    sph(g, 0.5, glow(), 0, 12.4, 0);
+  } else if (type === 'wall') {
+    // 长城垛口（南京/西安/石家庄）
+    box(g, 14, 1.9, 2.2, '#9A8A6B', 0, 0.95, 0);
+    for (let i = -3; i <= 3; i++) box(g, 0.7, 0.55, 2.2, '#9A8A6B', i * 2, 2.15, 0);
+    box(g, 6, 1.6, 2.2, '#9A8A6B', 4.5, 2.4, 0);
+    box(g, 4.2, 0.5, 3, '#E8C86A', 0, 3.4, 0);
+  } else if (type === 'panda') {
+    // 大熊猫：白身黑耳黑眼圈，怀里抱根竹子（成都）
+    sph(g, 1.5, M('#F5F1E8'), 0, 1.3, 0);
+    sph(g, 0.95, M('#F5F1E8'), 0, 2.8, 0.25);
+    sph(g, 0.26, M('#2A2A2A'), -0.55, 3.5, 0.1);
+    sph(g, 0.26, M('#2A2A2A'), 0.55, 3.5, 0.1);
+    sph(g, 0.14, M('#2A2A2A'), -0.32, 2.9, 0.62);
+    sph(g, 0.14, M('#2A2A2A'), 0.32, 2.9, 0.62);
+    sph(g, 0.12, M('#2A2A2A'), 0, 3.02, 0.75);
+    sph(g, 0.5, M('#2A2A2A'), -1.35, 1.5, 0.3);
+    sph(g, 0.5, M('#2A2A2A'), 1.35, 1.5, 0.3);
+    cyl(g, 0.09, 0.09, 1.6, '#7CBB5E', 0.85, 1.6, 0.75, 8);
+  } else if (type === 'ice') {
+    // 冰雕塔（哈尔滨）：半透明尖塔群
+    const iceM = new THREE.MeshStandardMaterial({ color: 0xA8D8FF, roughness: 0.15, transparent: true, opacity: 0.8, emissive: 0x4E9EE8, emissiveIntensity: 0.45 });
+    const t1 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 5, 8), iceM); t1.position.y = 2.5; g.add(t1);
+    const t2 = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.6, 8), iceM); t2.position.set(1.6, 1.8, 0.5); g.add(t2);
+    const t3 = new THREE.Mesh(new THREE.ConeGeometry(0.7, 2.6, 8), iceM); t3.position.set(-1.5, 1.3, 0.4); g.add(t3);
+    const b1 = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), iceM); b1.position.set(-0.8, 0.55, 1); g.add(b1);
+  } else if (type === 'palm') {
+    // 椰林海滩（三亚/海口）
+    place(g, PROPS.palm(1.1), 0, 0);
+    place(g, PROPS.palm(0.85), 2.2, 0.8);
+    place(g, PROPS.palm(0.7), -2, 0.6);
+    const sand = new THREE.Mesh(new THREE.CircleGeometry(3.4, 20).rotateX(-Math.PI / 2), M('#EFDCA8'));
+    sand.position.y = 0.02; g.add(sand);
+  } else if (type === 'dome') {
+    // 圆顶（呼和浩特/乌鲁木齐/银川：蒙古包+尖）
+    cyl(g, 2.2, 2.4, 1.4, '#F5F1E8', 0, 0.7, 0, 14);
+    sph(g, 2.2, glow(), 0, 1.4, 0, 1, 0.6, 1);
+    cyl(g, 0.1, 0.1, 1, '#E8C86A', 0, 2.6, 0, 6);
+    sph(g, 0.22, M('#E8C86A'), 0, 3.15, 0);
+  } else if (type === 'mountain') {
+    // 山形（重庆/桂林/拉萨/贵阳…）：三峰 + 雪顶/青山
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(3, 5.2, 7), M('#6FAF6B')); c1.position.set(-1.6, 2.6, -0.4); g.add(c1);
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 7, 7), M('#5E9E5E')); c2.position.set(1.2, 3.5, 0.3); g.add(c2);
+    const snow = new THREE.Mesh(new THREE.ConeGeometry(0.75, 1.7, 7), M('#FFFFFF')); snow.position.set(1.2, 5.6, 0.3); g.add(snow);
+    const c3 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 3.6, 7), M('#7CBF74')); c3.position.set(2.9, 1.8, -0.6); g.add(c3);
+  } else if (type === 'pavilion') {
+    // 亭子（杭州/济南/丽江…）：四柱 + 攒尖顶 + 基座
+    cyl(g, 2.4, 2.6, 0.35, '#C8B898', 0, 0.18, 0, 12);
+    for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) cyl(g, 0.09, 0.09, 1.7, '#B0483A', px, 1.2, pz, 6);
+    cone(g, 2.1, 1.1, '#B0483A', 0, 2.55, 0, 0, 0, 0, 10);
+    sph(g, 0.18, M('#E8C86A'), 0, 3.15, 0);
+    box(g, 1.5, 0.08, 0.3, '#B0483A', 0, 1.9, 1.02);
+  } else if (type === 'grotto') {
+    // 大佛（洛阳/敦煌）：崖壁坐佛
+    box(g, 4.6, 3.4, 1.2, '#B09A78', 0, 1.7, -0.6);
+    sph(g, 0.75, M('#D8C8A8'), 0, 2.6, 0.35);
+    cyl(g, 1.05, 1.25, 1.5, '#D8C8A8', 0, 1.15, 0.35, 12);
+    sph(g, 0.3, M('#6B5844'), 0, 2.75, 0.95);
+    sph(g, 0.3, M('#6B5844'), 0, 3.25, -0.2);
+  } else {
+    // harbor：灯塔 + 小船（天津/青岛/大连等沿海城市）
+    cyl(g, 0.5, 0.65, 3.6, '#F5F1E8', 0, 1.8, 0, 10);
+    cyl(g, 0.62, 0.62, 0.5, '#D95F4B', 0, 0.5, 0, 10);
+    cyl(g, 0.62, 0.62, 0.5, '#D95F4B', 0, 2.8, 0, 10);
+    sph(g, 0.34, glow(), 0, 3.75, 0);
+    box(g, 1.6, 0.3, 0.7, '#B08858', 2.4, 0.15, 1.2);
+    box(g, 0.9, 0.75, 0.5, '#F5F1E8', 2.4, 0.65, 1.2);
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
 }
