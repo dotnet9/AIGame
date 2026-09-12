@@ -171,9 +171,9 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   const world = { colliders: [], anim: {}, gates: {}, platforms: [] };
   const C = world.colliders;
   // 可站立物件：给碰撞体一个“台面高度”，跳得够高就能落上去站着（站得高看得远）
-  const colTop = (x, z, r, top, bottom = 0) => {
+  const colTop = (x, z, r, top, bottom = 0, bounce = false) => {
     C.push({ t: 'c', x, z, r, top, bottom });
-    world.platforms.push({ x, z, r, top });
+    world.platforms.push({ x, z, r, top, bounce });
   };
   // 纯平台（不挡路）：云朵这类悬空软物件，跳穿它落在上面反而更好玩
   const addPlatform = (x, z, r, top) => world.platforms.push({ x, z, r, top });
@@ -355,6 +355,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   // ---- 谷仓（黑黑的里面） ----
   const barn = place(scene, PROPS.barn(), 24, 22, Math.PI); // 门朝北（面向草甸）
   world.gates.darkness = barn.getObjectByName('darkness');
+  world.anim.barnDoors = ['doorL', 'doorR'].map(n => barn.getObjectByName(n)).filter(Boolean);
   colR(20.9, 19.3, 22.9, 19.7); colR(25.1, 19.3, 27.1, 19.7);
   colR(20.9, 24.3, 27.1, 24.7);
   colR(20.9, 19.3, 21.3, 24.7); colR(26.7, 19.3, 27.1, 24.7);
@@ -505,7 +506,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   }
   for (const [x, z, s] of [[-45, -6, 1], [-49, 9, 1.2], [-41, 13, 0.9], [-47, 17, 1.1], [-43, -12, 0.8]]) {
     place(scene, bigMushroom(s), x, z, Math.random() * 3);
-    colTop(x, z, 0.28 * s, 0.9 * s);
+    colTop(x, z, 0.28 * s, 0.9 * s, 0, true);
   }
   place(scene, PROPS.log(1.1), -45.5, 4.5, 0.4);
   colTop(-45.5, 4.5, 0.55, 0.8);

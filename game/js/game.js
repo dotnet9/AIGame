@@ -860,14 +860,24 @@ export class Game {
       this.player.position.y += this.vy * dt;
       if (this.vy <= 0 && this.player.position.y <= support + 0.04) {
         this.player.position.y = support;
-        this.onGround = true;
-        this.vy = 0;
-        this.jumps = 0;
-        // 落地一压，Q 弹一下
-        this.player.scale.set(1.12, 0.8, 1.12);
-        this.addTween(0.2, k => {
-          this.player.scale.set(1.12 - k * 0.12, 0.8 + k * 0.2, 1.12 - k * 0.12);
-        }, () => this.player.scale.set(1, 1, 1));
+        const pf = this._platformAt(pp.x, pp.z);
+        if (pf && pf.bounce) {
+          // 弹跳蘑菇：啵咿茵——弹得比跳还高，二段跳还能接着耍
+          this.onGround = false;
+          this.vy = 12.5;
+          this.jumps = 1;
+          sfx.boing();
+          this._puff();
+        } else {
+          this.onGround = true;
+          this.vy = 0;
+          this.jumps = 0;
+          // 落地一压，Q 弹一下
+          this.player.scale.set(1.12, 0.8, 1.12);
+          this.addTween(0.2, k => {
+            this.player.scale.set(1.12 - k * 0.12, 0.8 + k * 0.2, 1.12 - k * 0.12);
+          }, () => this.player.scale.set(1, 1, 1));
+        }
       }
     } else if (this.player.position.y > support + 0.06) {
       this.onGround = false;   // 走出石头边缘：脚下没支撑了，开始下落
@@ -905,6 +915,19 @@ export class Game {
       const d = Math.hypot(this.player.position.x - ISLE_CENTER.x, this.player.position.z - ISLE_CENTER.z);
       if (d > 5.1 && !this.climbing) this._climb(false); // 走出边缘 → 滑下去
     }
+  }
+
+  // 脚下所在的平台（最高的那个），没有则 null
+  _platformAt(x, z) {
+    if (this.onIsle) return null;
+    let best = null;
+    const y = this.player.position.y;
+    for (const pf of this.world.platforms || []) {
+      if (Math.hypot(x - pf.x, z - pf.z) <= pf.r + 0.15 && pf.top <= y + 0.3) {
+        if (!best || pf.top > best.top) best = pf;
+      }
+    }
+    return best;
   }
 
   // 脚下支撑面高度：地面（0 / 天空岛 14）或位置重合、台面不高于脚边太多的跳跳石
@@ -1120,6 +1143,15 @@ export class Game {
     }
     for (const f of a.foam || []) f.material.opacity = 0.4 + Math.sin(t * 2.2 + f.position.z) * 0.2;
     for (const s2 of a.islandSurf || []) s2.material.opacity = 0.28 + Math.sin(t * 1.6 + s2.position.x) * 0.14;
+    // 谷仓门：小人走近就缓缓推开，走远再轻轻合上——像真的推开谷仓门
+    if (a.barnDoors && a.barnDoors.length) {
+      const p2 = this.player.position;
+      const open = Math.hypot(p2.x - 24, p2.z - 19.2) < 3.6 ? 1.75 : 0;
+      a.barnDoors.forEach((d, i) => {
+        const dir = i === 0 ? -1 : 1;
+        d.rotation.y += (open * dir - d.rotation.y) * Math.min(1, dt * 3);
+      });
+    }
     // 云朵阶梯轻轻上下漂浮，平台高度同步跟随（站上去的 userinfo 会一起起伏）
     for (const cs of a.cloudStair || []) {
       const dy = cs.pf.bob.amp * Math.sin(t * cs.pf.bob.speed + cs.pf.bob.phase);
