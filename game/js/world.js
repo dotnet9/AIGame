@@ -412,18 +412,18 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     { x: 20, z: -16, top: 3.1 },
   ];
   for (const b of world.brickSpots) {
-    const brick = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.15, 1.25), M('#E8B04B', { rough: 0.7 }));
-    brick.position.set(b.x, b.top - 0.575, b.z);
+    const brick = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.62, 0.68), M('#E8B04B', { rough: 0.7 }));
+    brick.position.set(b.x, b.top - 0.31, b.z);
     brick.castShadow = true;
     scene.add(brick);
     b.mesh = brick;
-    b.bottom = b.top - 1.15;
+    b.bottom = b.top - 0.62;
     const q = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('？', '#7A4A12', '#FFF2D0'), transparent: true, depthWrite: false }));
     q.position.set(b.x, b.top + 0.08, b.z);
-    q.scale.setScalar(0.66);
+    q.scale.setScalar(0.4);
     scene.add(q);
     b.q = q;
-    addPlatform(b.x, b.z, 0.95, b.top);   // 站到砖块顶上也行
+    addPlatform(b.x, b.z, 0.55, b.top);   // 站到砖块顶上也行
   }
   // 天空岛顶面本身也是可站平台：沿云朵阶梯跳上来后就能直接落在岛上
   colTop(-22, 27, 6, 14, 13);   // bottom=13：岛底下走路自由通过

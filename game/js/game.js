@@ -917,7 +917,7 @@ export class Game {
       const headY = pp.y + 1.25;
       for (const b of this.world.brickSpots || []) {
         if (b.used) continue;
-        if (Math.hypot(pp.x - b.x, pp.z - b.z) <= 1.05 && headY >= b.bottom && headY <= b.bottom + 0.55) {
+        if (Math.hypot(pp.x - b.x, pp.z - b.z) <= 0.95 && headY >= b.bottom && headY <= b.bottom + 0.5) {
           this.vy = -1.2;
           this._bumpBrick(b);
           break;
@@ -962,9 +962,9 @@ export class Game {
 
   // 顶砖：砖块上顶晃动；第一次顶出藏在里面的词宠蛋，蛋掉到地上等小朋友去孵
   _bumpBrick(b) {
-    const baseY = b.top - 0.575;
+    const baseY = b.top - 0.31;
     sfx.pop();
-    this.addTween(0.32, k => { b.mesh.position.y = baseY + Math.sin(k * Math.PI) * 0.32; });
+    this.addTween(0.32, k => { b.mesh.position.y = baseY + Math.sin(k * Math.PI) * 0.22; });
     if (b.used) { sfx.miss(); return; }
     b.used = true;
     b.mesh.material.color.set('#9C8A72');   // 顶过的砖变成旧砖色
