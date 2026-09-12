@@ -1504,6 +1504,7 @@ export class Game {
       );
       this.mountPet.group.rotation.y = this.player.rotation.y;
       this.onGround = true; this.vy = 0; this.jumps = 0;
+      this._collide();   // 骑乘也要撞墙/挡河/挡海：没有这行骑着词宠能穿墙进水
       return;
     }
     const support = this._supportAt(pp.x, pp.z);
@@ -1562,13 +1563,20 @@ export class Game {
         }
       }
     }
-    // 摆动：空中定格成张开的姿势
-    const sw = this.onGround ? Math.sin(this.walkT) * (moving ? 0.55 : 0.06) : 0.8;
-    this.playerParts.legL.rotation.x = sw;
-    this.playerParts.legR.rotation.x = this.onGround ? -sw : -0.35;
-    this.playerParts.armL.rotation.x = -sw * 0.8;
-    this.playerParts.armR.rotation.x = sw * 0.8;
-    this.playerParts.body.position.y = 0.3 + Math.abs(Math.sin(this.walkT)) * (moving && this.onGround ? 0.03 : 0.008);
+    // 摆动：空中定格成张开的姿势；骑乘时收腿夹住词宠、手臂扶"把手"（跑起来词宠轻轻颠）
+    if (this.mount && this.mountPet) {
+      const bob = Math.abs(Math.sin(performance.now() / 280)) * (moving ? 0.06 : 0.015);
+      this.playerParts.legL.rotation.x = -1.05; this.playerParts.legR.rotation.x = -1.05;
+      this.playerParts.armL.rotation.x = -0.85; this.playerParts.armR.rotation.x = -0.85;
+      this.playerParts.body.position.y = 0.3 - bob;
+    } else {
+      const sw = this.onGround ? Math.sin(this.walkT) * (moving ? 0.55 : 0.06) : 0.8;
+      this.playerParts.legL.rotation.x = sw;
+      this.playerParts.legR.rotation.x = this.onGround ? -sw : -0.35;
+      this.playerParts.armL.rotation.x = -sw * 0.8;
+      this.playerParts.armR.rotation.x = sw * 0.8;
+      this.playerParts.body.position.y = 0.3 + Math.abs(Math.sin(this.walkT)) * (moving && this.onGround ? 0.03 : 0.008);
+    }
 
     this._collide();
     // 跑步扬起小尘土
