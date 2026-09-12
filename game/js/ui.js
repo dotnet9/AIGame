@@ -14,6 +14,8 @@ for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'sta
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-head', 'map-canvas', 'map-close',
   'leaderboard-widget', 'leaderboard-list', 'leaderboard-refresh', 'leaderboard-toggle', 'leaderboard-fold',
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
+  'levelup', 'levelup-burst', 'levelup-title', 'levelup-sub', 'levelup-stars', 'levelup-words-tip', 'levelup-words', 'levelup-next',
+  'chapter-banner', 'chapter-banner-text',
   'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout',
   'hud-menu', 'btn-menu']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
 
@@ -367,6 +369,49 @@ export function homeStars(x, y, n = 3) {
     }, 420 + i * 130);
     setTimeout(() => s.remove(), 1500 + i * 130);
   }
+}
+
+// ---------- 全屏通关卡：星星结算 + 本关单词回顾（点单词可再听发音） ----------
+export function levelUpOpen() { return els.levelup && !els.levelup.classList.contains('hidden'); }
+export function showLevelComplete({ index, name, words = [], last = false, onNext }) {
+  els.levelupBurst.textContent = last ? '🏆' : '🎉';
+  els.levelupTitle.textContent = last ? '整册通关！' : `第 ${index} 关完成！`;
+  els.levelupSub.textContent = last
+    ? `「${name}」${words.length} 只词宠全部唤醒，你就是词宠岛传奇！`
+    : `「${name}」全部唤醒 +3⭐`;
+  // 星星逐颗弹入：重置动画
+  const stars = els.levelupStars.querySelectorAll('span');
+  stars.forEach((s, i) => {
+    s.style.animation = 'none'; void s.offsetWidth;
+    s.style.animation = '';
+    s.style.animationDelay = last ? (0.2 + i * 0.2) + 's' : (0.3 + i * 0.25) + 's';
+  });
+  els.levelupWordsTip.style.display = words.length ? '' : 'none';
+  els.levelupWords.innerHTML = words.map(w =>
+    `<button type="button" class="lvlup-chip" data-en="${w.en}"><b>${w.en}</b><i>${w.zh}</i></button>`).join('');
+  els.levelupWords.querySelectorAll('.lvlup-chip').forEach(btn => {
+    btn.onclick = () => { sfx.pop(); speak(btn.dataset.en); };
+  });
+  els.levelupNext.textContent = last ? '再逛逛小岛 🏝️' : '继续冒险 →';
+  els.levelup.classList.remove('hidden');
+  confettiBurst(120);
+  vibrate([30, 60, 30, 60, 90]);
+  els.levelupNext.onclick = () => {
+    sfx.pop();
+    els.levelup.classList.add('hidden');
+    onNext && onNext();
+  };
+}
+
+// ---------- 关卡开始大横幅：飞入 → 停留 → 飘走 ----------
+let bannerTimer = null;
+export function chapterBanner(text) {
+  els.chapterBannerText.textContent = text;
+  els.chapterBanner.classList.remove('hidden', 'run');
+  void els.chapterBanner.offsetWidth;      // 重排以重启动画
+  els.chapterBanner.classList.add('run');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => els.chapterBanner.classList.add('hidden'), 3300);
 }
 
 // ---------- 词典详情卡 ----------

@@ -6,7 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
 import { buildWorld } from './world.js';
-import { buildPlayer, letterTexture, petThumbnail, PROPS } from './models.js';
+import { buildPlayer, letterTexture, petThumbnail, speechBubbleTexture, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
 import * as save from './save.js';
 import * as ui from './ui.js';
@@ -143,6 +143,8 @@ export class Game {
     }
     this.camYaw = 0; this.camPitch = 0.42; this.camDist = 8.5;
     this.gateTries = {};   // 每个机关猜错的次数（一次答对有星星奖励）
+    this.lockInput = false;   // 通关卡/演出期间锁操作
+    this.cinematic = false;   // 镜头动画接管中（不再按轨道公式覆盖机位）
     this._initGuide();
   }
 
@@ -204,6 +206,9 @@ export class Game {
     this.scene.add(owl);
     this.world.anim.owl = owl;
     this.world.colliders.push({ t: 'c', x: -6.1, z: 19.1, r: 0.55 });
+    // 续玩时按当前关卡恢复区域主题换装（通关演出时也会实时布置）
+    const curIdx = this.chapterIndex(this.hatchedInScope());
+    if (curIdx >= 0) this._dressChapter(curIdx);
   }
 
   // 关卡制出蛋：已孵化的变词宠；蛋只出"当前关卡的 6 个"（粉光柱）+ 剧情还没用掉的钥匙词蛋（蓝光柱带 🔑，不算本关进度）
@@ -305,7 +310,7 @@ export class Game {
     this.scene.add(this.moveMarker);
 
     addEventListener('keydown', e => {
-      if (e.repeat) return;
+      if (e.repeat || this.lockInput) return;
       this.keys.add(e.code);
       if (/^Key[WASD]$|^Arrow/.test(e.code)) this._clearMoveTarget(); // 手动方向一按，自动走路让位
       if (e.code === 'KeyE') this._interact();
@@ -326,6 +331,7 @@ export class Game {
     let dragging = false, lx = 0, ly = 0;
     this.canvas.addEventListener('contextmenu', e => e.preventDefault());
     this.canvas.addEventListener('pointerdown', e => {
+      if (this.lockInput) return;   // 通关卡/演出期间不响应世界交互
       if (e.pointerType === 'touch') {
         this.touchCam.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (this.touchCam.size === 2) {
@@ -382,6 +388,7 @@ export class Game {
     addEventListener('pointerup', endPointer);
     addEventListener('pointercancel', endPointer);
     this.canvas.addEventListener('wheel', e => {
+      if (this.lockInput) return;
       this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.012, 3.2, 60);
     }, { passive: true });
 
@@ -1353,7 +1360,7 @@ export class Game {
 
   // ================= 玩家 =================
   _updatePlayer(dt) {
-    if (this.climbing || this.riding) return;
+    if (this.lockInput || this.climbing || this.riding) return;
     const move = this._mv = this._mv || new THREE.Vector3();
     move.set(0, 0, 0);
     // 键盘/摇杆方向是“相对镜头”的；点击移动是“世界坐标直线”，不随镜头转
@@ -1681,6 +1688,8 @@ export class Game {
       this.camera.position.x += (Math.random() - 0.5) * k;
       this.camera.position.y += (Math.random() - 0.5) * k * 0.6;
     }
+    // 镜头动画（通关后飞向新一关蛋区）接管期间：轨道机位公式不覆盖 tween 的机位
+    if (this.cinematic) return;
     const target = this.player.position;
     // 复用临时向量：相机每帧跑 60 次，不能每次都 new（GC 卡顿元凶）
     const v = this._cv = this._cv || new THREE.Vector3();
@@ -2183,7 +2192,7 @@ export class Game {
     }
   }
 
-  // 通关演出：庆祝 + 星星 + 新一关的蛋登场；本册集齐放烟花
+  // 通关演出：全场欢呼 → 星星 → 换装新一关区域 + 新蛋登场 → 全屏通关卡 → 镜头飞向新蛋区
   _chapterComplete(doneCount) {
     sfx.great();
     setTimeout(() => sfx.magic(), 350);
@@ -2192,15 +2201,161 @@ export class Game {
     const p = this.player.position.clone().add(new THREE.Vector3(0, 1.4, 0));
     this._letterBurst(p, '★✨⭐');
     this._starBurst(p, 6);
+    // 全场词宠一起跳起来欢呼（此起彼伏）
+    dispatchEvent(new Event('wordpet:cheer'));
     const next = this.chapters[doneCount];
+    if (next) this._dressChapter(doneCount);          // 真场景变化：新一关区域主题换装
     this._spawnProgress();
     this._refreshHungry();
-    if (next) {
-      ui.toast(`🎊 第 ${doneCount} 关「${this.chapters[doneCount - 1].name}」全部唤醒！+3⭐ 第 ${doneCount + 1} 关「${next.name}」的蛋出现啦`, 5000);
-    } else {
-      ui.toast(`🎊 本册 ${this.total} 只词宠全部唤醒！你就是词宠岛传奇！去「课本」换一册还能继续玩～`, 6000);
-      this._fireworks();
+    this.lockInput = true;                             // 演出期间锁操作
+    setTimeout(() => {
+      const done = this.chapters[doneCount - 1];
+      ui.showLevelComplete({
+        index: doneCount,
+        name: done.name,
+        words: done.words.map(id => WORD_MAP[id]).filter(Boolean),
+        last: !next,
+        onNext: () => {
+          if (next) this._enterChapter(doneCount);
+          else this._bookDone();
+        },
+      });
+    }, 1200);
+  }
+
+  // 点了"继续冒险"：猫头鹰送奖说话 + 镜头飞向新一关第一颗蛋 → 开始横幅
+  _enterChapter(doneCount) {
+    const ch = this.chapters[doneCount];
+    this._owlDeliver(`第 ${doneCount + 1} 关「${ch.name}」的蛋我都备好啦，出发！`);
+    const egg = ch.words.map(id => this.eggs.get(id)).find(e => e && e.group && e.group.visible);
+    const go = () => {
+      ui.chapterBanner(`🚩 第 ${doneCount + 1} 关「${ch.name}」开始！`);
+      this.lockInput = false;
+      this._clearMoveTarget();
+    };
+    if (egg) this._flyTo(egg.group.position, go);
+    else go();
+  }
+
+  // 本册全部通关：烟花秀 + 收尾横幅
+  _bookDone() {
+    this._fireworks();
+    ui.chapterBanner('🏆 本册全部唤醒，你就是词宠岛传奇！');
+    this.lockInput = false;
+  }
+
+  // 镜头 cinematic：飞到目标上空环视 1 秒，再回到玩家机位（与轨道相机公式一致，落回不跳变）
+  _flyTo(target, onDone) {
+    this.cinematic = true;
+    this._clearMoveTarget();
+    const cam = this.camera;
+    const player = this.player.position;
+    const from = cam.position.clone();
+    const lookFrom = player.clone().add(new THREE.Vector3(0, 1.4, 0));
+    const lookTo = target.clone().add(new THREE.Vector3(0, 1, 0));
+    // 目标机位：蛋的斜上后方，能看到蛋和周围换装的区域
+    const dir = target.clone().sub(player).setY(0);
+    if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
+    dir.normalize();
+    const to = target.clone().add(dir.multiplyScalar(7)).add(new THREE.Vector3(0, 5.5, 0));
+    const orbit = new THREE.Vector3(
+      player.x + Math.sin(this.camYaw) * Math.cos(this.camPitch) * this.camDist,
+      player.y + Math.sin(this.camPitch) * this.camDist + 1.6,
+      player.z + Math.cos(this.camYaw) * Math.cos(this.camPitch) * this.camDist
+    );
+    const look = lookFrom.clone();
+    const sfx2 = setTimeout(() => sfx.magic(), 400);
+    this.addTween(2.4, k => {
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      cam.position.lerpVectors(from, to, e);
+      look.lerpVectors(lookFrom, lookTo, e);
+      cam.lookAt(look);
+    }, () => {
+      setTimeout(() => {
+        // 回程：落回当前 camYaw/camPitch/camDist 对应的机位，交还控制时不跳变
+        this.addTween(1.0, k => {
+          const e = k * k * (3 - 2 * k);
+          cam.position.lerpVectors(to, orbit, e);
+          look.lerpVectors(lookTo, lookFrom, e);
+          cam.lookAt(look);
+        }, () => {
+          this.cinematic = false;
+          clearTimeout(sfx2);
+          onDone && onDone();
+        });
+      }, 1100);   // 在新区域上空停留 1 秒看看换装效果
+    });
+  }
+
+  // 关卡主题换装：给第 idx 关（0 起）词蛋集中的区域布置主题装饰 + 氛围灯
+  _dressChapter(idx) {
+    const ch = this.chapters[idx];
+    if (!ch || !this.world.dressChapter) return;
+    // 统计本关词落在哪里，选蛋最多的区域
+    const count = {};
+    for (const id of ch.words) {
+      const z = WORD_MAP[id] && WORD_MAP[id].zone;
+      if (z && ZONE_RECTS.some(r => r.key === z)) count[z] = (count[z] || 0) + 1;
     }
+    const top = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+    if (!top) return;
+    const rect = ZONE_RECTS.find(r => r.key === top[0]);
+    // 每关一个主题色（按关卡序号轮换）
+    const THEMES = [
+      { accent: '#FF8FB0', emoji: '🌸', name: '樱花' },
+      { accent: '#FFC94E', emoji: '🌼', name: '向日葵' },
+      { accent: '#7EC4F2', emoji: '💙', name: '海洋' },
+      { accent: '#C6A5F0', emoji: '🔮', name: '魔法' },
+      { accent: '#8FD08F', emoji: '🍀', name: '森林' },
+      { accent: '#FF9F68', emoji: '🍊', name: '果园' },
+    ];
+    const theme = THEMES[idx % THEMES.length];
+    this.world.dressChapter(rect.x1, rect.z1, rect.x2, rect.z2, theme);
+    ui.toast(`${theme.emoji} 「${ch.name}」的${theme.name}主题布置完成！去 ${rect.name} 看看吧`, 4200);
+  }
+
+  // 猫头鹰园丁送奖演出：扑棱到玩家身边 → 气泡说话 + 撒星星 → 飞回木桩
+  _owlDeliver(text) {
+    const owl = this.world.anim.owl;
+    if (!owl || this._owlBusy) return;
+    this._owlBusy = true;
+    const home = owl.position.clone();
+    const dest = this.player.position.clone().add(new THREE.Vector3(1.7, 0, 1.7));   // 落在玩家侧边地面
+    sfx.pop();
+    this.addTween(1.2, k => {
+      const e = 1 - Math.pow(1 - k, 2);
+      owl.position.lerpVectors(home, dest, e);
+      owl.position.y += Math.sin(k * Math.PI) * 0.9;   // 飞行弧线
+      owl.rotation.y = Math.PI * 0.85;
+    }, () => {
+      this._owlSay(owl, text);
+      this._starBurst(owl.position.clone(), 5);
+      sfx.magic();
+      setTimeout(() => {
+        this.addTween(1.1, k => {
+          owl.position.lerpVectors(dest, home, k * k);
+          owl.position.y += Math.sin(k * Math.PI) * 0.6;
+        }, () => { owl.rotation.y = 0; this._owlBusy = false; });
+      }, 2400);
+    });
+  }
+
+  // 猫头鹰头顶的说话气泡（复用词宠短语气泡的绘制）
+  _owlSay(owl, text) {
+    // 气泡按空格换行，中文没有空格会挤成一行溢出：每 6 个字插一个空格辅助断行
+    const wrapped = String(text).replace(/(.{6})/g, '$1 ');
+    const tex = speechBubbleTexture(wrapped, '🦉');
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(2.6, 1.82, 1);   // 贴图 320x224，保持比例
+    sp.position.copy(owl.position).add(new THREE.Vector3(0, 1.3, 0));
+    this.scene.add(sp);
+    this.fx.push({
+      obj: sp, t: 0, dur: 2.3,
+      update: (t, dt) => {
+        sp.position.y += dt * 0.12;
+        sp.material.opacity = t > 1.7 ? Math.max(0, 1 - (t - 1.7) / 0.6) : 1;
+      },
+    });
   }
 
   // 星星从指尖飞起（拿星星时的小演出）

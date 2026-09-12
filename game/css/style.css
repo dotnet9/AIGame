@@ -598,6 +598,67 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   width: min(380px, 90vw); background: #FFFDF8; border-radius: 22px; border: 3px solid #FFE0B8;
   padding: 18px; text-align: center;
 }
+
+/* ---------- 通关庆祝卡：星星结算 + 单词回顾 ---------- */
+#levelup { z-index: 45; background: rgba(90, 60, 80, .5); }
+#levelup-card {
+  width: min(420px, 92vw); max-height: calc(100dvh - 32px); overflow-y: auto;
+  background: linear-gradient(180deg, #FFF9EC, #FFFDF8 55%);
+  border-radius: 26px; border: 3px solid #FFD9E6;
+  box-shadow: 0 20px 60px rgba(150, 70, 100, .35);
+  padding: 22px 20px 18px; text-align: center; position: relative;
+}
+#levelup-burst { font-size: 52px; animation: lvlupBounce .9s cubic-bezier(.34,1.56,.64,1); }
+@keyframes lvlupBounce { 0% { transform: scale(0) rotate(-30deg) } 60% { transform: scale(1.25) rotate(8deg) } 100% { transform: scale(1) rotate(0) } }
+#levelup-title { font-size: 24px; font-weight: 900; color: #C4577E; margin-top: 6px; letter-spacing: 1px; }
+#levelup-sub { color: #8A6B4A; font-weight: bold; font-size: 14px; margin-top: 4px; }
+#levelup-stars { margin: 12px 0 4px; display: flex; justify-content: center; gap: 10px; }
+#levelup-stars span {
+  font-size: 34px; display: inline-block; opacity: 0; transform: scale(0);
+  animation: starIn .5s cubic-bezier(.34,1.7,.64,1) forwards;
+  filter: drop-shadow(0 3px 6px rgba(255,190,60,.45));
+}
+#levelup-stars span:nth-child(2) { animation-delay: .25s; }
+#levelup-stars span:nth-child(3) { animation-delay: .5s; }
+@keyframes starIn { 0% { opacity: 0; transform: scale(0) rotate(-90deg) } 100% { opacity: 1; transform: scale(1) rotate(0) } }
+#levelup-words-tip { color: #A08A6E; font-size: 12px; font-weight: bold; margin-top: 8px; }
+#levelup-words { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-top: 8px; }
+.lvlup-chip {
+  cursor: pointer; border: 2px solid #FFE0B8; background: #FFFDF8; border-radius: 12px;
+  padding: 5px 10px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  transition: transform .15s, box-shadow .15s; font-family: inherit;
+}
+.lvlup-chip:active { transform: scale(.93); }
+.lvlup-chip b { color: #C4577E; font-size: 14px; }
+.lvlup-chip i { color: #8A6B4A; font-size: 11px; font-style: normal; }
+#levelup-next {
+  margin-top: 16px; width: 100%; padding: 12px; font-size: 16px; font-weight: 900; font-family: inherit;
+  color: #FFF; background: linear-gradient(180deg, #FF9FBE, #F76E9C);
+  border: none; border-radius: 999px; cursor: pointer;
+  box-shadow: 0 5px 14px rgba(220, 90, 130, .4), inset 0 1px 0 rgba(255,255,255,.4);
+  transition: transform .15s, box-shadow .15s;
+}
+#levelup-next:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(220, 90, 130, .5), inset 0 1px 0 rgba(255,255,255,.4); }
+#levelup-next:active { transform: scale(.96); }
+
+/* ---------- 关卡开始大横幅 ---------- */
+#chapter-banner {
+  position: fixed; top: 22%; left: 50%; z-index: 44;
+  transform: translate(-50%, -50%) scale(.6); opacity: 0;
+  pointer-events: none; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+  background: linear-gradient(90deg, rgba(255,159,190,.92), rgba(255,209,102,.92), rgba(159,190,255,.92));
+  border-radius: 999px; padding: 12px 30px;
+  box-shadow: 0 8px 26px rgba(150, 80, 110, .35);
+}
+#chapter-banner-text { font-size: 20px; font-weight: 900; color: #FFF; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(120, 50, 80, .45); }
+#chapter-banner.run { animation: bannerIn 3.2s cubic-bezier(.22,1.2,.36,1) forwards; }
+@keyframes bannerIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.5) }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.08) }
+  22% { transform: translate(-50%, -50%) scale(1) }
+  82% { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+  100% { opacity: 0; transform: translate(-50%, -62%) scale(.94) }
+}
 #intro-emoji { font-size: 42px; }
 #intro-text { color: #6B5844; font-size: 15px; line-height: 1.7; margin: 10px 0 14px; }
 #intro-text b { color: #E0678D; }

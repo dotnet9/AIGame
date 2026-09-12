@@ -22,6 +22,10 @@ const cone = (g, r, h, c, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, seg = 12)
   const m = new THREE.Mesh(new THREE.CylinderGeometry(0.001, r, h, seg), M(c));
   m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
 };
+const sph = (g, r, c, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), M(c));
+  m.position.set(x, y, z); m.scale.set(sx, sy, sz); g.add(m); return m;
+};
 
 // 岛屿半径（可玩范围）， 海从 52 以外开始
 const ISLE_R = 52;
@@ -797,6 +801,69 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     else if (roll < 0.7) { place(scene, PROPS.rock(0.6 + Math.random() * 0.8), x, z); colC(x, z, 0.4); }
     else if (roll < 0.85) place(scene, PROPS.flowerpatch(), x, z);
   }
+
+  // ---- 关卡主题换装：新一关解锁时给目标区域整体布置装饰 + 氛围灯（真场景变化） ----
+  // 装饰统一挂 dressing group：换关时清空重建，不与静态场景混在一起
+  const dressing = new THREE.Group();
+  scene.add(dressing);
+  world.dressChapter = (x1, z1, x2, z2, theme) => {
+    const accent = theme && theme.accent || '#FF8FB0';
+    while (dressing.children.length) dressing.remove(dressing.children[0]);
+    const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
+    const w = Math.min(x2 - x1, 24), d = Math.min(z2 - z1, 24);
+    // 位置收进可玩半径，别把旗杆插进海里
+    const clampR = (x, z) => {
+      const r = Math.hypot(x, z);
+      if (r <= 48) return [x, z];
+      return [x * 48 / r, z * 48 / r];
+    };
+    // 彩旗串：两条横跨区域的弧形旗绳 + 三色小三角旗
+    const flagColors = [accent, '#FFE08A', '#8FD08F', '#7EC4F2', '#FF9F68'];
+    const bunting = (ax, az, bx, bz, n = 9) => {
+      const g = new THREE.Group();
+      const hA = 2.6, hB = 2.6;
+      cyl(g, 0.045, 0.055, hA, '#C89A6B', ax, hA / 2, az, 0, 0, 0, 8);
+      cyl(g, 0.045, 0.055, hB, '#C89A6B', bx, hB / 2, bz, 0, 0, 0, 8);
+      for (let i = 1; i < n; i++) {
+        const t = i / n;
+        const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+        const sag = Math.sin(t * Math.PI) * 0.55;          // 旗绳下垂
+        const y = hA + (hB - hA) * t - sag;
+        const flag = cone(g, 0.13, 0.3, flagColors[i % flagColors.length], x, y, z, Math.PI, 0, 0, 4);
+        flag.rotation.x = Math.PI;                          // 旗尖朝下
+        flag.castShadow = false;
+      }
+      g.traverse(o => { if (o.isMesh) { o.castShadow = o.geometry.type !== 'ConeGeometry'; } });
+      dressing.add(g);
+    };
+    const [ax, az] = clampR(x1 + w * 0.12, z1 + d * 0.12);
+    const [bx, bz] = clampR(x2 - w * 0.12, z1 + d * 0.12);
+    bunting(ax, az, bx, bz);
+    const [cx1, cz1] = clampR(x1 + w * 0.12, z2 - d * 0.12);
+    const [dx1, dz1] = clampR(x2 - w * 0.12, z2 - d * 0.12);
+    bunting(cx1, cz1, dx1, dz1);
+    // 四角主题色气球柱（球 + 细绳 + 短杆）
+    for (const [gx, gz] of [[x1 + 1, z1 + 1], [x2 - 1, z1 + 1], [x1 + 1, z2 - 1], [x2 - 1, z2 - 1]]) {
+      const [px, pz] = clampR(gx, gz);
+      const g = new THREE.Group();
+      cyl(g, 0.03, 0.03, 1.1, '#E8DCC8', 0, 0.55, 0, 0, 0, 0, 6);
+      sph(g, 0.34, accent, 0, 1.35, 0, 1, 1.2, 1);
+      dressing.add(g);
+      g.position.set(px, 0, pz);
+      g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    }
+    // 主题花丛：sunflower/flowerpatch 沿边撒一圈
+    for (let i = 0; i < 6; i++) {
+      const t = (i + 0.5) / 6;
+      const [px, pz] = clampR(x1 + (x2 - x1) * t, z1 + (i % 2 ? -0.4 : d + 0.4));
+      place(dressing, i % 2 ? PROPS.flowerpatch() : PROPS.sunflower(), px, pz, Math.random() * 3);
+    }
+    dressing.traverse(o => { if (o.isMesh) o.receiveShadow = false; });
+    // 氛围灯：accent 色低强度点光（每关只有这一盏，手机也扛得住）
+    const light = new THREE.PointLight(new THREE.Color(accent), 6, 18, 1.6);
+    light.position.set(cx, 3.2, cz);
+    dressing.add(light);
+  };
 
   return world;
 }
