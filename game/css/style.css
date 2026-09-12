@@ -659,6 +659,35 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   82% { opacity: 1; transform: translate(-50%, -50%) scale(1) }
   100% { opacity: 0; transform: translate(-50%, -62%) scale(.94) }
 }
+
+/* ---------- 游戏更新提示条：非模态，顶部居中，不打断游戏 ---------- */
+#update-bar {
+  position: fixed; top: calc(10px + var(--sat)); left: 50%; transform: translateX(-50%);
+  z-index: 130;   /* 高于加载屏(100)和档案弹窗(110)：任何时候有更新都能看见 */
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(90deg, #FF9FBE, #FFC94E);
+  border-radius: 999px; padding: 7px 10px 7px 18px;
+  box-shadow: 0 6px 20px rgba(200, 100, 130, .4);
+  animation: toastIn .32s cubic-bezier(.34, 1.3, .64, 1);
+  max-width: 92vw;
+}
+#update-bar .update-text {
+  color: #FFF; font-weight: 900; font-size: 14px;
+  text-shadow: 0 1px 2px rgba(120, 50, 80, .35);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#update-now {
+  flex: none; cursor: pointer; font-family: inherit; font-weight: 900; font-size: 13px;
+  color: #C4577E; background: #FFFDF8; border: none; border-radius: 999px; padding: 6px 14px;
+  box-shadow: 0 2px 8px rgba(120, 50, 80, .25);
+  transition: transform .15s;
+}
+#update-now:active { transform: scale(.94); }
+#update-later {
+  flex: none; cursor: pointer; width: 26px; height: 26px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, .35); color: #FFF; font-size: 13px; font-weight: 900; line-height: 1;
+}
+#update-later:active { transform: scale(.9); }
 #intro-emoji { font-size: 42px; }
 #intro-text { color: #6B5844; font-size: 15px; line-height: 1.7; margin: 10px 0 14px; }
 #intro-text b { color: #E0678D; }

@@ -16,6 +16,7 @@ for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'sta
   'intro', 'intro-emoji', 'intro-text', 'intro-next',
   'levelup', 'levelup-burst', 'levelup-title', 'levelup-sub', 'levelup-stars', 'levelup-words-tip', 'levelup-words', 'levelup-next',
   'chapter-banner', 'chapter-banner-text',
+  'update-bar', 'update-now', 'update-later',
   'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout',
   'hud-menu', 'btn-menu']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
 
@@ -413,6 +414,13 @@ export function chapterBanner(text) {
   els.chapterBanner.classList.add('run');
   clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => els.chapterBanner.classList.add('hidden'), 3300);
+}
+
+// ---------- 游戏更新提示条（version.js 检测到新版本后调用） ----------
+export function showUpdateBar({ onUpdate, onLater } = {}) {
+  els.updateBar.classList.remove('hidden');
+  els.updateNow.onclick = () => { els.updateBar.classList.add('hidden'); onUpdate && onUpdate(); };
+  els.updateLater.onclick = () => { sfx.pop(); els.updateBar.classList.add('hidden'); onLater && onLater(); };
 }
 
 // ---------- 词典详情卡 ----------

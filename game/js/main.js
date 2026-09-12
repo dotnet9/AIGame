@@ -1,5 +1,6 @@
 // 词宠岛 · 入口
 import './compat.js'; // 兼容垫片（roundRect 等），必须最先加载
+import './version.js'; // 热更新检测：线上有新版本时提示刷新
 import * as THREE from 'three';
 import { Game } from './game.js';
 import * as save from './save.js';
