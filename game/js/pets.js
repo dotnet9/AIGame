@@ -256,6 +256,11 @@ export class PetManager {
         p.group.position.y = p.baseY + Math.abs(Math.sin(p.jt * 8)) * 0.35;
         if (p.jt > 1.4) { p.jumping = false; p.group.position.y = p.baseY; }
       } else {
+        // 饿了的词宠会主动跑到小主人身边讨吃的（8 米内才追，追到 2.2 米内停下）
+        if (p.hungry && playerPos) {
+          const pd = Math.hypot(playerPos.x - p.group.position.x, playerPos.z - p.group.position.z);
+          if (pd > 2.2 && pd < 10) p.target.set(playerPos.x, playerPos.z);
+        }
         const dx = p.target.x - p.group.position.x, dz = p.target.y - p.group.position.z;
         const d = Math.hypot(dx, dz);
         if (d < 0.15) {

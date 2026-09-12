@@ -1390,10 +1390,18 @@ export class Game {
     // 词宠打招呼：靠近自己的词宠时偶尔冒个笑脸（30 秒最多一次，骑乘中不打扰）
     if (!this.mount) {
       let near = null, nd = 3;
+      let hungryNear = null;
       for (const pt of this.pets.all()) {
-        if (save.isHungry(pt.word.id)) continue;
         const d = Math.hypot(p.x - pt.group.position.x, p.z - pt.group.position.z);
+        if (save.isHungry(pt.word.id)) {
+          if (d < 2.5) hungryNear = pt;   // 饿词宠跑到身边：撒娇讨吃的
+          continue;
+        }
         if (d < nd) { nd = d; near = pt; }
+      }
+      if (hungryNear && (!this._hungrySaid || this._hungrySaid < performance.now())) {
+        this._hungrySaid = performance.now() + 15000;
+        this._petSay(hungryNear, '小主人，我饿了', 2.2);
       }
       if (near && (!this._helloCd || this._helloCd < performance.now())) {
         this._helloCd = performance.now() + 30000;
@@ -1524,6 +1532,22 @@ export class Game {
       this.riding = false;
       this.player.position.copy(to);
       ui.toast(`🚂 到站！欢迎来到 ${st.name} ${st.emoji}`, 3400);
+    });
+  }
+
+  // 顶部城市胶囊 + 重弹介绍卡
+  _refreshCityPill() {
+    if (!this.cityTour) { ui.setCityPill(null); return; }
+    const st = this._currentStage();
+    ui.setCityPill(`${st.name} ${st.emoji}`, () => this._openCityIntro());
+  }
+  _openCityIntro() {
+    const st = this._currentStage();
+    const vkey = this.sem + ':' + st.key;
+    const visit = Math.max(0, (save.getSave().cityVisits?.[vkey] || 1) - 1);
+    ui.showCityCard({
+      city: st.city, variant: cityVariant(st.city, visit), visit, quiz: getCityQuiz(st.key),
+      onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
     });
   }
 
@@ -2772,6 +2796,22 @@ export class Game {
     });
   }
 
+  // 词宠说话气泡：文字版（"小主人，我饿了"等）
+  _petSay(pet, text, dur = 1.8) {
+    const tex = speechBubbleTexture(text, '💬');
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    s.scale.set(2.3, 1.61, 1);   // 贴图 320x224，保持比例
+    s.position.copy(pet.group.position).add(new THREE.Vector3(0, 1.45, 0));
+    this.scene.add(s);
+    this.fx.push({
+      obj: s, t: 0, dur,
+      update: (t, dt) => {
+        s.position.y += dt * 0.15;
+        s.material.opacity = t > dur - 0.5 ? Math.max(0, 1 - (t - (dur - 0.5)) / 0.5) : 1;
+      },
+    });
+  }
+
   // 词宠表情气泡：头顶冒表情（饿/开心/想念），1.6 秒上浮淡出
   _petEmoji(pet, emoji) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -2957,6 +2997,7 @@ export class Game {
     this._maybePreloadWhisper(); this._warmMic();
     ui.openChallenge({
       word, mode: 'feed',
+      // 读了/拼对了：额外加分和星星（复习巩固的奖励）
       onSuccess: () => {
         setTimeout(() => {
           ui.closeChallenge();
@@ -2967,9 +3008,6 @@ export class Game {
           ui.updateStars(save.getStars());
           if (save.bumpDaily('feed2') === 'done') this._afterDaily();
           this._chainReward(save.bumpChain('feed'));
-          this.pets.setHungry(id, false);
-          this.pets.celebrate(id);
-          this._petEmoji(this.pets.get(id), '🎵');
           sfx.good();
           ui.toast(`🍖「${word.en}」吃饱啦，心满意足地转了个圈 +1⭐`, 3000);
           // 喂满 3 次触发进化：长大一圈、戴上星星光环
@@ -2982,8 +3020,25 @@ export class Game {
           this._refreshHungry();
         }, 280);
       },
-      onClose: () => { this.currentWord = null; },
+      // 关闭卡片 = 喂完（读不读、拼不拼都可以，重点是见到词宠复习一遍）
+      onClose: () => {
+        this.currentWord = null;
+        this._feedDone(id);
+      },
     });
+  }
+
+  // 喂完：词宠说谢谢，1 秒后气泡消失；读了/拼对了会先走 onSuccess 的加分奖励
+  _feedDone(id) {
+    if (this._feedDoneAt && performance.now() - this._feedDoneAt < 800) return;   // onSuccess→closeChallenge 会连触发，防重复计次
+    this._feedDoneAt = performance.now();
+    save.feed(id);
+    const pet = this.pets.get(id);
+    this.pets.setHungry(id, false);
+    this.pets.celebrate(id);
+    if (pet) this._petSay(pet, '谢谢我的小主人', 1.2);
+    sfx.good();
+    this._refreshHungry();
   }
 
   _refreshHungry() {
@@ -3005,23 +3060,7 @@ export class Game {
   // 猜错不惩罚（词宠摇头回家），第一次就猜对额外奖 3 颗星星。
   _activeGate() {
     const p = this.player.position;
-    // 顶部城市胶囊 + 重弹介绍卡
-  _refreshCityPill() {
-    if (!this.cityTour) { ui.setCityPill(null); return; }
-    const st = this._currentStage();
-    ui.setCityPill(`${st.name} ${st.emoji}`, () => this._openCityIntro());
-  }
-  _openCityIntro() {
-    const st = this._currentStage();
-    const vkey = this.sem + ':' + st.key;
-    const visit = Math.max(0, (save.getSave().cityVisits?.[vkey] || 1) - 1);
-    ui.showCityCard({
-      city: st.city, variant: cityVariant(st.city, visit), visit, quiz: getCityQuiz(st.key),
-      onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
-    });
-  }
-
-  // 城市巡游：机关任务牌跟着钥匙蛋走——玩家靠近任务牌（蛋的孵化点）就地解谜
+    // 城市巡游：机关任务牌跟着钥匙蛋走——玩家靠近任务牌（蛋的孵化点）就地解谜
     if (this.cityTour && this._cityGatePos) {
       const needMap = { boat: 'boat', light: 'light', wind: 'wind', seed: 'planted', rain: 'beanstalk', banana: 'vines' };
       for (const [wid, pt] of Object.entries(this._cityGatePos)) {
