@@ -31,6 +31,7 @@ function fresh() {
     daily: { day: '', idx: 0, n: 0, done: false },
     milestones: {},    // 已领取的里程碑（collect1=孵满10只、enrolled3b=换过这册）
     weekly: [],        // 家长周报流水：{t: 时间戳, s: 朗读分} / {t, h:1 孵化}，只留最近 7 天
+    naughty: {},       // 错词本：wordId -> {misses, lastMiss, caughtOn}，读错的词隔天变"淘气词宠"回来复习
   };
 }
 
@@ -57,6 +58,7 @@ function load() {
     if (typeof merged.profile.registered !== 'boolean') merged.profile.registered = false;
     merged.milestones = d.milestones || {};
     merged.weekly = Array.isArray(d.weekly) ? d.weekly : [];
+    merged.naughty = d.naughty || {};
     merged.daily = Object.assign({ day: '', idx: 0, n: 0, done: false }, d.daily || {});
     if (!merged.player) merged.player = null;
     return merged;
@@ -140,6 +142,40 @@ function mergeSave(r) {
     if (!seen.has(k)) { data.weekly.push(x); seen.add(k); }
   }
   pruneWeekly();
+}
+
+// ---------- 错词本：读错的词变"淘气词宠"，隔天回来抓住它=复习 ----------
+export function markNaughty(id) {
+  if (!id) return;
+  const d = data.naughty = data.naughty || {};
+  const rec = d[id] = d[id] || { misses: 0, lastMiss: '', caughtOn: '' };
+  rec.misses++;
+  rec.lastMiss = todayKey();
+  save();
+}
+// 今日淘气词宠：从历史错词里随机挑一个（今天刚读错的除外，明天才回来）
+export function pickNaughtyToday() {
+  const d = data.naughty = data.naughty || {};
+  const today = todayKey();
+  if (d._todayId) {
+    const rec = d[d._todayId];
+    if (rec && rec.caughtOn !== today) return d._todayId;   // 今天的还在逃
+    delete d._todayId;
+  }
+  const cand = Object.keys(d).filter(id =>
+    id !== '_todayId' && d[id].misses >= 2
+    && (d[id].caughtOn || '') !== today && (d[id].lastMiss || '') !== today);
+  if (!cand.length) return null;
+  const id = cand[Math.floor(Math.random() * cand.length)];
+  d._todayId = id;
+  save();
+  return id;
+}
+export function catchNaughty(id) {
+  const d = data.naughty || {};
+  if (d[id]) d[id].caughtOn = todayKey();
+  if (d._todayId === id) delete d._todayId;
+  save();
 }
 
 // ---------- 家长周报数据：按天记朗读分与孵蛋数，只留最近 7 天 ----------

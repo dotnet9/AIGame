@@ -624,6 +624,7 @@ export class Game {
         ui.chapterBanner(`🎒 欢迎来到 ${BOOK_LABEL(this.sem)}！新的单词之旅出发啦`);
       }, 900);
     }
+    this._spawnNaughty();
     setInterval(() => this._refreshHungry(), 1500);
     // 指一条路：最近的可孵蛋
     setTimeout(() => {
@@ -1429,6 +1430,51 @@ export class Game {
   }
 
   // ================= 玩家 =================
+  // 淘气词宠：读错 2 次以上的词隔天变淘气词宠出场，点它读出单词就抓住（错词复习）
+  _spawnNaughty() {
+    const id = save.pickNaughtyToday();
+    if (!id || !save.isHatched(id)) return;
+    const pet = this.pets.get(id);
+    if (!pet) return;
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: letterTexture('😈', '#B28FF5', '#FFF'), transparent: true, depthWrite: false,
+    }));
+    tag.scale.setScalar(0.5);
+    tag.position.y = 1.55;
+    pet.group.add(tag);
+    this._naughtyId = id;
+    this._naughtyTag = tag;
+    setTimeout(() => ui.toast(`😈 「${WORD_MAP[id].en}」变成淘气词宠跑出来啦！找到它读出单词抓住它 +2⭐`, 5200), 6000);
+  }
+
+  // 抓淘气词宠：读出它的名字（60 分以上算抓住），成功 +2⭐
+  _catchNaughty(id) {
+    const word = WORD_MAP[id];
+    if (!word) return;
+    this.currentWord = word;
+    this._maybePreloadWhisper(); this._warmMic();
+    ui.openChallenge({
+      word: { en: word.en, zh: word.zh, syl: word.syl, hint: word.hint || '大声读出它的名字，把它抓回来！' },
+      mode: 'practice',
+      onSuccess: res => {
+        if ((res.score || 0) >= 60) {
+          save.catchNaughty(id);
+          save.addStars(2);
+          ui.updateStars(save.getStars());
+          if (this._naughtyTag) { this._naughtyTag.parent && this._naughtyTag.parent.remove(this._naughtyTag); this._naughtyTag = null; }
+          this._naughtyId = null;
+          sfx.great();
+          ui.confettiBurst(60);
+          ui.toast(`🎉 抓到淘气词宠「${word.en}」！+2⭐ 它乖乖回家复习去了`, 4200);
+          const pt = this.pets.get(id);
+          if (pt) this.pets.celebrate(id);
+        }
+        this.currentWord = null;
+      },
+      onClose: () => { this.currentWord = null; },
+    });
+  }
+
   // 骑词宠：跑得更快、视野更高；飞行词宠驮着飘半空。再触发一次下来
   _ridePet(id) {
     if (this.mount === id) {   // 下骑
@@ -2100,6 +2146,15 @@ export class Game {
       this.promptAction = () => this._rideBoat();
       return;
     }
+    // 淘气词宠在附近：优先提示抓捕（错词复习）
+    if (this._naughtyId) {
+      const np = this.pets.get(this._naughtyId);
+      if (np && Math.hypot(p.x - np.group.position.x, p.z - np.group.position.z) < 2.4) {
+        ui.showPrompt(`😈 抓住淘气的「${np.word.en}」（读出它）`, this.isTouch ? '👆' : 'E');
+        this.promptAction = () => this._catchNaughty(this._naughtyId);
+        return;
+      }
+    }
     // 许愿井（星星商店）与每日任务板
     if (Math.hypot(p.x - 4.6, p.z - 19.5) < 2.6) {
       ui.showPrompt('到许愿井换新装扮', this.isTouch ? '👆' : 'E');
@@ -2184,6 +2239,7 @@ export class Game {
     }
     if (this.eggs.get(id)) { this._approachEgg(id); }
     else if (save.isHungry(id)) { this._clearMoveTarget(); this._feedPet(id); }
+    else if (id === this._naughtyId) { this._clearMoveTarget(); this._catchNaughty(id); }
     else if (this.pets.get(id)) {
       // 摸头：点吃饱了的词宠，它开心地跳一下、念出自己的名字（顺手就是一次复习）
       this._clearMoveTarget();
@@ -3250,6 +3306,7 @@ export class Game {
     if (r.ok) this.voiceFailStreak = 0;
     else {
       this.voiceFailStreak = (this.voiceFailStreak || 0) + 1;
+      save.markNaughty(this.currentWord.id);   // 错词本：读错的词隔天变淘气词宠回来复习
       if (this.voiceFailStreak === 3) ui.toast('🌟 读得已经很棒啦！歇口气再试一次，也可以点下面的字母块拼一拼', 4200);
     }
     return r;
