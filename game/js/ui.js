@@ -1,5 +1,5 @@
 // DOM UI：HUD、挑战弹窗（语音+拼块）、召唤、图鉴、引导、提示
-import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice, updateBgm, isBgmMuted, setBgmMuted, setBgmFever } from './audio.js';
+import { sfx, speak, speakSlow, speakFollow, spellLetters, stopSpeaking, playRecording, scoreVoice, updateBgm, isBgmMuted, setBgmMuted, setBgmFever, getAccent, setAccent } from './audio.js';
 import { voiceSupported, voiceBlockedByInsecure, isVoiceBroken } from './speech.js';
 import { CURRICULUM, gradeKey } from './curriculum.js';
 
@@ -1519,10 +1519,18 @@ export function showHelp() {
       <div>🤔 被挡住？召唤对的词宠解谜题</div>
       <div>🍖 词宠饿了会想你，回去喂喂它</div>
       <div>⛲ 星星能换帽子和魔法棒</div>
+      <div style="margin-top:8px">🗣️ 发音口音：
+        <button id="accent-toggle" class="accent-btn"></button>
+      </div>
       <button id="help-close" class="round-btn small" style="position:absolute;top:14px;right:14px">✕</button>
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'help-close') ov.remove(); });
   document.body.appendChild(ov);
+  // 口音切换（影响 TTS 兜底嗓音；有真人录音的单词仍是录音）
+  const accBtn = ov.querySelector('#accent-toggle');
+  const paint = () => { accBtn.textContent = getAccent() === 'uk' ? '🇬🇧 英式' : '🇺🇸 美式'; };
+  paint();
+  accBtn.onclick = () => { setAccent(getAccent() === 'uk' ? 'us' : 'uk'); paint(); speak('hello'); };
 }
 
 // ---------- 右上角菜单：点 ☰ 展开 / 点别处或选项后收起 ----------

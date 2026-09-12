@@ -184,6 +184,13 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(200, 160, 40, .3);
 }
 
+/* ---------- 口音切换按钮 ---------- */
+.accent-btn {
+  font-family: inherit; font-weight: 900; font-size: 13px; cursor: pointer;
+  color: #934C64; background: #FFF0F5; border: 2px solid #FFD3E0; border-radius: 999px; padding: 4px 12px;
+}
+.accent-btn:active { transform: scale(.94); }
+
 /* ---------- 家长周报卡 ---------- */
 #report-card {
   width: min(400px, 92vw); max-height: calc(100dvh - 32px); overflow-y: auto;

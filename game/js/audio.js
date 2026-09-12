@@ -80,15 +80,29 @@ async function tryFileMeta(key) {
 // ---------- TTS 兜底 ----------
 let enVoice = null;
 
+// 口音偏好：us 美式 / uk 英式（只影响 TTS 兜底的嗓音选择，语音文件不受影响）
+let accent = 'us';
+try { accent = localStorage.getItem('voice-accent') === 'uk' ? 'uk' : 'us'; } catch (e) { /* ignore */ }
+export function getAccent() { return accent; }
+export function setAccent(a) {
+  accent = a === 'uk' ? 'uk' : 'us';
+  try { localStorage.setItem('voice-accent', accent); } catch (e) { /* ignore */ }
+  enVoice = null;
+  pickVoice();
+}
+
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
   if (!vs.length) return;
-  const prefer = ['Aria', 'Jenny', 'Zira', 'Google US English', 'Samantha'];
+  const prefer = accent === 'uk'
+    ? ['Sonia', 'Libby', 'Hazel', 'Google UK English Female', 'Daniel']
+    : ['Aria', 'Jenny', 'Zira', 'Google US English', 'Samantha'];
+  const lang = accent === 'uk' ? /en[-_]GB/i : /en[-_]US/i;
   for (const p of prefer) {
-    const v = vs.find(v => /en[-_]US/i.test(v.lang) && v.name.includes(p));
+    const v = vs.find(v => lang.test(v.lang) && v.name.includes(p));
     if (v) { enVoice = v; return; }
   }
-  enVoice = vs.find(v => /en[-_]US/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || vs[0];
+  enVoice = vs.find(v => lang.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || vs[0];
 }
 
 if ('speechSynthesis' in window) {
