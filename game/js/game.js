@@ -649,6 +649,7 @@ export class Game {
     this._updateZoneHint(dt);
     this._updateFx(dt);
     this._updateIslandLOD();
+    this._updateDayNight();
     this.eggs.update(dt, t);
     this.pets.update(dt, t, this.player.position);
     // 词宠溜达守规矩：不穿墙、不下河、不出世界（boat 词宠本来就漂在河里，跳过）
@@ -2062,6 +2063,43 @@ export class Game {
       this.moveMarker.material.opacity = 0.55 + Math.sin(t * 8) * 0.3;
     }
     this.riverHintCd -= dt;
+  }
+
+  // 昼夜循环：按真实时间移动日月、调光照与雾色（18:00-6:00 进夜晚模式）
+  _updateDayNight() {
+    const dn = this.world.anim.dayNight;
+    if (!dn) return;
+    this._dnT = (this._dnT || 0) - 1;
+    if (this._dnT > 0) return;
+    this._dnT = 60;   // 约每秒一次
+    const hr = new Date().getHours() + new Date().getMinutes() / 60;
+    const sea = this.world.anim.sea;
+    if (hr < 6 || hr >= 18) {
+      // 夜晚：月亮当班、光照调暗、雾色转深、全岛萤火虫点亮
+      dn.sunCore.visible = dn.sunHalo.visible = false;
+      dn.moon.visible = true;
+      dn.sun.intensity = 0.55; dn.hemi.intensity = 0.5;
+      dn.fog.color.set(0x39466B);
+      dn.dome.material.color.set(0x6B7FB8);
+      if (sea) sea.material.color.set('#2E5F8A');
+      if (this.world.anim.nightFire) this.world.anim.nightFire.material.opacity = 0.85;
+    } else {
+      // 白天：太阳东升西落，清晨/黄昏偏金，正午最亮
+      dn.sunCore.visible = dn.sunHalo.visible = true;
+      dn.moon.visible = false;
+      const a = Math.PI * (1 - (hr - 6) / 12);
+      dn.sun.position.set(Math.cos(a) * 60, 16 + Math.sin(a) * 34, 14);
+      dn.sunCore.position.set(Math.cos(a) * 118, 20 + Math.sin(a) * 90, 24);
+      dn.sunHalo.position.copy(dn.sunCore.position).multiplyScalar(0.98);
+      const h = Math.max(0.15, Math.sin(a));
+      dn.sun.intensity = 1.2 + h * 0.9;
+      dn.hemi.intensity = 0.75 + h * 0.35;
+      dn.fog.color.set(0xDFF3EC);
+      dn.dome.material.color.set(0xFFFFFF);
+      if (sea) sea.material.color.set('#4A9ED9');
+      if (this.world.anim.nightFire) this.world.anim.nightFire.material.opacity = 0;
+      dn.sun.color.set(hr < 8 ? 0xFFE2B8 : hr >= 16 ? 0xFFC98A : 0xFFF2DC);
+    }
   }
 
   // 外圈海岛懒加载：雾外的岛整组隐藏（省 draw call），走近再显示，视觉无感

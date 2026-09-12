@@ -236,14 +236,20 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   sunHalo.position.copy(sunDir).multiplyScalar(116);
   sunHalo.scale.setScalar(64);
   scene.add(sunHalo);
+  // 月亮（夜晚替换太阳出场）
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: letterTexture('🌙', '#DCE8FF', '#FFFDF4'), fog: false,
+    depthWrite: false, transparent: true,
+  }));
+  moon.scale.setScalar(18);
+  moon.position.set(-90, 60, -40);
+  moon.visible = false;
+  scene.add(moon);
 
   // ---- 光照 ----
-  scene.add(new THREE.HemisphereLight(0xFFF6E8, 0x9CC98F, 1.05));
+  const hemi = new THREE.HemisphereLight(0xFFF6E8, 0x9CC98F, 1.05);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xFFF2DC, 2.1);
-  // 真实时段色温：清晨和黄昏整岛偏金（只调一次，白天玩的孩子看不到差别）
-  const hr = new Date().getHours();
-  if (hr >= 16 && hr < 19) { sun.color.set(0xFFC98A); sun.intensity = 1.75; }
-  else if (hr >= 5 && hr < 8) { sun.color.set(0xFFE2B8); sun.intensity = 1.85; }
   sun.position.set(18, 30, 12);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -253,6 +259,28 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   sun.shadow.bias = -0.0004;
   sun.shadow.radius = 4;          // 阴影边缘更柔，画面更干净
   scene.add(sun);
+  // 昼夜循环：game 层每帧按真实时间移动日月、调光照与雾色
+  world.anim.dayNight = { sunCore, sunHalo, moon, sun, hemi, dome, fog: scene.fog };
+  // 夜晚全岛萤火虫（白天 opacity 0 隐藏）
+  {
+    const n = 50;
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 44;
+      pos[i * 3] = Math.cos(a) * r;
+      pos[i * 3 + 1] = 0.6 + Math.random() * 2.4;
+      pos[i * 3 + 2] = Math.sin(a) * r;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const fire = new THREE.Points(geo, new THREE.PointsMaterial({
+      map: glowTexture('rgba(190,255,220,1)', 'rgba(140,255,190,0)'),
+      color: 0xAFFFD0, size: 0.4, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    scene.add(fire);
+    world.anim.nightFire = fire;
+  }
 
   // ---- 大海（全岛外圈 + 群岛） ----
   const seaMat = M('#4A9ED9', { rough: 0.32 });
