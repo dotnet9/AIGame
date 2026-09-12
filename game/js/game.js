@@ -605,6 +605,7 @@ export class Game {
   }
 
   start() {
+    this._started = true;
     ui.hideLoading();
     ui.updateUser(save.getUsername());
     ui.updateStars(save.getStars());
@@ -1357,6 +1358,19 @@ export class Game {
     if (this._zoneTimer < 0.6) return;
     this._zoneTimer = 0;
     const p = this.player.position;
+    // 词宠打招呼：靠近自己的词宠时偶尔冒个笑脸（30 秒最多一次，骑乘中不打扰）
+    if (!this.mount) {
+      let near = null, nd = 3;
+      for (const pt of this.pets.all()) {
+        if (save.isHungry(pt.word.id)) continue;
+        const d = Math.hypot(p.x - pt.group.position.x, p.z - pt.group.position.z);
+        if (d < nd) { nd = d; near = pt; }
+      }
+      if (near && (!this._helloCd || this._helloCd < performance.now())) {
+        this._helloCd = performance.now() + 30000;
+        this._petEmoji(near, '😊');
+      }
+    }
     // 情景单词：走到实物旁弹气泡并念一遍（每个点 90 秒最多触发一次）
     for (const s of SCENE_WORDS) {
       if (this._sceneCd && this._sceneCd[s.en] > performance.now()) continue;
@@ -1493,6 +1507,7 @@ export class Game {
     this.mountFly = !!pet.flying;
     this.onGround = true; this.vy = 0; this.jumps = 0;
     sfx.boing();
+    this._petEmoji(pet, '😍');
     ui.toast(`骑上「${pet.word.en}」啦！${this.mountFly ? '它驮着你飘在半空' : '跑得更快了'}，再点它下来`, 3000);
   }
 
@@ -2608,6 +2623,23 @@ export class Game {
     });
   }
 
+  // 词宠表情气泡：头顶冒表情（饿/开心/想念），1.6 秒上浮淡出
+  _petEmoji(pet, emoji) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: letterTexture(emoji, '#FFFDF6', '#5C4A38'), transparent: true, depthWrite: false,
+    }));
+    s.scale.setScalar(0.55);
+    s.position.copy(pet.group.position).add(new THREE.Vector3(0, 1.5, 0));
+    this.scene.add(s);
+    this.fx.push({
+      obj: s, t: 0, dur: 1.6,
+      update: (t, dt) => {
+        s.position.y += dt * 0.4;
+        s.material.opacity = t > 1 ? Math.max(0, 1 - (t - 1) / 0.6) : 1;
+      },
+    });
+  }
+
   // 情景单词气泡：物件上方飘出"单词+中文"，慢慢上浮消散
   _sceneBubble(s, w) {
     const tex = speechBubbleTexture(`${w.en} ${w.zh}`, s.emoji);
@@ -2788,6 +2820,7 @@ export class Game {
           this._chainReward(save.bumpChain('feed'));
           this.pets.setHungry(id, false);
           this.pets.celebrate(id);
+          this._petEmoji(this.pets.get(id), '🎵');
           sfx.good();
           ui.toast(`🍖「${word.en}」吃饱啦，心满意足地转了个圈 +1⭐`, 3000);
           // 喂满 3 次触发进化：长大一圈、戴上星星光环
@@ -2806,7 +2839,10 @@ export class Game {
 
   _refreshHungry() {
     for (const pet of this.pets.all()) {
-      this.pets.setHungry(pet.word.id, save.isHungry(pet.word.id));
+      const hungry = save.isHungry(pet.word.id);
+      if (hungry && !pet.hungry && this._started) this._petEmoji(pet, '🍖');   // 刚开始想你了：头顶冒🍖
+      pet.hungry = hungry;
+      this.pets.setHungry(pet.word.id, hungry);
     }
     // HUD 显示本关进度：第 X 关 · 本关唤醒 n/6
     const total = this.hatchedInScope();
