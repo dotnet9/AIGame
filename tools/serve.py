@@ -88,10 +88,44 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        if urlparse(self.path).path == "/api/leaderboard":
+        path = urlparse(self.path).path
+        if path == "/api/leaderboard":
             with BOARD_LOCK:
                 rows = sorted(read_board(), key=lambda x: (-int(x.get("score", 0)), x.get("username", "")))[:5]
             return self._json(200, rows)
+        if path == "/api/stats":
+            with BOARD_LOCK:
+                accounts = read_accounts()
+                rows = read_board()
+            saves = sum(1 for a in accounts.values() if a.get("save_data"))
+            return self._json(200, {
+                "registered": len(accounts),
+                "syncedSaves": saves,
+                "players": len(rows),
+                "totalScore": sum(int(x.get("score", 0)) for x in rows),
+                "top": sorted(rows, key=lambda x: -int(x.get("score", 0)))[:10],
+            })
+        if path == "/admin":
+            html = """<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8"><title>词宠岛 · 运营看板</title>
+<style>body{font-family:"Microsoft YaHei",sans-serif;background:#FFF7E8;margin:24px;color:#5C4A38}
+h2{color:#C4577E}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}
+.cell{background:#fff;border:2px solid #FFE0B8;border-radius:14px;padding:14px;text-align:center}
+.cell b{display:block;font-size:26px;color:#C4577E}table{width:100%;border-collapse:collapse;background:#fff}
+td,th{border:1px solid #FFE0B8;padding:8px 12px;text-align:left}</style>
+<h2>🏝️ 词宠岛 · 运营看板</h2><div class="grid" id="g"></div>
+<h3>排行榜 Top 10</h3><table id="t"></table>
+<script>fetch('/api/stats').then(r=>r.json()).then(d=>{
+document.getElementById('g').innerHTML=[['注册账号',d.registered],['已云同步存档',d.syncedSaves],['上榜玩家',d.players],['累计积分',d.totalScore]]
+.map(x=>`<div class="cell"><b>${x[1]}</b>${x[0]}</div>`).join('');
+document.getElementById('t').innerHTML='<tr><th>名字</th><th>分数</th></tr>'+d.top.map(x=>`<tr><td>${x.username}</td><td>${x.score}</td></tr>`).join('');
+});</script>"""
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         return super().do_GET()
 
     def do_POST(self):
