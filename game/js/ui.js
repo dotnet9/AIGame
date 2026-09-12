@@ -1592,7 +1592,7 @@ function watchBgmDialogs() {
 }
 
 // ---------- 绑定 HUD 按钮 ----------
-export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, onAccount, onAbout, isTouch }) {
+export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, onHungryPill, onMic, onMicEnd, onRank, onReport, onAccount, onAbout, isTouch }) {
   isTouchMode = !!isTouch;
   els.btnCatalog.addEventListener('click', onCatalog);
   els.btnHelp.addEventListener('click', showHelp);
