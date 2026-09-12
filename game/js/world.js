@@ -134,7 +134,7 @@ function islandTexture() {
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 16;   // 拉满各向异性：远景地面不再有晃动的摩尔条纹
   return tex;
 }
 

@@ -1327,6 +1327,10 @@ export class Game {
       const dy = cs.pf.bob.amp * Math.sin(t * cs.pf.bob.speed + cs.pf.bob.phase);
       cs.pf.top = cs.pf.baseTop + dy;
       cs.mesh.position.y = cs.baseY + dy;
+      // 远景淡出：镜头离得远时云梯几乎隐身，不会连成一条白带；走近才浮现
+      const d2 = this.camera.position.distanceTo(cs.mesh.position);
+      const op = Math.max(0.12, Math.min(0.8, 1.35 - d2 / 40));
+      cs.mesh.traverse(o => { if (o.isMesh) o.material.opacity = op; });
     }
     for (const pd of a.islandPads || []) {
       pd.beacon.rotation.y = t * 1.5;
