@@ -1,6 +1,6 @@
 // 农场岛屿世界搭建：地形彩绘、河流、果园、风车田、谷仓、菜园、天空岛、阳光海滩、神秘森林、环形群岛
 import * as THREE from 'three';
-import { PROPS, badge } from './models.js';
+import { PROPS, badge, letterTexture } from './models.js';
 import { ISLANDS } from './words.js';
 
 const M = (color, o = {}) => new THREE.MeshStandardMaterial({
@@ -343,6 +343,12 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   const windmill = place(scene, PROPS.windmill(), 27, -18, 0.4);
   world.anim.windmill = windmill.userData.blades;
   colC(27, -18, 2.0);
+  // 风车下的乘凉凉影
+  {
+    const shade = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x2E5230, transparent: true, opacity: 0.1, depthWrite: false }));
+    shade.position.set(27, 0.34, -18);
+    scene.add(shade);
+  }
   // 风车田地标：小干草垛（跳上去站站看）
   place(scene, PROPS.haybale(0.6), 18, -20, Math.random() * 3);
   colTop(18, -20, 0.85, 0.95);
@@ -355,6 +361,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   // ---- 谷仓（黑黑的里面） ----
   const barn = place(scene, PROPS.barn(), 24, 22, Math.PI); // 门朝北（面向草甸）
   world.gates.darkness = barn.getObjectByName('darkness');
+  world.anim.barn = barn;
   world.anim.barnDoors = ['doorL', 'doorR'].map(n => barn.getObjectByName(n)).filter(Boolean);
   colR(20.9, 19.3, 22.9, 19.7); colR(25.1, 19.3, 27.1, 19.7);
   colR(20.9, 24.3, 27.1, 24.7);
@@ -398,6 +405,26 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   isle.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(isle);
   world.gates.skyIsle = isle;
+  // ---- 悬浮砖块（超级马里奥式）：跳起来用头顶爆，藏在里面的词宠蛋会掉下来 ----
+  world.brickSpots = [
+    { x: 3, z: 18, top: 2.6 },
+    { x: -12, z: -12, top: 2.9 },
+    { x: 20, z: -16, top: 3.1 },
+  ];
+  for (const b of world.brickSpots) {
+    const brick = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.15, 1.25), M('#E8B04B', { rough: 0.7 }));
+    brick.position.set(b.x, b.top - 0.575, b.z);
+    brick.castShadow = true;
+    scene.add(brick);
+    b.mesh = brick;
+    b.bottom = b.top - 1.15;
+    const q = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('？', '#7A4A12', '#FFF2D0'), transparent: true, depthWrite: false }));
+    q.position.set(b.x, b.top + 0.08, b.z);
+    q.scale.setScalar(0.66);
+    scene.add(q);
+    b.q = q;
+    addPlatform(b.x, b.z, 0.95, b.top);   // 站到砖块顶上也行
+  }
   // 天空岛顶面本身也是可站平台：沿云朵阶梯跳上来后就能直接落在岛上
   colTop(-22, 27, 6, 14, 13);   // bottom=13：岛底下走路自由通过
   // ---- 云朵阶梯：菜园南侧外圈 9 朵矮云，每跳 1.3 米单跳可达，一路跳到岛沿 ----
@@ -549,6 +576,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     const bf = PROPS.butterfly(bfColors[i]);
     bf.position.set(bfCenters[i][0], 1, bfCenters[i][1]);
     bf.userData.center = bfCenters[i];
+    bf.userData.home = [...bfCenters[i]];
     bf.userData.phase = Math.random() * 9;
     scene.add(bf);
     world.anim.butterflies.push(bf);

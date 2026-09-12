@@ -181,6 +181,7 @@ export class Game {
   _spawnProgress() {
     const cur = new Set(this.currentChapter.words);
     const perchId = this._perchEggId();
+    const brickId = this._brickEggId(perchId);
     for (const w of this.scopeWords) {
       if (save.isHatched(w.id)) {
         if (!this.pets.get(w.id)) {
@@ -191,6 +192,7 @@ export class Game {
       }
       if (this.eggs.get(w.id)) continue;
       if (cur.has(w.id)) {
+        if (brickId === w.id) continue;   // 这颗蛋藏进了悬浮砖块，顶爆才掉出来
         const egg = this.eggs.spawnEgg(w, w.zone === 'sky');
         egg.group.userData.wordId = w.id;
         // 本关有一颗蛋放上跳跳石高台：要跳上去才够得着，加点小挑战
@@ -208,6 +210,24 @@ export class Game {
     const GATES = ['boat', 'light', 'wind', 'seed', 'rain'];
     const ids = this.currentChapter.words.filter(id => !GATES.includes(id) && WORD_MAP[id].zone !== 'sky');
     return ids.length ? ids[this.chapterIndex(this.hatchedInScope()) % ids.length] : null;
+  }
+
+  // 本关藏进悬浮砖块的蛋：非钥匙/天空/高台蛋，按关卡序号轮换；换关时砖块重置
+  _brickEggId(perchId = null) {
+    if (!this.world.brickSpots) return null;
+    const pid = perchId ?? this._perchEggId();
+    const GATES = ['boat', 'light', 'wind', 'seed', 'rain', 'banana'];
+    const ids = this.currentChapter.words.filter(id => !GATES.includes(id) && id !== pid && WORD_MAP[id].zone !== 'sky');
+    if (!ids.length) return null;
+    const id = ids[this.chapterIndex(this.hatchedInScope()) % ids.length];
+    const brick = this.world.brickSpots[this.chapterIndex(this.hatchedInScope()) % this.world.brickSpots.length];
+    if (brick.eggId !== id) {
+      brick.eggId = id;
+      brick.used = false;
+      if (brick.mesh) brick.mesh.material.color.set('#E8B04B');
+      if (brick.q) brick.q.visible = true;
+    }
+    return id;
   }
 
   _putEggOnPerch(egg) {
@@ -652,6 +672,13 @@ export class Game {
     const cur = chapters[chIdx].words;
     const left = cur.filter(id => !save.isHatched(id)).length;
     const e = this._nearestReachableEgg();
+    if (!e) {
+      const bid = this._brickEggId();
+      if (bid && !save.isHatched(bid)) {
+        const b = (this.world.brickSpots || []).find(s => s.eggId === bid);
+        if (b) return { text: '🧱 还有一颗蛋藏在半空的砖块里——跳起来用头顶爆它！', target: { x: b.x, z: b.z } };
+      }
+    }
     if (e) {
       // 蛋在海岛上而人不在岛上：指引去坐小火车 / 回主岛
       const isl = this.islands.find(i => i.key === e.word.zone);
@@ -885,6 +912,18 @@ export class Game {
     } else {
       this.player.position.y = support;
     }
+    // 顶砖块：上升时头碰到悬浮砖底 → 顶爆它（藏在里面的蛋会掉下来）
+    if (this.vy > 0) {
+      const headY = pp.y + 1.25;
+      for (const b of this.world.brickSpots || []) {
+        if (b.used) continue;
+        if (Math.hypot(pp.x - b.x, pp.z - b.z) <= 1.05 && headY >= b.bottom && headY <= b.bottom + 0.55) {
+          this.vy = -1.2;
+          this._bumpBrick(b);
+          break;
+        }
+      }
+    }
     // 摆动：空中定格成张开的姿势
     const sw = this.onGround ? Math.sin(this.walkT) * (moving ? 0.55 : 0.06) : 0.8;
     this.playerParts.legL.rotation.x = sw;
@@ -897,7 +936,11 @@ export class Game {
     // 跑步扬起小尘土
     if (moving && this.onGround) {
       this.dustT -= dt;
-      if (this.dustT <= 0) { this.dustT = 0.22; this._puff(); }
+      if (this.dustT <= 0) {
+        this.dustT = 0.22;
+        // 沿河浅滩跑起来溅水花，其他地方扬小尘土
+        this._puff(Math.abs(pp.z) < 6.3 && Math.abs(pp.z) > 3.6 ? 0xa8d8f0 : 0xffffff);
+      }
     }
     // 星星魔法棒：走路撒星星
     if (this.playerParts.wandTip) {
@@ -915,6 +958,29 @@ export class Game {
       const d = Math.hypot(this.player.position.x - ISLE_CENTER.x, this.player.position.z - ISLE_CENTER.z);
       if (d > 5.1 && !this.climbing) this._climb(false); // 走出边缘 → 滑下去
     }
+  }
+
+  // 顶砖：砖块上顶晃动；第一次顶出藏在里面的词宠蛋，蛋掉到地上等小朋友去孵
+  _bumpBrick(b) {
+    const baseY = b.top - 0.575;
+    sfx.pop();
+    this.addTween(0.32, k => { b.mesh.position.y = baseY + Math.sin(k * Math.PI) * 0.32; });
+    if (b.used) { sfx.miss(); return; }
+    b.used = true;
+    b.mesh.material.color.set('#9C8A72');   // 顶过的砖变成旧砖色
+    if (b.q) b.q.visible = false;
+    const id = b.eggId;
+    if (!id) { sfx.miss(); return; }
+    const w = WORD_MAP[id];
+    const egg = this.eggs.spawnEgg(w, false, false);
+    egg.baseY = b.top;
+    egg.group.position.set(b.x, b.top, b.z);
+    ui.toast(`🧱 蛋掉下来啦——走过去读出「${w.en}」唤醒它！`, 3600);
+    this.addTween(0.5, k => { egg.baseY = b.top * (1 - k * k); }, () => {
+      egg.baseY = 0;
+      sfx.good();
+      this._puff(0xbfe3f5);
+    });
   }
 
   // 脚下所在的平台（最高的那个），没有则 null
@@ -943,8 +1009,8 @@ export class Game {
   }
 
   // 脚下的小尘土
-  _puff() {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTexture(), transparent: true, depthWrite: false }));
+  _puff(color = 0xffffff) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTexture(), color, transparent: true, depthWrite: false }));
     s.position.copy(this.player.position).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.12, (Math.random() - 0.5) * 0.3));
     s.scale.setScalar(0.26);
     this.scene.add(s);
@@ -1143,6 +1209,31 @@ export class Game {
     }
     for (const f of a.foam || []) f.material.opacity = 0.4 + Math.sin(t * 2.2 + f.position.z) * 0.2;
     for (const s2 of a.islandSurf || []) s2.material.opacity = 0.28 + Math.sin(t * 1.6 + s2.position.x) * 0.14;
+    // 站进谷仓：墙体变半透明，黑黑的程度也减半——里面亮堂看得见，不黑灯瞎火
+    if (a.barn) {
+      const p2 = this.player.position;
+      const inside = p2.x > 21 && p2.x < 27 && p2.z > 19.5 && p2.z < 24.5;
+      if (a.barn.userData.inside !== inside) {
+        a.barn.userData.inside = inside;
+        a.barn.traverse(o => {
+          if (!o.isMesh || o.name === 'darkness' || o.name.startsWith('door')) return;
+          o.material.transparent = true;
+          o.material.opacity = inside ? 0.38 : 1;
+        });
+        const dark = a.barn.getObjectByName('darkness');
+        if (dark && dark.visible) dark.material.opacity = inside ? 0.55 : 0.96;
+      }
+    }
+    // 谷仓烟囱冒烟
+    this._smokeT = (this._smokeT || 0) - dt;
+    if (this._smokeT <= 0) {
+      this._smokeT = 0.85;
+      const sm = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTexture(), color: 0xe4e0da, transparent: true, opacity: 0.42, depthWrite: false }));
+      sm.position.set(23.1, 4.85, 22.8);
+      sm.scale.setScalar(0.3);
+      this.scene.add(sm);
+      this.fx.push({ obj: sm, t: 0, dur: 2.4, update: (tt, dt2) => { sm.position.y += dt2 * 0.45; sm.position.x += dt2 * 0.1; sm.material.opacity = 0.42 * (1 - tt / 2.4); sm.scale.setScalar(0.3 + tt * 0.32); } });
+    }
     // 谷仓门：小人走近就缓缓推开，走远再轻轻合上——像真的推开谷仓门
     if (a.barnDoors && a.barnDoors.length) {
       const p2 = this.player.position;
@@ -1188,6 +1279,16 @@ export class Game {
     }
     for (const bf of a.butterflies || []) {
       const c = bf.userData.center, p = bf.userData.phase;
+      // 走近蝴蝶会把它吓飞（中心点被推开），过后慢慢飘回原来的花丛
+      const fdx = bf.position.x - this.player.position.x, fdz = bf.position.z - this.player.position.z;
+      const pd = Math.hypot(fdx, fdz);
+      if (pd < 1.7 && pd > 0.001) {
+        c[0] += fdx / pd * dt * 3.4;
+        c[1] += fdz / pd * dt * 3.4;
+      } else if (bf.userData.home) {
+        c[0] += (bf.userData.home[0] - c[0]) * Math.min(1, dt * 0.1);
+        c[1] += (bf.userData.home[1] - c[1]) * Math.min(1, dt * 0.1);
+      }
       bf.position.set(
         c[0] + Math.sin(t * 0.5 + p) * 2.4,
         0.9 + Math.sin(t * 1.6 + p) * 0.35,
@@ -1997,6 +2098,28 @@ export class Game {
   }
 
   // ---------- 许愿井商店 ----------
+  // 许愿井投星星：买到新装扮，一颗星星落进井里画出涟漪
+  _wellStarFx() {
+    const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: letterTexture('⭐', '#FFE24E', '#FFFDF0'), transparent: true }));
+    star.position.set(4.95, 2.9, 19.6);
+    star.scale.setScalar(0.42);
+    this.scene.add(star);
+    const ripple = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xbfe3f5, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+    ripple.position.set(4.6, 1.06, 19.5);
+    this.scene.add(ripple);
+    this.addTween(0.75, k => {
+      star.position.y = 2.9 - k * 1.85;
+      star.position.x = 4.95 - k * 0.35;
+      star.material.rotation = k * 6;
+      ripple.scale.setScalar(1 + k * 5);
+      ripple.material.opacity = 0.9 * (1 - k);
+    }, () => {
+      this.scene.remove(star);
+      this.scene.remove(ripple);
+      sfx.good();
+    });
+  }
+
   _openShop() {
     const wear = save.getWear();
     const items = SHOP_ITEMS.map(it => {
@@ -2013,6 +2136,7 @@ export class Game {
           : { [it.type + 'Owned']: true, [it.type]: true };
         save.updateWear(patch);
         ui.updateStars(save.getStars());
+        this._wellStarFx();
         sfx.magic();
         ui.toast(`🎉 买到了${it.emoji}${it.name}！马上穿上试试`, 3200);
         this._refreshPlayerLook();
