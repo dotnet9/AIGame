@@ -454,22 +454,27 @@ export function showCityCard({ city, variant, visit, quiz, onStar, onDone }) {
   const q = quiz ? `<div class="cc-quiz"><b>🤔 小问答：${quiz.q}</b><div class="cc-opts">${
     quiz.opts.map((o, i) => `<button type="button" data-i="${i}">${o}</button>`).join('')
   }</div><div class="cc-quiz-rs"></div></div>` : '';
+  const banner = (emoji, cls) => `<div class="cc-banner ${cls}"><span class="cc-bn-emoji">${emoji}</span><span class="cc-bn-city">${city.en}</span></div>`;
   const tabs = [
     { id: 'home', name: '🏠 首页', html: `
+      ${banner(variant.emoji, 'bn-home')}
+      <p class="cc-p">欢迎来到 <b>${city.name} ${city.en}</b>！${variant.intro}</p>
       <button class="cc-intro-en" data-en="${variant.introEn}">🔊 ${variant.introEn}</button>
-      <div class="cc-intro">${variant.intro}</div>
       ${cwords ? `<div class="cc-sec">🗣️ 城市英文词（点点读）</div><div class="cc-chips">${cwords}</div>` : ''}
       ${q}` },
-    { id: 'uni', name: '🎓 大学', html: unis
-      ? `<div class="cc-chips col">${unis}</div><div class="cc-sub">点大学名字听英文发音，种下一颗大学梦</div>`
-      : '<div class="cc-sub">这座城市更出名的是风景，去看看"风景"页吧！</div>' },
-    { id: 'food', name: '🍜 美食', html: foods
-      ? `<div class="cc-chips">${foods}</div><div class="cc-sub">来到这里一定要尝尝当地特色～</div>`
-      : '<div class="cc-sub">这座城市有自己的秘密美食，等你去发现！</div>' },
+    { id: 'uni', name: '🎓 大学', html: `
+      ${banner('🎓', 'bn-uni')}
+      <p class="cc-p">${city.name}有好多了不起的学府——点大学名字听英文发音，从小种下一颗大学梦：</p>
+      ${unis ? `<div class="cc-chips col">${unis}</div>` : `<p class="cc-p">这座城市更出名的是风景，去看看"风景"页吧！</p>`}` },
+    { id: 'food', name: '🍜 美食', html: `
+      ${banner('🍜', 'bn-food')}
+      <p class="cc-p">来到${city.name}，一定要尝尝这些特色美味：</p>
+      ${foods ? `<div class="cc-chips">${foods}</div>` : '<p class="cc-p">这座城市的秘密美食，等你亲自去发现！</p>'}` },
     { id: 'scene', name: '🏞️ 风景', html: `
-      <div class="cc-scene">${variant.emoji} ${city.name}的地标：${LANDMARK_ZH[city.landmark] || '城市舞台'}</div>
-      <div class="cc-sub">${variant.intro}</div>
-      ${cwords ? `<div class="cc-chips">${cwords}</div>` : ''}` },
+      ${banner(variant.emoji, 'bn-scene')}
+      <p class="cc-p"><b>${LANDMARK_ZH[city.landmark] || '城市舞台'}</b>是${city.name}的名片。</p>
+      <div class="cc-intro">${variant.intro}</div>
+      ${cwords ? `<div class="cc-sec">🗣️ 风景英文词</div><div class="cc-chips">${cwords}</div>` : ''}` },
   ];
   ov.innerHTML = `<div id="city-card">
     <div class="cc-emoji">${variant.emoji}</div>

@@ -204,6 +204,39 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   box-shadow: 0 20px 60px rgba(150, 90, 60, .35);
   padding: 18px; text-align: center; position: relative;
 }
+#city-card .cc-banner {
+  height: 88px; border-radius: 16px; margin-bottom: 10px; position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 -18px 24px rgba(120, 70, 40, .12);
+}
+#city-card .bn-home { background: linear-gradient(135deg, #A8D8F0, #C8E8C0 60%, #FFE8B8); }
+#city-card .bn-uni  { background: linear-gradient(135deg, #C8B8E8, #E8D8F0 60%, #F5E8C8); }
+#city-card .bn-food { background: linear-gradient(135deg, #F5C8A8, #F0A8A0 60%, #F5D8A8); }
+#city-card .bn-scene{ background: linear-gradient(135deg, #A8E8D8, #B8D8F0 60%, #D8F0C0); }
+#city-card .cc-bn-emoji { font-size: 54px; filter: drop-shadow(0 4px 8px rgba(80,40,20,.25)); }
+#city-card .cc-bn-city {
+  position: absolute; bottom: 4px; right: 10px; font-weight: 900; font-size: 12px;
+  color: rgba(255,255,255,.85); letter-spacing: 2px; text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(60,40,20,.4);
+}
+#city-card .cc-p { color: #6B5844; font-size: 13px; line-height: 1.6; margin-bottom: 8px; text-align: left; }
+#city-card .cc-p b { color: #C4577E; }
+/* 窄屏（小手机）：字号与间距降级 */
+@media (max-width: 400px) {
+  #city-card { padding: 12px; border-radius: 20px; }
+  #city-card .cc-name { font-size: 24px; }
+  #city-card .cc-banner { height: 68px; }
+  #city-card .cc-bn-emoji { font-size: 42px; }
+  #city-card .rp-grid, #city-card .cc-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* 横屏矮屏（手机横过来）：卡片加宽限高，内部滚动 */
+@media (orientation: landscape) and (max-height: 440px) {
+  #city-card { width: min(600px, 92vw); padding: 12px 16px; }
+  #city-card .cc-banner { height: 56px; }
+  #city-card .cc-bn-emoji { font-size: 34px; }
+  #city-card .cc-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-items: start; }
+  #city-card .cc-body > .cc-banner, #city-card .cc-body > .cc-p:first-child { grid-column: 1 / -1; }
+}
 #city-card .cc-emoji { font-size: 58px; animation: lvlupBounce .9s cubic-bezier(.34,1.56,.64,1); }
 #city-card .cc-name { font-size: 30px; font-weight: 900; color: #C4577E; margin-top: 4px; letter-spacing: 3px; }
 #city-card .cc-en { font-size: 15px; font-weight: bold; color: #B47514; letter-spacing: 2px; }
