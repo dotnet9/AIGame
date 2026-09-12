@@ -1547,7 +1547,27 @@ export function buildPlayer(gender = 'boy', wear = {}) {
 
 // ================= 场景物 =================
 export const PROPS = {};
-// 神秘货郎的小推车（限时事件用）
+// NPC：猫头鹰园丁（站在木桩上管每日任务链）
+PROPS.owl = () => {
+  const g = G();
+  cyl(g, 0.09, 0.12, 1.0, '#8A6844', 0, 0.5, 0, 0, 0, 0, 8);          // 木桩
+  const body = G(); body.position.set(0, 1.35, 0); g.add(body);
+  sph(body, 0.34, '#9C7A4E', 0, 0, 0, 1, 1.15, 0.95);                  // 身体
+  sph(body, 0.3, '#C9A875', 0, -0.06, 0.18, 1, 0.9, 0.6);              // 肚子
+  sph(body, 0.12, '#7A5C3A', -0.26, 0.08, -0.05, 0.8, 1.3, 0.6);       // 翅膀
+  sph(body, 0.12, '#7A5C3A', 0.26, 0.08, -0.05, 0.8, 1.3, 0.6);
+  for (const sx of [-1, 1]) cone(body, 0.09, 0.2, '#7A5C3A', 0.14 * sx, 0.42, 0, 0, 0, 0, 6);  // 耳羽
+  sph(body, 0.2, '#C9A875', 0, 0.26, 0.22, 1, 0.75, 0.5);              // 脸盘
+  for (const sx of [-1, 1]) {
+    sph(body, 0.065, '#FFFDF5', 0.085 * sx, 0.32, 0.24, 1, 1.1, 0.6);  // 大眼睛
+    sph(body, 0.032, '#2A2420', 0.095 * sx, 0.32, 0.28);
+    sph(body, 0.012, '#FFFFFF', 0.105 * sx, 0.345, 0.3);
+  }
+  cone(body, 0.05, 0.12, '#FF9A3C', 0, 0.26, 0.3, Math.PI / 2, 0, 0, 6); // 喙
+  body.userData.blinkParts = [];
+  return g;
+};
+// 地标：果园的鸟窝（两颗小小的蛋）
 PROPS.merchantCart = () => {
   const g = G();
   box(g, 1.5, 0.85, 0.95, '#C89A6B', 0, 0.78, 0);

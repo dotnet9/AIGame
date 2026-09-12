@@ -98,6 +98,30 @@ export function hungryPets() {
   return Object.keys(data.pets).filter(isHungry);
 }
 
+// 园丁猫头鹰的每日任务链：三步（孵化/喂食/召唤），每步 +2⭐，全部完成 +4⭐
+export function getChain() {
+  const today = todayKey();
+  if (!data.chain || data.chain.day !== today) data.chain = { day: today, step: 0, n: 0, done: false };
+  return data.chain;
+}
+const CHAIN_TASKS = [['hatch', 1], ['feed', 1], ['summon', 1]];
+export function bumpChain(task, n = 1) {
+  const c = getChain();
+  if (c.done) return null;
+  const [needId, needN] = CHAIN_TASKS[c.step] || [null, 0];
+  if (task !== needId) return null;
+  c.n += n;
+  if (c.n >= needN) {
+    c.step += 1;
+    c.n = 0;
+    if (c.step >= CHAIN_TASKS.length) { c.done = true; save(); return { done: true }; }
+    save();
+    return { step: true };
+  }
+  save();
+  return { progress: true };
+}
+
 // 稀有词宠（95 分孵化）与进化形态标记
 export function markRare(id) {
   if (data.pets[id] && !data.pets[id].rare) { data.pets[id].rare = true; save(); }
