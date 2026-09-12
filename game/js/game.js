@@ -197,6 +197,21 @@ export class Game {
     g.visible = false;
     this.scene.add(g);
     this.guideArrow = g;
+    // 发光小径：一串脉动光点从脚下铺向目标，方位一目了然（3D 地图游戏标配）
+    const dots = new THREE.Group();
+    for (let i = 0; i < 22; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: softTexture(), color: 0xFFC4DC, transparent: true,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      s.scale.setScalar(0.26);
+      dots.add(s);
+      this.pathDots = this.pathDots || [];
+      this.pathDots.push(s);
+    }
+    dots.visible = false;
+    this.scene.add(dots);
+    this.pathDotsGroup = dots;
   }
 
   _initEntities() {
@@ -783,6 +798,26 @@ export class Game {
         this.guideArrow.rotation.y = Math.atan2(-dz, dx);
       } else this.guideArrow.visible = false;
     } else this.guideArrow.visible = false;
+    // 发光小径：光点波浪式脉动，从脚下铺向目标（贴近地面跟着地形高度走）
+    if (obj.target && !this.lockInput) {
+      const tgt = obj.target;
+      const d = Math.hypot(tgt.x - p.x, tgt.z - p.z);
+      const show = d > 4 && d < 60;
+      this.pathDotsGroup.visible = show;
+      if (show) {
+        const n = this.pathDots.length;
+        for (let i = 0; i < n; i++) {
+          const k = (i + 1) / (n + 1);
+          const dot = this.pathDots[i];
+          dot.position.set(
+            p.x + (tgt.x - p.x) * k,
+            p.y + 0.22 + Math.sin(t * 4 - i * 0.6) * 0.08,
+            p.z + (tgt.z - p.z) * k
+          );
+          dot.material.opacity = 0.3 + 0.45 * (0.5 + 0.5 * Math.sin(t * 5 - i * 0.7));
+        }
+      }
+    } else this.pathDotsGroup.visible = false;
   }
 
   // 区域进入提示
