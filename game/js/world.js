@@ -361,6 +361,9 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   }
   world.anim.clouds = clouds;
 
+  // 纯城市链条模式：巡游岛屿带 level 配置（来自城市 JSON）——跳过农场几何，世界=大海+城市群岛
+  const cityOnly = !!semIslands.length && semIslands[0].level != null;
+  if (!cityOnly) {
   // ---- 岛屿地面（彩绘） ----
   const ground = new THREE.Mesh(new THREE.CircleGeometry(ISLE_R, 72).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 1 }));
@@ -660,6 +663,8 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     world.anim.fireflies = fire;
   }
 
+  }   // end !cityOnly（农场地形到此为止）
+
   // ---- 云朵（抬到高处：飘太低会挡在镜头和小人之间，把地面糊成一片白） ----
   world.anim.clouds = [];
   for (let i = 0; i < 8; i++) {
@@ -748,6 +753,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   scene.add(petals);
   world.anim.petals = { points: petals, speeds };
 
+  if (!cityOnly) {
   // ---- 机关 1：金色沙墙（南边去海滩的路，用 wind 吹开） ----
   {
     const wall = new THREE.Group();
@@ -801,6 +807,8 @@ export function buildWorld(scene, semIslands = ISLANDS) {
       colC(x, z, 2.2);
     }
   }
+
+  }   // end !cityOnly（农场机关到此为止）
 
   // ---- 城市巡游舞台：每关一个城市（地标+名牌+特产装饰），小火车往返 ----
   world.islands = [];
@@ -911,6 +919,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     world.islands.push({ ...isl, grp, pad: { x: cx, z: cz - 2.5 } });
   }
 
+  if (!cityOnly) {
   // ---- 小火车站（主岛，去群岛的入口） ----
   {
     const st = new THREE.Group();
@@ -940,6 +949,8 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     else if (roll < 0.7) { place(scene, PROPS.rock(0.6 + Math.random() * 0.8), x, z); colC(x, z, 0.4); }
     else if (roll < 0.85) place(scene, PROPS.flowerpatch(), x, z);
   }
+
+  }   // end !cityOnly（火车站与装饰散布到此为止）
 
   // ---- 关卡主题换装：新一关解锁时给目标区域整体布置装饰 + 氛围灯（真场景变化） ----
   // 装饰统一挂 dressing group：换关时清空重建，不与静态场景混在一起

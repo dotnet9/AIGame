@@ -250,12 +250,14 @@ export class Game {
     this._spawnProgress();
     this.planted = save.hasGate('planted');
     this._refreshHungry();
-    // NPC：猫头鹰园丁，站在任务板旁的木桩上管每日任务链
-    const owl = PROPS.owl();
-    owl.position.set(-6.1, 0, 19.1);
-    this.scene.add(owl);
-    this.world.anim.owl = owl;
-    this.world.colliders.push({ t: 'c', x: -6.1, z: 19.1, r: 0.55 });
+    // NPC：猫头鹰园丁，站在任务板旁的木桩上管每日任务链（纯城市链条模式由城市 NPC 系统接管）
+    if (!this.cityTour) {
+      const owl = PROPS.owl();
+      owl.position.set(-6.1, 0, 19.1);
+      this.scene.add(owl);
+      this.world.anim.owl = owl;
+      this.world.colliders.push({ t: 'c', x: -6.1, z: 19.1, r: 0.55 });
+    }
     // 续玩时按当前关卡恢复区域主题换装（通关演出时也会实时布置）
     const curIdx = this.chapterIndex(this.hatchedInScope());
     if (curIdx >= 0) this._dressChapter(curIdx);
@@ -286,10 +288,16 @@ export class Game {
         // 本关有一颗蛋放上跳跳石高台：要跳上去才够得着，加点小挑战
         if (perchId === w.id) this._putEggOnPerch(egg);
       } else if (this._pendingGateWord(w.id)) {
-        const pos = this._cityPos(w);
-        const egg = this.eggs.spawnEgg(w, w.zone === 'sky', true, null, pos);
-        egg.group.userData.wordId = w.id;
-        (this._cityGatePos = this._cityGatePos || {})[w.id] = { x: pos.x, z: pos.z };
+        if (this.cityTour) {
+          // 纯城市链条：没有农场机关，剧情词蛋按普通粉蛋处理（保证本关可完成）
+          const egg = this.eggs.spawnEgg(w, false, false, this.currentChapter.words.indexOf(w.id) + 1, this._cityPos(w));
+          egg.group.userData.wordId = w.id;
+        } else {
+          const pos = this._cityPos(w);
+          const egg = this.eggs.spawnEgg(w, w.zone === 'sky', true, null, pos);
+          egg.group.userData.wordId = w.id;
+          (this._cityGatePos = this._cityGatePos || {})[w.id] = { x: pos.x, z: pos.z };
+        }
       }
     }
   }
@@ -754,6 +762,20 @@ export class Game {
     const total = this.hatchedInScope();
     const chIdx = this.chapterIndex(total);
     const chapters = this.chapters;
+    // 纯城市链条：引导=当前城市里最近的未孵词宠蛋
+    if (this.cityTour) {
+      const cur = this.currentChapter;
+      const left = cur.words.filter(id => !save.isHatched(id) && this.eggs.get(id));
+      if (!left.length) return { text: `找到本关剩下的词宠蛋，全部唤醒就过关啦！`, target: null };
+      let best = null, bd = 1e9;
+      for (const id of left) {
+        const e = this.eggs.get(id);
+        if (!e || !e.group) continue;
+        const d = this.player.position.distanceTo(e.group.position);
+        if (d < bd) { bd = d; best = e; }
+      }
+      return { text: `🥚 朝着发光的词宠蛋走过去，孵化它！`, target: best ? best.group.position : null };
+    }
     if (total >= this.total) {
       return {
         text: `🎉 本册 ${this.total} 只词宠全部唤醒！去许愿井换套新装扮，或去「课本」换一册接着玩吧`,
@@ -1891,6 +1913,16 @@ export class Game {
   }
 
   _collide() {
+    // 纯城市链条：把玩家关在当前城市岛内（岛外是大海，掉下去就坏了）
+    if (this.cityTour) {
+      const st = this._currentStage();
+      const dx = this.player.position.x - st.cx, dz = this.player.position.z - st.cz;
+      const d = Math.hypot(dx, dz), max = st.r - 0.6;
+      if (d > max) {
+        this.player.position.x = st.cx + dx / d * max;
+        this.player.position.z = st.cz + dz / d * max;
+      }
+    }
     const p = this.player.position;
     const R = 0.42;
     const trying = this._mv && this._mv.lengthSq() > 0.02;   // 正在主动移动才提示
