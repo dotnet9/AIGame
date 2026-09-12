@@ -703,7 +703,7 @@ for (const [sem, book] of Object.entries(CURRICULUM))
 const volsOf = en => en2sem.get(en.toLowerCase()) || [];
 
 // 老词（农场/海滩/森林）作为固定序章永远保留；顺带记下它属于哪几册（可能为空）
-for (const w of BASE_WORDS) { w.vols = volsOf(w.en); w.story = true; }
+for (const w of BASE_WORDS) { w.vols = volsOf(w.en); }   // 注意：别覆盖 w.story，那是每只词宠的小知识文案
 for (const w of islandWords) w.vols = volsOf(w.en);
 for (const isl of ISLANDS) isl.vols = [...new Set(isl.rows.flatMap(r => volsOf(r[0])))];
 

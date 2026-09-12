@@ -301,9 +301,13 @@ export class Game {
         }
         this.tapInfo = { x: e.clientX, y: e.clientY, t: performance.now() };
       } else if (e.button === 2) { dragging = true; lx = e.clientX; ly = e.clientY; }
-      else if (e.button === 0) this._click(e);
+      else if (e.button === 0) { this._click(e); this._holdWalk = e.pointerId; }   // 按住不放=持续走向指针
     });
     addEventListener('pointermove', e => {
+      // 按住左键拖动 = 持续走向指针指着的地面（点哪走哪的连续版）；点了蛋/词宠的寻路不抢
+      if (this._holdWalk === e.pointerId && !this.moveThenEgg && (e.buttons & 1) === 1 && !ui.challengeOpen()) {
+        this._setMoveTarget(e);
+      }
       if (dragging) {
         this.camYaw -= (e.clientX - lx) * 0.006;
         this.camPitch = THREE.MathUtils.clamp(this.camPitch + (e.clientY - ly) * 0.004, 0.08, 1.1);
@@ -327,6 +331,7 @@ export class Game {
       }
     });
     const endPointer = e => {
+      if (this._holdWalk === e.pointerId) this._holdWalk = null;
       if (this.touchCam.has(e.pointerId)) {
         this.touchCam.delete(e.pointerId);
         this.pinchDist = 0;
@@ -550,6 +555,10 @@ export class Game {
     this._updateFx(dt);
     this.eggs.update(dt, t);
     this.pets.update(dt, t, this.player.position);
+    // 词宠溜达守规矩：不穿墙、不下河、不出世界（boat 词宠本来就漂在河里，跳过）
+    for (const pt of this.pets.all()) {
+      if (!pt.flying && pt.group.visible) this._resolvePetWalk(pt);
+    }
     this._updatePrompt();
     this._placeQuestBubble();
     // 脚步声：真的在走才响，每 0.34 秒很轻的一声
@@ -718,6 +727,29 @@ export class Game {
   // 区域进入提示
   // 小人的小生命感：随机眨眼；站着不动时轻轻歪头张望
   _updateIdleLife(dt, t) {
+    // 孵化奖励：走到刚孵出的词宠身边 → +1 飘字，爪印飞进词宠胶囊，数字弹跳 +1
+    let reward = null;
+    for (const pt of this.pets.all()) {
+      if (!pt.rewardPending) continue;
+      if (Math.hypot(pt.group.position.x - this.player.position.x, pt.group.position.z - this.player.position.z) < 1.8) { reward = pt; break; }
+    }
+    if (reward) {
+      reward.rewardPending = false;
+      const vp = reward.group.position.clone().add(new THREE.Vector3(0, 1.5, 0)).project(this.camera);
+      const sx = (vp.x * 0.5 + 0.5) * innerWidth, sy = (-vp.y * 0.5 + 0.5) * innerHeight;
+      ui.floatPlusOne(sx, sy);
+      ui.homePaw(sx, sy, 6, () => ui.petRewardCollect());
+      sfx.good();
+    }
+    // 小知识气泡跟着词宠走，超时或打开弹窗就收起
+    if (this._fact && this._fact.until > performance.now() && !ui.challengeOpen()) {
+      const fpet = this.pets.get(this._fact.id);
+      if (fpet) {
+        const vp = fpet.group.position.clone().add(new THREE.Vector3(0, 1.35, 0)).project(this.camera);
+        if (vp.z < 1) ui.placePetFact((vp.x * 0.5 + 0.5) * innerWidth, (-vp.y * 0.5 + 0.5) * innerHeight);
+        else ui.hidePetFact();
+      } else ui.hidePetFact();
+    } else ui.hidePetFact();
     const parts = this.playerParts;
     if (parts.eyes && parts.eyes.length) {
       this._blinkT = (this._blinkT ?? 1.2 + Math.random() * 2) - dt;
@@ -734,6 +766,53 @@ export class Game {
       const want = idle ? Math.sin(t * 0.7) * 0.15 : 0;
       parts.head.rotation.y += (want - parts.head.rotation.y) * Math.min(1, dt * 5);
     }
+  }
+
+  // 词宠溜达的碰撞：与小人同一套世界规则（被挡住就换个目标，不顶着墙较劲）
+  _resolvePetWalk(pt) {
+    const pos = pt.group.position;
+    const onIsle = pt.baseY === 14;
+    let pushed = false;
+    if (onIsle) {
+      const dc = Math.hypot(pos.x + 22, pos.z - 27);
+      if (dc > 5) { const k = 5 / dc; pos.x = -22 + (pos.x + 22) * k; pos.z = 27 + (pos.z - 27) * k; pushed = true; }
+      return;   // 天空岛的词宠只守岛沿
+    }
+    const isl = this._islandAt(pos);
+    if (isl) {
+      const dc = Math.hypot(pos.x - isl.cx, pos.z - isl.cz);
+      if (dc > isl.r - 0.3) {
+        const k = (isl.r - 0.3) / dc;
+        pos.x = isl.cx + (pos.x - isl.cx) * k;
+        pos.z = isl.cz + (pos.z - isl.cz) * k;
+        pushed = true;
+      }
+    } else {
+      const dc = Math.hypot(pos.x, pos.z);
+      if (dc > WORLD_R) { pos.x *= WORLD_R / dc; pos.z *= WORLD_R / dc; pushed = true; }
+    }
+    if (pt.word.id !== 'boat' && Math.abs(pos.z) < 4.1) { pos.z = pos.z >= 0 ? 4.1 : -4.1; pushed = true; }
+    const R = 0.4;
+    for (const c of this.world.colliders) {
+      if (c.dead) continue;
+      if (c.top !== undefined && (pos.y > c.top - 0.25 || pos.y + 1 <= (c.bottom || 0))) continue;
+      if (c.t === 'c') {
+        const dx = pos.x - c.x, dz = pos.z - c.z;
+        const d = Math.hypot(dx, dz);
+        if (d < c.r + R && d > 0.001) {
+          pos.x = c.x + dx / d * (c.r + R);
+          pos.z = c.z + dz / d * (c.r + R);
+          pushed = true;
+        }
+      } else {
+        const cx = THREE.MathUtils.clamp(pos.x, c.x1, c.x2);
+        const cz = THREE.MathUtils.clamp(pos.z, c.z1, c.z2);
+        const dx = pos.x - cx, dz = pos.z - cz;
+        const d = Math.hypot(dx, dz);
+        if (d < R && d > 0.001) { pos.x = cx + dx / d * R; pos.z = cz + dz / d * R; pushed = true; }
+      }
+    }
+    if (pushed) { pt.wait = 0; pt.target.set(pos.x + (Math.random() - 0.5) * 3, pos.z + (Math.random() - 0.5) * 3); }
   }
 
   // 碰撞提示：顶到什么东西时给一句小朋友听得懂的话（按类型限频，不会刷屏）
@@ -1448,6 +1527,12 @@ export class Game {
       sfx.good();
       const w = pet.word || WORD_MAP[id];
       if (w) speak(w.en);
+      // 摸摸头，它把自己的小故事告诉你（词条里现成的 story/hint）
+      const fact = (typeof w.story === 'string' && w.story) ? w.story : (w.hint || `它叫 ${w.en}，是最可爱的词宠`);
+      if (fact) {
+        this._fact = { id, until: performance.now() + 5200 };
+        ui.showPetFact(`「${w.en}」${w.zh}`, fact);
+      }
     }
     else this._setMoveTarget(e);   // 点的是空地 → 走过去（手机轻点同理）
   }
@@ -1553,6 +1638,9 @@ export class Game {
     this.eggs.removeEgg(word.id);
     const pet = this.pets.spawn(word);
     pet.group.userData.wordId = word.id;
+    // 孵化奖励挂起：词宠胶囊的数字先不加，小人走过去后 +1 入账（见 _updateIdleLife）
+    ui.petRewardBegin();
+    pet.rewardPending = true;
     // 弹出动画 + 字母飞舞
     pet.group.scale.setScalar(0.01);
     this.addTween(0.9, k => {

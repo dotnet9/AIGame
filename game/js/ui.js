@@ -8,7 +8,7 @@ const els = {};
 for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'star-pill', 'hungry-pill', 'prompt', 'prompt-key', 'prompt-text',
   'quest', 'quest-text', 'quest-close', 'daily', 'daily-text', 'modal', 'modal-title', 'word-en', 'word-ipa', 'word-zh', 'word-hint', 'btn-play', 'btn-mic',
   'mic-label', 'btn-replay', 'voice-feedback', 'score-panel', 'cheer', 'cheer-emoji', 'cheer-word', 'score-ring', 'score-num', 'score-stars', 'score-msg',
-  'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
+  'pet-fact', 'pet-fact-title', 'pet-fact-text', 'spell-area', 'spell-slots', 'spell-tiles', 'btn-replay-letters', 'btn-show-help-word',
   'btn-skip',
   'btn-switch-spell', 'modal-close', 'modal-foot', 'picker', 'picker-title', 'picker-grid', 'picker-close',
   'catalog', 'catalog-grid', 'catalog-close', 'map', 'map-head', 'map-canvas', 'map-close',
@@ -62,14 +62,30 @@ const SCORE_LEVELS = [
   [0, 'MISS...', 'miss', '🙈'],
 ];
 
+let petDebt = 0;      // 已孵化但奖励还没领取的词宠数（走近它才 +1）
+let lastHUD = null;
+function renderPetCount() {
+  if (!lastHUD) return;
+  const shown = Math.max(0, lastHUD.count - petDebt);
+  els.petCount.textContent = isTouchMode
+    ? `🐾 ${shown}/${lastHUD.total}`
+    : `🐾 ${lastHUD.chapterText ? lastHUD.chapterText + ' · ' : ''}词宠 ${shown}/${lastHUD.total}`;
+}
+export function petRewardBegin() { petDebt++; renderPetCount(); }
+export function petRewardCollect() {
+  petDebt = Math.max(0, petDebt - 1);
+  renderPetCount();
+  els.petCount.classList.remove('pet-pop-anim');
+  void els.petCount.offsetWidth;
+  els.petCount.classList.add('pet-pop-anim');
+}
 export function updateHUD(count, total, hungryCount, chapterText = '') {
   // 手机上横向空间小：去掉可推断的字，只留数字
-  els.petCount.textContent = isTouchMode
-    ? `🐾 ${count}/${total}`
-    : `🐾 ${chapterText ? chapterText + ' · ' : ''}词宠 ${count}/${total}`;
+  lastHUD = { count: Number(count) || 0, total, hungryCount, chapterText };
+  renderPetCount();
   const hungry = hungryCount > 0;
   els.hungryPill.classList.toggle('hidden', !hungry);
-  els.hungryPill.textContent = isTouchMode ? `🍖 ${hungryCount} 只饿啦` : `🍖 有 ${hungryCount} 只词宠想你啦`;
+  els.hungryPill.textContent = isTouchMode ? `🍖 ${hungryCount} 只想你` : `🍖 有 ${hungryCount} 只词宠想你啦`;
   document.body.classList.toggle('has-hungry', hungry);
 }
 
@@ -348,6 +364,55 @@ export function homeStars(x, y, n = 3) {
     }, 420 + i * 130);
     setTimeout(() => s.remove(), 1500 + i * 130);
   }
+}
+
+// 爪印归航：孵化奖励的小物品从词宠身边飞进 HUD 的词宠胶囊（同星星归航的手感）
+export function homePaw(x, y, n = 6, onDone) {
+  const pill = document.getElementById('pet-count');
+  if (!pill) { if (onDone) onDone(); return; }
+  const pr = pill.getBoundingClientRect();
+  const tx = pr.x + pr.width / 2, ty = pr.y + pr.height / 2;
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('span');
+    s.className = 'home-star';
+    s.textContent = i % 2 ? '🐾' : '💛';
+    s.style.left = x + 'px';
+    s.style.top = y + 'px';
+    document.body.appendChild(s);
+    const dx = tx - x + (Math.random() - 0.5) * 16;
+    const dy = ty - y + (Math.random() - 0.5) * 16;
+    setTimeout(() => {
+      s.style.transform = `translate(${dx}px, ${dy}px) scale(.35)`;
+      s.style.opacity = '.9';
+    }, 380 + i * 120);
+    setTimeout(() => s.remove(), 1450 + i * 120);
+  }
+  if (onDone) setTimeout(onDone, 1900);
+}
+
+// +1 飘字：在屏幕坐标处冒出一个“+1”然后飘走消失
+export function floatPlusOne(x, y) {
+  const d = document.createElement('div');
+  d.className = 'plus-one';
+  d.textContent = '+1';
+  d.style.left = x + 'px';
+  d.style.top = y + 'px';
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 1250);
+}
+
+// 小知识气泡：贴着词宠头顶显示，需要每帧用 placePetFact 跟随
+export function showPetFact(title, text) {
+  els.petFactTitle.textContent = title;
+  els.petFactText.textContent = text;
+  els.petFact.classList.remove('hidden');
+}
+export function placePetFact(x, y) {
+  els.petFact.style.left = x + 'px';
+  els.petFact.style.top = y + 'px';
+}
+export function hidePetFact() {
+  els.petFact.classList.add('hidden');
 }
 
 // ---------- FEVER 连击：连续 3 次 PERFECT(95+) 触发，星星翻倍，读非完美即断 ----------

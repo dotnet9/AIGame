@@ -175,6 +175,29 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 }
 #quest-close:hover { background: #FFF3D6; color: #B47514; }
 
+/* 词宠小知识气泡：摸摸头弹出来的小故事 */
+#pet-fact {
+  position: fixed; left: 0; top: 0; z-index: 15; max-width: 252px;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: #FFFDF8; border: 2px solid rgba(168, 214, 168, .95); border-radius: 12px;
+  padding: 7px 12px; font-size: 12.5px; color: #4E6B3A; line-height: 1.55;
+  box-shadow: 0 4px 12px rgba(110, 150, 80, .18); pointer-events: none; text-align: center;
+}
+#pet-fact b { display: block; color: #2E6B4F; margin-bottom: 2px; }
+/* 孵化奖励的 +1 飘字 */
+.plus-one {
+  position: fixed; z-index: 70; font-size: 30px; font-weight: 900; font-style: italic;
+  color: #FFD34E; text-shadow: 0 2px 0 #B47A10, 0 0 14px rgba(255, 210, 80, .85);
+  pointer-events: none; animation: plusFloat 1.2s ease-out forwards;
+}
+@keyframes plusFloat {
+  0% { opacity: 0; transform: translateY(6px) scale(.6); }
+  18% { opacity: 1; transform: translateY(-6px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-64px) scale(1); }
+}
+/* 词宠数量胶囊的 +1 弹跳 */
+#pet-count.pet-pop-anim { animation: starPopAnim .5s cubic-bezier(.34,1.56,.64,1); }
+
 /* ---------- 每日任务横幅 ---------- */
 #daily {
   position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 16;
