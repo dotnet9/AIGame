@@ -1,4 +1,5 @@
 // 词宠岛 · 入口
+import './compat.js'; // 兼容垫片（roundRect 等），必须最先加载
 import * as THREE from 'three';
 import { Game } from './game.js';
 import * as save from './save.js';
@@ -17,7 +18,6 @@ window.__buildPet = buildPet; // 调试句柄
 window.__petThumb = petThumbnail; // 调试句柄
 
 const canvas = document.getElementById('scene');
-
 // 全局错误兜底（别让小朋友卡在黑屏）
 window.addEventListener('error', e => {
   const el = document.getElementById('loading');
@@ -51,7 +51,14 @@ function begin(name, semKey, gender, password, serverScore) {
     console.error(err);
     window.__bootErr = err && (err.stack || err.message);
     const el = document.getElementById('loading');
-    if (el) el.querySelector('.loading-text').textContent = '哎呀，这台设备跑不起来 3D 画面，换台电脑试试吧';
+    if (el) {
+      const esc = s => String(s).replace(/[<>&"]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[ch]));
+      const msg = esc((err && err.message) || err || '未知错误');
+      const log = (window.__errLog || []).slice(-2).map(esc).join('；');
+      el.querySelector('.loading-text').innerHTML =
+        '哎呀，加载 3D 画面时出了点小问题，请关掉其他应用后刷新重试' +
+        `<small style="display:block;margin-top:10px;font-size:12px;opacity:.75;word-break:break-all">${msg}${log ? '<br>' + log : ''}</small>`;
+    }
   }
 }
 

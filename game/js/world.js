@@ -36,10 +36,11 @@ function place(scene, obj, x, z, ry = 0, y = 0) {
 
 // ---------- 彩绘地形：一块大画布画出各区域的地面 ----------
 function islandTexture() {
+  const S = 2048;                                  // 2 倍分辨率：路面、地块边缘放大后依然清晰
   const cv = document.createElement('canvas');
-  cv.width = cv.height = 1024;
+  cv.width = cv.height = S;
   const c = cv.getContext('2d');
-  const P = 1024 / (ISLE_R * 2);                  // 世界坐标 → 画布像素
+  const P = S / (ISLE_R * 2);                      // 世界坐标 → 画布像素
   const px = x => (x + ISLE_R) * P, pz = z => (z + ISLE_R) * P;
   const blob = (x, z, r, colors, n = 6) => {
     for (let i = 0; i < n; i++) {
@@ -52,25 +53,34 @@ function islandTexture() {
     }
     c.globalAlpha = 1;
   };
+  // 地图式小路：深色路缘描边 + 浅暖路面 + 中心白色虚线，轮廓干净不发虚
   const path = (pts, w = 1.4) => {
-    c.strokeStyle = '#D9B68F';
-    c.lineWidth = w * P;
-    c.globalAlpha = 0.85;
+    const draw = () => {
+      c.beginPath();
+      pts.forEach(([x, z], i) => i ? c.lineTo(px(x), pz(z)) : c.moveTo(px(x), pz(z)));
+    };
     c.lineCap = 'round'; c.lineJoin = 'round';
-    c.beginPath();
-    pts.forEach(([x, z], i) => i ? c.lineTo(px(x), pz(z)) : c.moveTo(px(x), pz(z)));
-    c.stroke();
-    c.globalAlpha = 1;
+    c.strokeStyle = 'rgba(158,120,86,.85)';        // 路缘
+    c.lineWidth = (w + 0.32) * P;
+    draw(); c.stroke();
+    c.strokeStyle = '#EBD3A9';                     // 路面
+    c.lineWidth = w * P;
+    draw(); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,.7)';        // 中心虚线
+    c.lineWidth = 0.1 * P;
+    c.setLineDash([0.75 * P, 0.6 * P]);
+    draw(); c.stroke();
+    c.setLineDash([]);
   };
 
   // 草地底色
   c.fillStyle = '#7FCB72';
-  c.fillRect(0, 0, 1024, 1024);
+  c.fillRect(0, 0, S, S);
   for (let i = 0; i < 1000; i++) {
     c.fillStyle = ['#8FD88A', '#74C06E', '#93D98B', '#7ACB70'][i % 4];
     c.globalAlpha = 0.5;
     c.beginPath();
-    c.ellipse(Math.random() * 1024, Math.random() * 1024, 8 + Math.random() * 26, 5 + Math.random() * 18,
+    c.ellipse(Math.random() * S, Math.random() * S, 8 + Math.random() * 26, 5 + Math.random() * 18,
       Math.random() * 3, 0, Math.PI * 2);
     c.fill();
   }
@@ -78,10 +88,10 @@ function islandTexture() {
 
   // 阳光果园（西北）：深一点的绿
   blob(-20, -18, 9, ['#6FBB68', '#67B262']);
-  // 风车田（东北）：金色麦浪条纹
+  // 风车田（东北）：金色麦浪条纹（低对比 + 加宽：高频细条纹在远处会采样混叠出摩尔条纹）
   blob(21, -19, 9, ['#C9C16B', '#D4C470']);
-  c.strokeStyle = 'rgba(217,196,112,.6)';
-  c.lineWidth = 2.5 * P;
+  c.strokeStyle = 'rgba(214,199,128,.3)';
+  c.lineWidth = 3.6 * P;
   for (let x = 10; x <= 32; x += 3.2) {
     c.beginPath(); c.moveTo(px(x), pz(-29)); c.lineTo(px(x + 1), pz(-8)); c.stroke();
   }
@@ -134,7 +144,12 @@ function islandTexture() {
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 16;   // 拉满各向异性：远景地面不再有晃动的摩尔条纹
+  // 远景摩尔条纹的解法：mipmap（缩小采样用低级 mip）+ 各向异性过滤。
+  // anisotropy 的具体上限由 game.js 在拿到渲染器后按显卡能力收口（写 16 超上限会被驱动忽略，条纹就会回来）
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 16;
   return tex;
 }
 
@@ -232,6 +247,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
   sun.shadow.camera.far = 110;
   sun.shadow.bias = -0.0004;
+  sun.shadow.radius = 4;          // 阴影边缘更柔，画面更干净
   scene.add(sun);
 
   // ---- 大海（全岛外圈 + 群岛） ----

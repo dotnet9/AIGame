@@ -97,7 +97,19 @@ export class Game {
 
   // ================= 初始化 =================
   _initRenderer() {
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+    // 先探测 WebGL 是否可用，给出比"设备跑不起来"更准确的原因
+    const probe = document.createElement('canvas');
+    if (!(probe.getContext('webgl2') || probe.getContext('webgl'))) {
+      throw new Error('此浏览器没有开启 WebGL（可在浏览器设置里开启硬件加速后刷新）');
+    }
+    // 上下文可能因内存不足创建失败（手机后台应用多时常见）：先标准方式，失败后关抗锯齿降级重试
+    const create = opts => new THREE.WebGLRenderer({ canvas: this.canvas, ...opts });
+    try {
+      this.renderer = create({ antialias: true });
+    } catch (e) {
+      console.warn('WebGL 标准初始化失败，降级重试：', e);
+      this.renderer = create({ antialias: false });
+    }
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true;
@@ -111,13 +123,24 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 260);
     this.world = buildWorld(this.scene, this.islands);
-    // 辉光后期（失败则退回普通渲染）
-    try {
-      this.composer = new EffectComposer(this.renderer);
-      this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.65, 0.86);
-      this.composer.addPass(this.bloom);
-    } catch (e) { this.composer = null; }
+    // 各向异性过滤按显卡实际上限收口：手机一般只支持 4~8，写死 16 会被驱动忽略导致远景摩尔条纹
+    const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+    this.scene.traverse(o => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        if (m.map) { m.map.anisotropy = Math.min(16, maxAniso); m.map.needsUpdate = true; }
+      }
+    });
+    // 辉光后期：桌面端开启；触屏设备（内存紧张、容易崩上下文）跳过，直接普通渲染
+    const lowEnd = matchMedia('(pointer: coarse)').matches;
+    if (!lowEnd) {
+      try {
+        this.composer = new EffectComposer(this.renderer);
+        this.composer.addPass(new RenderPass(this.scene, this.camera));
+        this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.65, 0.86);
+        this.composer.addPass(this.bloom);
+      } catch (e) { this.composer = null; }
+    }
     this.camYaw = 0; this.camPitch = 0.42; this.camDist = 8.5;
     this.gateTries = {};   // 每个机关猜错的次数（一次答对有星星奖励）
     this._initGuide();
