@@ -90,14 +90,15 @@ export class Game {
     this.cityRouteList = route;
     this.islands = route.map((cid, i) => {
       const c = CITY_MAP[cid];
+      const lv = c.level || {};
       const a = (i / route.length) * Math.PI * 2 + 0.35;
-      const dist = 66 + (i % 3) * 13;
+      const dist = 80 + (i % 3) * 16;                      // 岛变大后外推，避免与主岛/邻岛相碰
       const v0 = cityVariant(c, 0);
       return {
         key: cid, uid: cid + '#' + i, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
-        cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: 13 + (i % 2) * 2,
+        cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: Math.min(21, Math.max(16, (lv.radius || 28) * 0.62)),
         landmark: c.landmark, decos: c.variants.map(v => DECO_EMOJI[v.deco] || '🏮'),
-        startChapter: i, unis: c.unis, city: c,
+        startChapter: i, unis: c.unis, city: c, level: lv,
       };
     });
     this.scopeIds = new Set(this.scopeWords.map(w => w.id));

@@ -9,6 +9,61 @@ const M = (color, o = {}) => new THREE.MeshStandardMaterial({
   transparent: !!o.alpha, opacity: o.alpha ?? 1, side: o.side ?? THREE.FrontSide,
 });
 
+// 城市岛地面贴图：草底 + 城市色分区 + 环形大道 + 十字街 + 中心广场（地图式画法：路缘+路面+中心虚线）
+function cityIslandTexture(color, level) {
+  const S = 768;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const c = cv.getContext('2d');
+  const C = S / 2;
+  // 草地底 + 深浅斑块
+  c.fillStyle = '#7FCB72';
+  c.fillRect(0, 0, S, S);
+  for (let i = 0; i < 420; i++) {
+    c.fillStyle = ['#8FD88A', '#74C06E', '#93D98B', '#7ACB70'][i % 4];
+    c.globalAlpha = 0.5;
+    c.beginPath();
+    c.ellipse(Math.random() * S, Math.random() * S, 6 + Math.random() * 18, 4 + Math.random() * 12, Math.random() * 3, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.globalAlpha = 1;
+  // 城市主题色地块（四个方位的浅色广场区）
+  c.fillStyle = color;
+  c.globalAlpha = 0.16;
+  for (const [dx, dz] of [[-0.52, -0.4], [0.5, -0.45], [-0.45, 0.5], [0.52, 0.45]]) {
+    c.beginPath();
+    c.ellipse(C + dx * S / 2, C + dz * S / 2, S * 0.16, S * 0.13, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.globalAlpha = 1;
+  // 画路工具：地图式三笔（路缘/路面/中心虚线）
+  const road = pts => {
+    const draw = () => { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); };
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.strokeStyle = 'rgba(158,120,86,.8)'; c.lineWidth = S * 0.052; draw(); c.stroke();
+    c.strokeStyle = '#EBD3A9'; c.lineWidth = S * 0.042; draw(); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,.65)'; c.lineWidth = S * 0.006;
+    c.setLineDash([S * 0.022, S * 0.018]); draw(); c.stroke();
+    c.setLineDash([]);
+  };
+  // 环形大道（0.6 半径）+ 十字街 + 中心广场环
+  const ring = [];
+  for (let a = 0; a <= Math.PI * 2 + 0.01; a += Math.PI / 24) ring.push([C + Math.cos(a) * S * 0.3, C + Math.sin(a) * S * 0.3]);
+  road(ring);
+  road([[C, S * 0.06], [C, S * 0.94]]);
+  road([[S * 0.06, C], [S * 0.94, C]]);
+  // 中心广场
+  c.strokeStyle = 'rgba(158,120,86,.6)'; c.lineWidth = S * 0.02;
+  c.beginPath(); c.arc(C, C, S * 0.1, 0, Math.PI * 2); c.stroke();
+  c.fillStyle = color; c.globalAlpha = 0.28;
+  c.beginPath(); c.arc(C, C, S * 0.088, 0, Math.PI * 2); c.fill();
+  c.globalAlpha = 1;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 16;
+  return tex;
+}
+
 // 简易几何辅助（火车站等小构筑物用）
 const box = (g, w, h, d, c, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c));
@@ -771,9 +826,27 @@ export function buildWorld(scene, semIslands = ISLANDS) {
     // 岛上装饰：城市舞台先摆地标+名牌+特产，再补少量绿树
     const isCity = !!isl.landmark;
     if (isCity) {
-      const lm = cityLandmark(isl.landmark, color);
-      grp.add(lm);
-      colC(cx, cz, 1.4);
+      // 地面贴图：环道+十字街+中心广场（level 配置驱动）
+      const top0 = new THREE.Mesh(new THREE.CircleGeometry(r - 0.35, 40).rotateX(-Math.PI / 2),
+        new THREE.MeshStandardMaterial({ map: cityIslandTexture(color, isl.level), roughness: 0.95 }));
+      top0.position.y = 0.02;
+      top0.receiveShadow = true;
+      grp.add(top0);
+      // 多地标组合：主地标居中，其余按角度分布（level.landmarks 配置）
+      const lms = (isl.level && isl.level.landmarks && isl.level.landmarks.length)
+        ? isl.level.landmarks : [isl.landmark, 'pavilion'];
+      lms.forEach((type, i) => {
+        if (i > 0 && type === lms[0]) return;
+        const a = (i / Math.max(1, lms.length)) * Math.PI * 2 + 1.1;
+        const rr = i === 0 ? 0 : r * 0.56;
+        const lm = cityLandmark(type, color);
+        lm.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+        lm.scale.setScalar(i === 0 ? 1 : 0.78);
+        lm.rotation.y = -a + Math.PI;
+        lm.traverse(o => { if (o.isMesh) o.castShadow = true; });
+        grp.add(lm);
+        colC(cx + Math.cos(a) * rr, cz + Math.sin(a) * rr, i === 0 ? 1.4 : 1.0);
+      });
       // 观景石台：天空词蛋放上面，跳上去够得着
       box(grp, 1.6, 3.2, 1.6, '#C8B898', r * 0.3, 1.6, -r * 0.3);
       box(grp, 2.1, 0.3, 2.1, '#D8CCA8', r * 0.3, 3.3, -r * 0.3);
@@ -794,6 +867,12 @@ export function buildWorld(scene, semIslands = ISLANDS) {
         s.position.set(Math.cos(a) * (r - 3), 0.6, Math.sin(a) * (r - 3));
         grp.add(s);
       });
+      // 花丛点缀：环路四个象限
+      if (PROPS.flowerpatch) for (const [dx, dz] of [[0.4, 0.4], [-0.4, 0.4], [0.4, -0.4], [-0.4, -0.4]]) {
+        const fp = PROPS.flowerpatch();
+        fp.position.set(dx * r, 0, dz * r);
+        grp.add(fp);
+      }
     }
     const decoSpots = [];
     const treeN = isCity ? 3 : 7;
