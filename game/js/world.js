@@ -810,36 +810,79 @@ export function buildWorld(scene, semIslands = ISLANDS) {
 
   }   // end !cityOnly（农场机关到此为止）
 
-  // ---- 城市巡游舞台：每关一个城市（地标+名牌+特产装饰），小火车往返 ----
+  // ---- 城市巡游舞台：每关一个城市（真实轮廓地形+地标+名牌+特产装饰） ----
   world.islands = [];
   for (const isl of semIslands) {
     const { cx, cz, r, color, key } = isl;
     const grp = new THREE.Group();
-    // 岛身：草顶 + 岩底
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 6, 26),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#9CCF8C'), 0.55), roughness: 0.95 }));
-    top.position.y = -3;
-    top.receiveShadow = true;
-    const rock = new THREE.Mesh(new THREE.ConeGeometry(r * 0.92, r * 0.9, 26), M('#A8825B'));
-    rock.rotation.x = Math.PI;
-    rock.position.y = -6 - r * 0.45;
-    grp.add(top, rock);
-    // 岛边浪花圈
-    const surf2 = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r + 0.7, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.4, depthWrite: false }));
-    surf2.position.y = 0.03;
-    grp.add(surf2);
-    world.anim.islandSurf = world.anim.islandSurf || [];
-    world.anim.islandSurf.push(surf2);
+    // 岛身：按城市轮廓多边形生成（顶面贴图 UV 按包围盒映射，岩裙沿边下垂）
+    if (isl.shape) {
+      const pts = isl.shape;                      // 已是世界坐标（含 cx/cz 偏移的局部点）
+      const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+      const shape = new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])));
+      const geo = new THREE.ShapeGeometry(shape, 24);
+      // 顶面贴图：UV 按包围盒归一化，环道/街纹理才能对上
+      // 注意：ShapeGeometry 顶点是 (x, y, 0)，多边形的"z"存在 y 分量里
+      const uv = geo.attributes.uv, pos = geo.attributes.position;
+      for (let i = 0; i < uv.count; i++) {
+        uv.setXY(i, (pos.getX(i) - minX) / (maxX - minX), 1 - (pos.getY(i) - minZ) / (maxZ - minZ));
+      }
+      const top0 = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: cityIslandTexture(color, isl.level), roughness: 0.95 }));
+      top0.rotation.x = -Math.PI / 2;
+      top0.position.y = 0.02;
+      top0.receiveShadow = true;
+      grp.add(top0);
+      // 岩裙：沿轮廓边垂直下垂到 -7，再收到中心形成倒锥岩底
+      const skirtPos = [], skirtIdx = [];
+      const sink = -3.2;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+        const k = skirtPos.length / 3;
+        skirtPos.push(ax, 0, az, bx, 0, bz, ax * 0.8, sink, az * 0.8, bx * 0.8, sink, bz * 0.8);
+        skirtIdx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+      }
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute('position', new THREE.Float32BufferAttribute(skirtPos, 3));
+      sg.setIndex(skirtIdx);
+      sg.computeVertexNormals();
+      const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0xA8825B, roughness: 1, side: THREE.DoubleSide }));
+      grp.add(skirt);
+      world.cityBounds = world.cityBounds || {};
+      world.cityBounds[key] = { pts, minX, maxX, minZ, maxZ, cx, cz };
+    } else {
+      // 兜底：无轮廓时保持圆形岛身
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 6, 26),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#9CCF8C'), 0.55), roughness: 0.95 }));
+      top.position.y = -3;
+      top.receiveShadow = true;
+      const rock = new THREE.Mesh(new THREE.ConeGeometry(r * 0.92, r * 0.9, 26), M('#A8825B'));
+      rock.rotation.x = Math.PI;
+      rock.position.y = -6 - r * 0.45;
+      grp.add(top, rock);
+    }
+    // 岛边浪花：圆环兜底；多边形轮廓暂不撒环（沿边浪花后续做）
+    if (!isl.shape) {
+      const surf2 = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r + 0.7, 40).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.4, depthWrite: false }));
+      surf2.position.y = 0.03;
+      grp.add(surf2);
+    }
+    if (surf2) {
+      world.anim.islandSurf = world.anim.islandSurf || [];
+      world.anim.islandSurf.push(surf2);
+    }
     // 岛上装饰：城市舞台先摆地标+名牌+特产，再补少量绿树
     const isCity = !!isl.landmark;
     if (isCity) {
-      // 地面贴图：环道+十字街+中心广场（level 配置驱动）
+      // 圆形兜底地面：有轮廓时顶面已由 ShapeGeometry 承担，不再叠加圆面
+      if (!isl.shape) {
       const top0 = new THREE.Mesh(new THREE.CircleGeometry(r - 0.35, 40).rotateX(-Math.PI / 2),
         new THREE.MeshStandardMaterial({ map: cityIslandTexture(color, isl.level), roughness: 0.95 }));
       top0.position.y = 0.02;
       top0.receiveShadow = true;
       grp.add(top0);
+      }
       // 多地标组合：主地标居中，其余按角度分布（level.landmarks 配置）
       const lms = (isl.level && isl.level.landmarks && isl.level.landmarks.length)
         ? isl.level.landmarks : [isl.landmark, 'pavilion'];

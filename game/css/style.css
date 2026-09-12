@@ -198,7 +198,8 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 
 /* ---------- 城市介绍卡 ---------- */
 #city-card {
-  width: min(430px, 94vw); max-height: calc(100dvh - 28px); overflow-y: auto;
+  width: min(430px, 94vw); max-height: calc(100dvh - 28px); overflow: hidden;
+  display: flex; flex-direction: column;
   background: linear-gradient(180deg, #FFF9EC, #FFFDF8 60%);
   border-radius: 26px; border: 3px solid #FFE0B8;
   box-shadow: 0 20px 60px rgba(150, 90, 60, .35);
@@ -411,7 +412,7 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 #sign-card .sg-hist { font-size: 11px; color: #9C8C7A; line-height: 1.6; margin-top: 6px; text-align: justify; }
 #sign-card .sg-tip { font-size: 10px; color: #B8A890; margin-top: 10px; }
 #city-card .cc-tab.on { color: #FFF; background: linear-gradient(180deg, #FFB86B, #F79A3E); border-color: #F79A3E; }
-#city-card .cc-body { min-height: 120px; }
+#city-card .cc-body { min-height: 120px; overflow-y: auto; flex: 1 1 auto; overscroll-behavior: contain; padding-right: 4px; }
 #city-card .cc-scene { font-weight: 900; color: #4E7A46; font-size: 14px; margin-bottom: 6px; }
 #city-card .cc-sub { color: #8A6B4A; font-size: 12px; margin-top: 6px; }
 

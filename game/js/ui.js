@@ -631,23 +631,52 @@ export function showSignDetail(it) {
   ov.className = 'overlay';
   ov.style.zIndex = '118';
   const [emoji, typeName] = SIGN_TYPE_ZH[it.type] || ['📍', '城市名片'];
+  const nm = it.name || it.zh || '';
   ov.innerHTML = `<div id="sign-card">
     <button class="round-btn small" id="sign-close" style="position:absolute;top:12px;right:12px">✕</button>
-    ${it.img
-      ? `<img class="sg-img" src="${it.img}" alt="${it.name || it.zh || ''}"
-           onerror="this.style.display='none';this.parentElement.querySelector('.sg-fb').style.display='flex'">`
-      : ''}
-    <div class="sg-fb"><span>${emoji}</span></div>
-    <div class="sg-head"><i class="tag">${emoji} ${typeName}</i><b>${it.name || it.zh || ''}</b></div>
+    <div class="sg-fb" style="display:flex"><span>${emoji}</span></div>
+    <div class="sg-head"><i class="tag">${emoji} ${typeName}</i><b>${nm}</b></div>
     ${it.en ? `<div class="sg-en">${it.en}</div>` : ''}
-    ${it.desc ? `<div class="sg-desc">${it.desc}</div>` : ''}
-    ${it.site ? `<a class="sg-site" href="${it.site}" target="_blank" rel="noopener noreferrer">🌐 打开官网</a>` : ''}
     ${it.founded ? `<div class="sg-meta">📅 创建于 ${it.founded} 年</div>` : ''}
+    ${it.desc ? `<div class="sg-desc">${it.desc}</div>` : ''}
     ${it.history ? `<div class="sg-hist">${it.history}</div>` : ''}
-    <div class="sg-tip">🔊 点读英文 · 在地图上按方位探索更多牌子</div>
+    <div class="sg-wiki"></div>
+    ${it.site ? `<a class="sg-site" href="${it.site}" target="_blank" rel="noopener noreferrer">🌐 打开官网</a>` : ''}
+    <div class="sg-tip">🔊 点读英文名 · 照片来自维基百科</div>
   </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if (e.target === ov || e.target.id === 'sign-close') ov.remove(); });
+  fillSignWiki(ov, it);
+}
+
+// 拉取维基百科真实照片与百科短文（中文条目优先，英文名兜底），失败保持 emoji 占位
+async function fillSignWiki(ov, it) {
+  const title = it.wiki || it.name || it.zh || it.en;
+  if (!title) return;
+  const apis = [
+    `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+    it.en ? `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(it.en)}` : null,
+  ].filter(Boolean);
+  for (const api of apis) {
+    if (!ov.isConnected) return;
+    try {
+      const r = await fetch(api);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const img = (d.originalimage && d.originalimage.source) || (d.thumbnail && d.thumbnail.source);
+      const fb = ov.querySelector('.sg-fb');
+      if (!img || !fb) continue;
+      const im = document.createElement('img');
+      im.className = 'sg-img';
+      im.src = img;
+      im.alt = it.name || it.zh || '';
+      fb.style.display = 'none';
+      fb.parentElement.insertBefore(im, fb);
+      const w = ov.querySelector('.sg-wiki');
+      if (w && d.extract) w.innerHTML = `<div class="sg-hist">📖 ${d.extract}</div>`;
+      return;
+    } catch (e) { /* 断网/条目不存在：试下一个 */ }
+  }
 }
 
 // ---------- 北京终章成就卡：这一册带着词宠走过的城市 ----------

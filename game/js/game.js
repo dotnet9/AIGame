@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 
 import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
 import { CITY_MAP, cityRoute, cityVariant, getCityQuiz, DECO_EMOJI } from './cities.js';
+import { getCityShape } from './city-shape.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail, speechBubbleTexture, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -92,11 +93,14 @@ export class Game {
       const c = CITY_MAP[cid];
       const lv = c.level || {};
       const a = (i / route.length) * Math.PI * 2 + 0.35;
-      const dist = 80 + (i % 3) * 16;                      // 岛变大后外推，避免与主岛/邻岛相碰
+      const dist = 88 + (i % 3) * 18;                      // 全尺寸岛外推
       const v0 = cityVariant(c, 0);
+      const rr = Math.min(34, Math.max(22, lv.radius || 28));   // 城市占满可视区域
+      const shape = getCityShape(cid, lv.shape).map(([sx, sz]) => [sx * rr, sz * rr]);   // 局部多边形
       return {
         key: cid, uid: cid + '#' + i, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
-        cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: Math.min(21, Math.max(16, (lv.radius || 28) * 0.62)),
+        cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: rr,
+        shape,
         landmark: c.landmark, decos: c.variants.map(v => DECO_EMOJI[v.deco] || '🏮'),
         startChapter: i, unis: c.unis, city: c, level: lv,
       };
@@ -413,7 +417,7 @@ export class Game {
           this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
         }
         this.tapInfo = { x: e.clientX, y: e.clientY, t: performance.now() };
-      } else if (e.button === 2) { dragging = true; lx = e.clientX; ly = e.clientY; }
+      } else if (e.button === 2) { e.preventDefault(); dragging = true; lx = e.clientX; ly = e.clientY; }
       else if (e.button === 0) { this._click(e); this._holdWalk = e.pointerId; }   // 按住不放=持续走向指针
     });
     addEventListener('pointermove', e => {
@@ -571,10 +575,7 @@ export class Game {
     // 钳制范围：城市模式=当前城市岛（此前按世界原点半径 48 钳，城市岛在 80 外，
     // 圈内点击落点必被拉到圈外——这就是"点击圈在圈外"的根因）
     if (this.cityTour) {
-      const st = this._currentStage();
-      const dx = pt.x - st.cx, dz = pt.z - st.cz;
-      const d = Math.hypot(dx, dz), max = st.r - 0.5;
-      if (d > max) { pt.x = st.cx + dx / d * max; pt.z = st.cz + dz / d * max; }
+      this._clampCityPos(pt);
     } else {
       const dc = Math.hypot(pt.x, pt.z);
       if (dc > 48) { pt.x *= 48 / dc; pt.z *= 48 / dc; }   // 别点到世界外面去
@@ -1552,6 +1553,7 @@ export class Game {
       pt.target.set(c2.x, c2.z);
     }
     this.player.position.set(cur.cx, 0, cur.cz - cur.r * 0.35);
+    this._clampCityPos(this.player.position, cur);   // 有机轮廓下出生点也可能在海上
     this.onIsle = false;
     this._clearMoveTarget();
   }
@@ -1589,7 +1591,10 @@ export class Game {
       const [dx, dz] = DIRS[b];
       items.forEach((it, i) => {
         const rr = stage.r * Math.min(0.85, 0.5 + i * 0.09);   // 同方位多条目按半径错开
-        const x = stage.cx + dx * rr, z = stage.cz + dz * rr;
+        let x = stage.cx + dx * rr, z = stage.cz + dz * rr;
+        const clampP = { x, z };
+        this._clampCityPos(clampP, stage);                     // 有机轮廓下确保牌子在陆地内
+        x = clampP.x; z = clampP.z;
         const sign = this._makeSign(it, colorOf[it.type]);
         sign.position.set(x, 0, z);
         sign.lookAt(stage.cx, 0, stage.cz);                    // 牌面朝向城中心
@@ -1616,11 +1621,40 @@ export class Game {
     }));
     em.scale.setScalar(0.6); em.position.set(0, 1.75, 0.1); g.add(em);
     const name = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: letterTexture(it.name || it.zh || '', '#5B4632', '#FFFDF4'), transparent: true, depthWrite: false,
+      map: this._signNameTexture(it.name || it.zh || ''), transparent: true, depthWrite: false,
     }));
-    name.scale.set(2.3, 0.62, 1); name.position.set(0, 2.55, 0); g.add(name);
+    name.scale.set(2.6, 0.58, 1); name.position.set(0, 2.55, 0); g.add(name);
     g.traverse(o => { o.userData.sign = it; });
     return g;
+  }
+
+  // 牌名高清文字纹理：640×144 横条 canvas，字号自适应（128px 单字拉伸是之前模糊的根因）
+  _signNameTexture(text) {
+    const W = 640, H = 144;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    let size = 72;
+    c.font = `900 ${size}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+    while (c.measureText(text).width > W - 60 && size > 30) {
+      size -= 4;
+      c.font = `900 ${size}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+    }
+    c.fillStyle = '#FFFDF4';
+    c.beginPath();
+    if (c.roundRect) c.roundRect(6, 10, W - 12, H - 20, 28); else c.rect(6, 10, W - 12, H - 20);
+    c.fill();
+    c.strokeStyle = 'rgba(140,110,80,.55)';
+    c.lineWidth = 5;
+    c.stroke();
+    c.fillStyle = '#5B4632';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(text, W / 2, H / 2 + 2, W - 60);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
   }
 
   // 坐小火车回当前城市（主岛火车站触发）
@@ -1998,16 +2032,43 @@ export class Game {
     });
   }
 
-  _collide() {
-    // 纯城市链条：把玩家关在当前城市岛内（岛外是大海，掉下去就坏了）
-    if (this.cityTour) {
-      const st = this._currentStage();
-      const dx = this.player.position.x - st.cx, dz = this.player.position.z - st.cz;
+  // 点是否在多边形内（射线法）
+  _inPoly(x, z, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, zi] = pts[i], [xj, zj] = pts[j];
+      if (((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
+  // 把世界坐标点钳回当前城市多边形内（在外则投影到最近边上并略向心收缩）
+  _clampCityPos(p, st = this._currentStage()) {
+    const b = this.world.cityBounds && this.world.cityBounds[st.key];
+    if (!b) {   // 兜底：圆形钳制
+      const dx = p.x - st.cx, dz = p.z - st.cz;
       const d = Math.hypot(dx, dz), max = st.r - 0.6;
-      if (d > max) {
-        this.player.position.x = st.cx + dx / d * max;
-        this.player.position.z = st.cz + dz / d * max;
-      }
+      if (d > max) { p.x = st.cx + dx / d * max; p.z = st.cz + dz / d * max; }
+      return;
+    }
+    const lx = p.x - st.cx, lz = p.z - st.cz;
+    if (this._inPoly(lx, lz, b.pts)) return;
+    let best = null, bd = 1e9;
+    for (let i = 0; i < b.pts.length - 1; i++) {
+      const [ax, az] = b.pts[i], [bx, bz] = b.pts[i + 1];
+      const ex = bx - ax, ez = bz - az;
+      const t = Math.max(0, Math.min(1, ((lx - ax) * ex + (lz - az) * ez) / (ex * ex + ez * ez || 1)));
+      const qx = ax + ex * t, qz = az + ez * t;
+      const d = (lx - qx) ** 2 + (lz - qz) ** 2;
+      if (d < bd) { bd = d; best = [qx, qz]; }
+    }
+    if (best) { p.x = st.cx + best[0] * 0.97; p.z = st.cz + best[1] * 0.97; }
+  }
+
+  _collide() {
+    // 纯城市链条：把玩家关在当前城市多边形内（岛外是大海，掉下去就坏了）
+    if (this.cityTour) {
+      this._clampCityPos(this.player.position);
     }
     const p = this.player.position;
     const R = 0.42;
