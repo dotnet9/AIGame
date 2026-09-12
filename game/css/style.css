@@ -371,7 +371,9 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
 
 /* 触屏跳跃按钮（摇杆右边） */
 #btn-jump {
-  position: fixed; left: calc(170px + var(--sal)); bottom: calc(52px + var(--sab)); z-index: 18;
+  /* 市面手游惯例：左摇杆管移动，右下角放跳跃/动作键（右手拇指够得着、反应快）；
+     略高于底部，避开右下角的排行榜小组件 */
+  position: fixed; right: calc(26px + var(--sar)); bottom: calc(110px + var(--sab)); z-index: 18;
   width: 68px; height: 68px; border-radius: 50%;
   background: rgba(255,255,255,.92); border: 2px solid #CDEBC8; color: #4E7A46;
   font-size: 20px; font-weight: 900; display: flex; align-items: center; justify-content: center;
@@ -803,7 +805,7 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   #voice-feedback { font-size: 14px; }
   .slot, .tile { width: 40px; height: 46px; font-size: 22px; }
   #joy { left: calc(18px + var(--sal)); bottom: calc(24px + var(--sab)); }
-  #btn-jump { left: calc(158px + var(--sal)); bottom: calc(44px + var(--sab)); width: 60px; height: 60px; font-size: 17px; }
+  #btn-jump { right: calc(20px + var(--sar)); bottom: calc(96px + var(--sab)); width: 60px; height: 60px; font-size: 17px; }
   #user-pill { max-width: 96px; }
   #word-ipa { font-size: 15px; }
   #prompt { bottom: calc(22% + var(--sab)); font-size: 14px; padding: 8px 14px; background: rgba(255,255,255,.64); border-color: rgba(205,235,200,.72); color: rgba(78,122,70,.95); box-shadow: 0 3px 10px rgba(100,140,90,.14); backdrop-filter: blur(2px); }
@@ -910,6 +912,6 @@ button:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-vi
   .round-btn { width: 50px; height: 50px; }
   #joy { width: 136px; height: 136px; }
   #joy-knob { width: 58px; height: 58px; }
-  #btn-jump { left: calc(186px + var(--sal)); width: 72px; height: 72px; font-size: 20px; }
+  #btn-jump { right: calc(30px + var(--sar)); bottom: calc(110px + var(--sab)); width: 72px; height: 72px; font-size: 20px; }
   #catalog-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 }

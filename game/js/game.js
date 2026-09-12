@@ -1638,18 +1638,23 @@ export class Game {
         }
       }
     }
-    // 河流
-    if (Math.abs(p.z) < 4.1) {
+    // 河流（碰撞带 3.8 贴着水面视觉边缘 3.5，站岸滩上不再有"明明是地面却被推"的错愕感）
+    if (Math.abs(p.z) < 3.8) {
       const canCross = save.hasGate('boat') && Math.abs(p.x) < 2.0;
       if (!canCross) {
-        p.z = p.z >= 0 ? 4.1 : -4.1;
-        if (this.riverHintCd <= 0) {
+        p.z = p.z >= 0 ? 3.8 : -3.8;
+        // 只有"明确朝河走"才提示：沿岸蹭边被推开是常事，弹"挡住去路"只会让孩子看着脚下的平地发懵
+        const towardRiver = !!(this._mv && Math.abs(this._mv.z) >= Math.abs(this._mv.x)
+          && Math.sign(this._mv.z) === (p.z >= 0 ? -1 : 1));
+        if (towardRiver && this.riverHintCd <= 0) {
           this.riverHintCd = 6;
-          // 码头边交互提示条已经在引导了，别再用 toast 重复念叨同一句话
-          const nearDock = Math.abs(p.x) < 8;
-          if (!nearDock) {
-            if (save.isHatched('boat')) ui.toast('🌊 河流挡路啦！回码头召唤能浮在水上的词宠吧');
-            else ui.toast('🌊 河流挡住了去路…码头边好像有一颗蛋在发光');
+          // 目标在河对岸（或就在码头过河点）才喊"挡路"；目标在同侧时孩子明明能走过去，说了只会误导
+          const t = this._objective().target;
+          const across = !t || Math.abs(t.z) < 3.8 || Math.sign(t.z) !== Math.sign(p.z);
+          const nearDock = Math.abs(p.x) < 8;   // 码头边的交互提示条已在引导，别用 toast 重复念叨
+          if (across && !nearDock) {
+            if (save.isHatched('boat')) ui.toast('🌊 这条河挡住去路啦！回到码头，召唤词宠带你过河吧');
+            else ui.toast('🌊 这条河挡住去路啦！沿着岸边走到码头，那边的蛋能帮你过河');
           }
         }
       }
