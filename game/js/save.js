@@ -30,6 +30,7 @@ function fresh() {
       wear: { hat: '', hatOwned: [], balloon: false, balloonOwned: false, wand: false, wandOwned: false } },
     daily: { day: '', idx: 0, n: 0, done: false },
     milestones: {},    // 已领取的里程碑（collect1=孵满10只、enrolled3b=换过这册）
+    weekly: [],        // 家长周报流水：{t: 时间戳, s: 朗读分} / {t, h:1 孵化}，只留最近 7 天
   };
 }
 
@@ -55,6 +56,7 @@ function load() {
     // 是否已建过档案（用来决定是否直接续玩）；老存档默认 false，下次填一次名字即可
     if (typeof merged.profile.registered !== 'boolean') merged.profile.registered = false;
     merged.milestones = d.milestones || {};
+    merged.weekly = Array.isArray(d.weekly) ? d.weekly : [];
     merged.daily = Object.assign({ day: '', idx: 0, n: 0, done: false }, d.daily || {});
     if (!merged.player) merged.player = null;
     return merged;
@@ -131,6 +133,53 @@ function mergeSave(r) {
   if (!data.profile.wear.hat && rw.hat) data.profile.wear.hat = rw.hat;
   if (r.intro) data.intro = true;
   data.milestones = Object.assign({}, r.milestones || {}, data.milestones);
+  // 周报流水并集去重（按时间戳+内容）
+  const seen = new Set((data.weekly || []).map(x => x.t + '|' + (x.s ?? '') + '|' + (x.h ?? '')));
+  for (const x of (r.weekly || [])) {
+    const k = x.t + '|' + (x.s ?? '') + '|' + (x.h ?? '');
+    if (!seen.has(k)) { data.weekly.push(x); seen.add(k); }
+  }
+  pruneWeekly();
+}
+
+// ---------- 家长周报数据：按天记朗读分与孵蛋数，只留最近 7 天 ----------
+function pruneWeekly() {
+  const cutoff = Date.now() - 7 * 86400000;
+  data.weekly = (data.weekly || []).filter(x => x.t >= cutoff);
+}
+export function logWeeklyScore(score) {
+  data.weekly = data.weekly || [];
+  data.weekly.push({ t: Date.now(), s: Math.max(0, Math.min(100, Math.round(score))) });
+  pruneWeekly();
+  save();
+}
+export function logWeeklyHatch() {
+  data.weekly = data.weekly || [];
+  data.weekly.push({ t: Date.now(), h: 1 });
+  pruneWeekly();
+  save();
+}
+export function getWeeklyReport() {
+  data.weekly = data.weekly || [];
+  pruneWeekly();
+  const scores = data.weekly.filter(x => typeof x.s === 'number').map(x => x.s);
+  const days = {};
+  for (const x of data.weekly) {
+    const d = new Date(x.t);
+    const key = `${d.getMonth() + 1}/${d.getDate()}`;
+    days[key] = days[key] || { reads: 0, hatches: 0, sum: 0 };
+    if (typeof x.s === 'number') { days[key].reads++; days[key].sum += x.s; }
+    if (x.h) days[key].hatches++;
+  }
+  return {
+    reads: scores.length,
+    avg: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+    best: scores.length ? Math.max(...scores) : 0,
+    hatches: data.weekly.filter(x => x.h).length,
+    days,
+    playMinutes: Math.round((data.playSeconds || 0) / 60),
+    totalPets: Object.keys(data.pets).length,
+  };
 }
 
 // ---------- 收集里程碑：每孵满 10 只词宠解锁一份礼物（全有时送星星） ----------
@@ -170,6 +219,7 @@ export function isHatched(id) { return !!data.pets[id]; }
 export function hatch(id) {
   const now = Date.now();
   data.pets[id] = { hatchedAt: now, fedAt: now, feedStage: 0, feeds: 0 };
+  (data.weekly = data.weekly || []).push({ t: now, h: 1 });
   save();
 }
 

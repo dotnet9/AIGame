@@ -17,7 +17,7 @@ for (const id of ['loading', 'hud', 'user-pill', 'pet-count', 'score-pill', 'sta
   'levelup', 'levelup-burst', 'levelup-title', 'levelup-sub', 'levelup-stars', 'levelup-words-tip', 'levelup-words', 'levelup-next',
   'chapter-banner', 'chapter-banner-text',
   'update-bar', 'update-now', 'update-later',
-  'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout',
+  'toast', 'btn-catalog', 'btn-help', 'btn-account', 'profile-close', 'profile-logout', 'btn-report',
   'hud-menu', 'btn-menu']) els[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = $(id);
 
 // 音标表（tools/gen_ipa.py 生成，可选：404 时静默跳过）
@@ -429,6 +429,39 @@ export function showUpdateBar({ onUpdate, onLater } = {}) {
   els.updateBar.classList.remove('hidden');
   els.updateNow.onclick = () => { els.updateBar.classList.add('hidden'); onUpdate && onUpdate(); };
   els.updateLater.onclick = () => { sfx.pop(); els.updateBar.classList.add('hidden'); onLater && onLater(); };
+}
+
+// ---------- 家长周报：本周读了多少词、平均分、时长（可复制分享） ----------
+export function showParentReport(rep, name = '') {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  const dayRows = Object.entries(rep.days || {}).map(([d, v]) =>
+    `<div class="rp-row"><span>${d}</span><span>${v.hatches ? `孵 ${v.hatches} 只` : ''}${v.hatches && v.reads ? ' · ' : ''}${v.reads ? `读 ${v.reads} 次` : ''}${v.reads ? ` · 均分 ${Math.round(v.sum / v.reads)}` : ''}</span></div>`).join('')
+    || '<div class="rp-row"><span>这周还没开始学习，快去孵一颗蛋吧！</span></div>';
+  ov.innerHTML = `<div id="report-card">
+    <button class="round-btn small rp-close">✕</button>
+    <div class="rp-title">📋 ${name ? name + ' 的' : ''}学习周报（近 7 天）</div>
+    <div class="rp-grid">
+      <div class="rp-cell"><b>${rep.hatches}</b><i>新孵词宠</i></div>
+      <div class="rp-cell"><b>${rep.reads}</b><i>朗读次数</i></div>
+      <div class="rp-cell"><b>${rep.avg}</b><i>平均分</i></div>
+      <div class="rp-cell"><b>${rep.best}</b><i>最高分</i></div>
+    </div>
+    <div class="rp-days">${dayRows}</div>
+    <div class="rp-sub">图鉴共收集 ${rep.totalPets} 只词宠 · 累计游玩约 ${rep.playMinutes} 分钟</div>
+    <button class="rp-share">复制本周小结，分享给家人 👨‍👩‍👧</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector('.rp-close').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('.rp-share').onclick = () => {
+    const text = `${name ? name + '的' : ''}学习周报：本周新孵词宠 ${rep.hatches} 只，朗读 ${rep.reads} 次（平均 ${rep.avg} 分，最高 ${rep.best} 分），图鉴已收集 ${rep.totalPets} 只！——词宠岛`;
+    navigator.clipboard?.writeText(text).then(
+      () => sfx.pop(),
+      () => {}
+    );
+  };
 }
 
 // ---------- 词典详情卡 ----------
@@ -1559,6 +1592,8 @@ export function bindHUD({ onCatalog, onHelp, onBook, onSummon, onPrompt, onMap, 
   if (aboutBtn) aboutBtn.addEventListener('click', onAbout);
   const rankBtn = document.getElementById('btn-rank');
   if (rankBtn) rankBtn.addEventListener('click', onRank);
+  const reportBtn = els.btnReport;
+  if (reportBtn) reportBtn.addEventListener('click', onReport);
   if (els.btnAccount) els.btnAccount.addEventListener('click', onAccount);
   // 左上角头像 pill 本身就写着"学习档案"，点它直接开档案（和菜单里的「我的档案」一样）
   if (els.userPill) els.userPill.addEventListener('click', onAccount);

@@ -531,6 +531,7 @@ export class Game {
       onMap: () => this._openMap(),
       onHungryPill: () => this._openCatalog(true),
       onRank: () => ui.showLeaderboard({ username: save.getUsername(), score: save.getScore() }),
+      onReport: () => ui.showParentReport(save.getWeeklyReport(), save.getUsername()),
       onAbout: () => ui.showAbout(),
       onAccount: () => ui.showProfile((name, semKey, gender, password, serverScore) => {
         save.setUsername(name);
@@ -3189,6 +3190,7 @@ export class Game {
   // 连败安抚：连续读不准时自动放宽判定（听感像就算过）并温柔鼓励，别让孩子卡在挫败感里
   _lenientResult(alts) {
     const r = matchAlt(alts, this.currentWord.en, (this.voiceFailStreak || 0) >= 2 ? 1 : 0);
+    if (r.score > 0) save.logWeeklyScore(r.score);   // 家长周报：真实朗读才记
     if (r.ok) this.voiceFailStreak = 0;
     else {
       this.voiceFailStreak = (this.voiceFailStreak || 0) + 1;

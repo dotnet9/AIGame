@@ -184,6 +184,27 @@ body.fever #score-pill { border-color: #FFB93C; box-shadow: 0 0 0 3px rgba(255, 
   border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(200, 160, 40, .3);
 }
 
+/* ---------- 家长周报卡 ---------- */
+#report-card {
+  width: min(400px, 92vw); max-height: calc(100dvh - 32px); overflow-y: auto;
+  background: #FFFDF8; border-radius: 22px; border: 3px solid #FFE0B8;
+  box-shadow: 0 18px 50px rgba(150,90,60,.28); padding: 18px; position: relative;
+}
+#report-card .rp-close { position: absolute; top: 10px; right: 10px; }
+#report-card .rp-title { font-weight: 900; color: #B47514; font-size: 16px; margin-bottom: 12px; }
+#report-card .rp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#report-card .rp-cell { background: #FFF6E8; border-radius: 14px; padding: 10px 4px; text-align: center; border: 2px solid #FFE0B8; }
+#report-card .rp-cell b { display: block; font-size: 22px; color: #C4577E; }
+#report-card .rp-cell i { font-style: normal; font-size: 11px; color: #8A6B4A; }
+#report-card .rp-days { margin-top: 12px; border-top: 2px dashed #FFE0B8; padding-top: 8px; }
+#report-card .rp-row { display: flex; justify-content: space-between; font-size: 13px; color: #6B5844; padding: 4px 2px; }
+#report-card .rp-sub { margin-top: 10px; font-size: 12px; color: #A08A6E; }
+#report-card .rp-share {
+  margin-top: 12px; width: 100%; padding: 10px; font-weight: 900; font-size: 14px; font-family: inherit;
+  color: #FFF; background: linear-gradient(180deg, #FFB86B, #F79A3E); border: none; border-radius: 999px; cursor: pointer;
+}
+#report-card .rp-share:active { transform: scale(.97); }
+
 /* ---------- 词典详情卡（竖直滚动） ---------- */
 .mini-btn {
   border: 2px solid #F2C98C; background: #FFF7EA; color: #7A5C22; font-weight: bold;
