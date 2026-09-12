@@ -116,11 +116,19 @@ export function updateStars(n) {
 }
 
 // 每日任务横幅（进度或完成状态）
+let lastDaily = '';
+let dailyHide = null;
+// 每日任务横幅：只在进度有变化时冒泡几秒，不再常驻占屏幕
 export function setDaily(text, done = false) {
   if (!els.daily) return;
-  els.daily.classList.toggle('hidden', !text);
+  if (!text) { els.daily.classList.add('hidden'); return; }
+  if (text === lastDaily) return;   // 内容没变就不动（游戏层每 1.5 秒刷新一次）
+  lastDaily = text;
   els.daily.classList.toggle('done', !!done);
-  if (els.dailyText) els.dailyText.textContent = text || '';
+  if (els.dailyText) els.dailyText.textContent = text;
+  els.daily.classList.remove('hidden');
+  clearTimeout(dailyHide);
+  dailyHide = setTimeout(() => els.daily.classList.add('hidden'), done ? 5000 : 3600);
 }
 
 // ---------- 任务气泡：跟着小人走，尾巴指向他 ----------
