@@ -127,5 +127,5 @@ initCities({ homeId: save.getHomeCity(), semKey: save.getBookSem() || '3a', coun
 if (save.getUsername() && save.isRegistered() && CURRICULUM[save.getBookSem()]) begin();
 else ui.showProfile(begin, {
   username: save.getUsername(), password: save.getPassword(), registered: save.isRegistered(),
-  semKey: save.getBookSem(), gender: save.getGender(),
+  semKey: save.getBookSem(), gender: save.getGender(), city: save.getHomeCity(),
 }, { mode: save.getUsername() ? 'login' : 'register' });

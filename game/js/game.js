@@ -880,7 +880,7 @@ export class Game {
       // 蛋在海岛上而人不在岛上：指引去坐小火车 / 回主岛
       const isl = this.islands.find(i => i.key === e.word.zone);
       const here = this._islandAt(this.player.position);
-      if (isl && (!here || here.key !== isl.key)) {
+      if (!this.cityTour && isl && (!here || here.key !== isl.key)) {
         const onMain = !here;
         return {
           text: onMain
@@ -3744,7 +3744,7 @@ export class Game {
     const dist = from.distanceTo(to);
     const dur = THREE.MathUtils.clamp(dist / 22, 1.6, 4);
     sfx.magic();
-    ui.toast(isl ? `🚂 呜——开往「${isl.name}」的小火车出发啦！` : '🚂 呜——回到阳光农场啦！', 2600);
+    ui.toast(isl ? `🚂 呜——开往「${isl.name}」的小火车出发啦！` : '🚂 呜——回到主岛啦！', 2600);
     this.addTween(dur, (k, dt) => {
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       this.player.position.lerpVectors(from, to, e);
