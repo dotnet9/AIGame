@@ -45,13 +45,33 @@ function hash(str) {
   return h >>> 0;
 }
 
+// 通关奖励城市：order=0 的城市不进自动巡游路线，北京通关后可自由前往探索
+export function bonusCityIds() {
+  const set = new Set();
+  for (const c of _index.cities) {
+    if ((c.order || 0) === 0 && c.id !== _index.finalCity) set.add(c.id);
+  }
+  return set;
+}
+export function bonusCities() {
+  return _index.cities.filter(c => (c.order || 0) === 0 && c.id !== _index.finalCity);
+}
+// 按需加载奖励城市完整数据（进城前调用；已缓存则跳过）
+export async function ensureCityData(id) {
+  if (CITY_MAP[id]) return CITY_MAP[id];
+  const d = await loadCityData(id);
+  if (d) CITY_MAP[id] = d;
+  return d;
+}
+
 // 城市巡游路线：家乡 → 洗牌（家乡/终点除外）→ 终点城市收尾
 // seed = 昵称+册：同一孩子同一册每次进游戏路线一致（进度可续）
 export function cityRoute(homeId, semKey, count, username = '') {
   const ids = _index.cities.length ? _index.cities.map(c => c.id) : ['chengdu', 'beijing'];
   const home = ids.includes(homeId) ? homeId : _index.defaultHome;
   const final = _index.finalCity;
-  const pool = ids.filter(id => id !== home && id !== final);
+  const bonusSet = bonusCityIds();
+  const pool = ids.filter(id => id !== home && id !== final && !bonusSet.has(id));
   let seed = hash(username + '|' + semKey);
   const rand = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
   for (let i = pool.length - 1; i > 0; i--) {

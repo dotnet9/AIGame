@@ -753,6 +753,9 @@ function seededShuffle(arr, rand) {
   }
   return a;
 }
+// 供 game.js 奖励城市组关复用的 seeded 工具
+export const makeSeedRand = makeRand;
+export const shuffleSeed = seededShuffle;
 export function chaptersFor(sem, username = '') {
   const rand = makeRand((username || '') + '|' + sem);
   const pool = seededShuffle(allWordsForSem(sem).map(w => w.id), rand);

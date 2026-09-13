@@ -4,8 +4,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL } from './words.js';
-import { CITY_MAP, cityRoute, cityVariant, getCityQuiz, DECO_EMOJI } from './cities.js';
+import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islandsForSem, BOOK_LABEL, makeSeedRand, shuffleSeed } from './words.js';
+import { CITY_MAP, cityRoute, cityVariant, getCityQuiz, DECO_EMOJI, ensureCityData, bonusCities } from './cities.js';
 import { getCityShape } from './city-shape.js';
 import { NPCManager } from './npcs.js';
 import { cityLandmark } from './world.js';
@@ -134,7 +134,7 @@ export class Game {
     for (const w of this.scopeWords) if (save.isHatched(w.id)) n++;
     return n;
   }
-  get currentChapter() { return this.chapters[this.chapterIndex(this.hatchedInScope())]; }
+  get currentChapter() { return this.chapters[this._forceChapter ?? this.chapterIndex(this.hatchedInScope())]; }
 
   // ================= 初始化 =================
   _initRenderer() {
@@ -1546,6 +1546,8 @@ export class Game {
   // ---------- 城市巡游 ----------
   // 当前关对应的城市舞台（路线[章节序]）
   _currentStage() {
+    // 奖励探索期间锁定当前城（普通巡游按进度走）
+    if (this._forceChapter != null && this.islands[this._forceChapter]) return this.islands[this._forceChapter];
     const idx = Math.min(this.chapterIndex(this.hatchedInScope()), this.islands.length - 1);
     return this.islands[idx] || this.islands[0];
   }
@@ -2890,6 +2892,7 @@ export class Game {
   // 点了"继续冒险"：猫头鹰送奖说话 + 镜头飞向新一关第一颗蛋 → 开始横幅
   _enterChapter(doneCount) {
     const ch = this.chapters[doneCount];
+    this._forceChapter = null;   // 回到按进度组关（退出奖励探索）
     if (this.cityTour) {
       // 城市巡游：搬进新城 → 城市介绍卡（介绍/名校/美食/风景 Tab + 小问答）→ 出发探索
       this._switchCity(doneCount);
@@ -2941,7 +2944,113 @@ export class Game {
         const v = (save.getSave().cityVisits?.[this.sem + ':' + id]) || 0;
         return { name: c.name, emoji: cityVariant(c, Math.max(0, v - 1)).emoji };
       });
-      setTimeout(() => ui.showTravelBadge(visited), 1800);
+      setTimeout(() => ui.showTravelBadge(visited, () => {
+        const bonus = bonusCities();
+        if (bonus.length) ui.showBonusCities(bonus, id => this._enterBonusCity(id));
+      }), 1800);
+    }
+  }
+
+  // ---------- 好友分享链接跳转 ----------
+  // ?city=chengdu：路线城=已解锁则跳过去继续玩（未解锁提示按顺序）；奖励城=通关后才能去
+  _handleShareCity(id) {
+    if (!id || !CITY_MAP[id]) return;
+    const routeIdx = this.cityRouteList.indexOf(id);
+    const done = this.hatchedInScope() >= this.total;
+    if (routeIdx < 0) {
+      // 不在巡游路线：家乡/奖励城走解锁判断
+      if (done) { this._enterBonusCity(id); return; }
+      const isBonus = bonusCities().some(c => c.id === id);
+      ui.toast(isBonus ? '🔒 请全部通关后才能玩该城市哦！' : '🗺️ 这座城市不在你的巡游路线里，先去打卡路线上的城市吧！', 3600);
+      return;
+    }
+    const chIdx = this.chapterIndex(this.hatchedInScope());
+    if (routeIdx > chIdx) {
+      ui.toast('🚂 这座城市还没解锁——先按顺序孵蛋解锁前面的城市吧！', 3600);
+      return;
+    }
+    if (routeIdx === chIdx) return;   // 已经在这座城
+    // 已解锁的历史城市：直接跳回去继续玩（重温城市卡）
+    this._switchCity(routeIdx);
+    this._refreshCityPill();
+    const st = this.islands[routeIdx];
+    ui.chapterBanner(` 欢迎来到 ${st.name} ${st.emoji}！和词宠们再玩一会儿吧`);
+    this.lockInput = false;
+    this._clearMoveTarget();
+  }
+
+  // ---------- 通关奖励城市 ----------
+  // 北京通关后解锁：order=0 的城市可自由前往（组关=复习已学词+词池补充，重在巩固与探索）
+  async _enterBonusCity(id) {
+    if (this._bonusBusy) return;
+    // 奖励城市需通关本册（孵完全册词、抵达北京）才解锁
+    if (this.hatchedInScope() < this.total) {
+      ui.toast('🔒 请全部通关后才能玩该城市哦！', 3200);
+      return;
+    }
+    this._bonusBusy = true;
+    try {
+      await ensureCityData(id);
+      if (!CITY_MAP[id]) { ui.toast('🗺️ 这座城市的地图还没准备好'); return; }
+      let idx = this.islands.findIndex(isl => isl.key === id);
+      if (idx < 0) {
+        // 追加城市舞台：位置放到巡游圈外一层，避免与已有城市重叠
+        const i = this.islands.length;
+        const c = CITY_MAP[id];
+        const lv = c.level || {};
+        const a = (i / this.islands.length) * Math.PI * 2 + 1.1;
+        const dist = 132;
+        const v0 = cityVariant(c, 0);
+        const rr = Math.round((lv.radius || 28) * 3);
+        const shape = getCityShape(id, lv.shape).map(([sx, sz]) => [sx * rr, sz * rr]);
+        this.islands.push({
+          key: id, uid: id + '#' + i, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
+          cx: Math.cos(a) * dist, cz: Math.sin(a) * dist, r: rr, shape,
+          landmark: c.landmark, decos: c.variants.map(v => DECO_EMOJI[v.deco] || '🏮'),
+          startChapter: this.chapters.length, unis: c.unis, city: c, level: lv,
+          chapterName: c.name + ' · 奖励探索', bonus: true,
+        });
+        // 奖励关：复习 8 + 新词 4（词池里未学过的），seed=昵称+册+城市，稳定可重玩
+        const unlearned = this.scopeWords.map(w => w.id).filter(w => !save.isHatched(w));
+        const rand = makeSeedRand(save.getUsername() + '|' + this.sem + '|bonus|' + id);
+        const bag = shuffleSeed(unlearned, rand);
+        const fresh = bag.slice(0, 4);
+        const learnedPool = this.scopeWords.map(w => w.id).filter(w => save.isHatched(w));
+        const review = shuffleSeed(learnedPool, rand).slice(0, 8);
+        const words = [...fresh, ...review];
+        this.chapters.push({ name: c.name + ' · 奖励探索', words, review, bonus: true });
+        idx = i;
+        this._forceChapter = this.chapters.length - 1;   // 蛋从奖励关出（普通巡游时清除）
+        // 运行时补建精建岛（网格+碰撞+装饰），并塞回数据岛供显隐切换
+        if (this.world && this.world.buildIsland) {
+          const built = this.world.buildIsland(this.islands[i]);
+          if (built) this.islands[i].grp = built.grp;
+        }
+      }
+      this._switchCity(idx);
+      // 清掉未孵的旧蛋（正常通关路径不会有，防御 hack/异常进度），再按奖励关进度出蛋
+      for (const [eid, eg] of this.eggs.eggs) {
+        if (!eg.group.visible) continue;
+        if (this.chapters[this.chapters.length - 1].words.includes(eid)) continue;
+        this.eggs.removeEgg(eid);
+      }
+      this._spawnProgress();   // 按新进度生成奖励关的蛋（部分在牌子旁）
+      const st = this.islands[idx];
+      setBgmMood('forest');
+      this._refreshCityPill();
+      const visit = save.visitCity(this.sem + ':' + st.key);
+      ui.showCityCard({
+        city: st.city, variant: cityVariant(st.city, visit), visit,
+        quiz: getCityQuiz(st.key), bonus: true,
+        onStar: () => { save.addStars(1); ui.updateStars(save.getStars()); },
+        onDone: () => {
+          ui.chapterBanner(`🎉 奖励探索「${st.name}」！点亮新蛋、逛逛牌子吧`);
+          this.lockInput = false;
+          this._clearMoveTarget();
+        },
+      });
+    } finally {
+      this._bonusBusy = false;
     }
   }
 

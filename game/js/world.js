@@ -814,11 +814,10 @@ export function buildWorld(scene, semIslands = ISLANDS, opts = {}) {
 
   // ---- 城市巡游舞台：每关一个城市（真实轮廓地形+地标+名牌+特产装饰） ----
   world.islands = [];
-  for (let si = 0; si < semIslands.length; si++) {
-    const isl = semIslands[si];
+  const buildOne = (isl, si, forceFull) => {
     const { cx, cz, r, color, key } = isl;
     const grp = new THREE.Group();
-    if (focus >= 0 && Math.abs(si - focus) > 1) {
+    if (!forceFull && focus >= 0 && Math.abs(si - focus) > 1) {
       const lt = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 6, 20),
         new THREE.MeshStandardMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#9CCF8C'), 0.55), roughness: 0.95 }));
       lt.position.y = -3; grp.add(lt);
@@ -828,7 +827,7 @@ export function buildWorld(scene, semIslands = ISLANDS, opts = {}) {
       ln.scale.set(3.4, 0.95, 1); ln.position.set(0, 4.5, 0); grp.add(ln);
       grp.position.set(cx, 0, cz); scene.add(grp);
       world.islands.push({ ...isl, grp, light: true });
-      continue;
+      return;
     }
     // 岛身：按城市轮廓多边形生成（顶面贴图 UV 按包围盒映射，岩裙沿边下垂）
     if (isl.shape) {
@@ -976,7 +975,14 @@ export function buildWorld(scene, semIslands = ISLANDS, opts = {}) {
     grp.position.set(cx, 0, cz);
     scene.add(grp);
     world.islands.push({ ...isl, grp, pad: { x: cx, z: cz - 2.5 } });
-  }
+  };
+  for (let si = 0; si < semIslands.length; si++) buildOne(semIslands[si], si);
+  // 供奖励城市运行时补建精建岛（复用同一套碰撞/装饰闭包）；返回带 grp 的岛对象
+  world.buildIsland = (isl) => {
+    const before = world.islands.length;
+    buildOne(isl, 0, true);
+    return world.islands.length > before ? world.islands.pop() : { ...isl };
+  };
 
   if (!cityOnly) {
   // ---- 小火车站（主岛，去群岛的入口） ----

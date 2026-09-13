@@ -705,7 +705,7 @@ async function fillSignWiki(ov, it) {
 }
 
 // ---------- 北京终章成就卡：这一册带着词宠走过的城市 ----------
-export function showTravelBadge(cities) {
+export function showTravelBadge(cities, onDone) {
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.style.zIndex = '130';
@@ -717,7 +717,27 @@ export function showTravelBadge(cities) {
     <button class="tb-ok">太棒了！</button>
   </div>`;
   document.body.appendChild(ov);
-  ov.querySelector('.tb-ok').onclick = () => { sfx.great(); ov.remove(); };
+  ov.querySelector('.tb-ok').onclick = () => { sfx.great(); ov.remove(); if (onDone) onDone(); };
+}
+
+// ---------- 通关奖励城市选择卡 ----------
+// 北京通关后解锁的 order=0 城市：点击即可自由前往探索
+export function showBonusCities(list, onPick) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '130';
+  ov.innerHTML = `<div id="travel-card">
+    <div class="tb-t">🗺️ 奖励城市已解锁！</div>
+    <div class="tb-sub">这些城市不在线路图上，通关才能去——挑一座开始探索：</div>
+    <div class="tb-list">${list.map(c => `<button class="tb-city bc-pick" data-id="${c.id}">${c.name}</button>`).join('')}</div>
+    <div class="tb-sub">每座城都有大学/美食/风景牌子和新蛋等你点亮</div>
+    <button class="tb-ok">下次再去</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('.tb-ok').onclick = () => { sfx.pop(); ov.remove(); };
+  ov.querySelectorAll('.bc-pick').forEach(btn => {
+    btn.onclick = () => { const id = btn.dataset.id; ov.remove(); if (onPick) onPick(id); };
+  });
 }
 
 // ---------- 二选一询问卡（换册"接着玩/重新出发"等） ----------
@@ -1820,13 +1840,13 @@ export function playIntro(onDone, isTouch = false, bookLabel = '', total = 0) {
     ? '用左下角<b>摇杆</b>走路，<b>跳</b>按钮蹦一蹦，<br>屏幕上拖动转视角，双指缩放。'
     : '用 <b>W A S D</b> 或方向键走路，按<b>空格</b>跳一跳，<br>方向键+空格能向前跳，右键拖动转视角。';
   const steps = [
-    ['🌼', `欢迎来到 <b>词宠岛</b>！<br>现在玩的是 <b>${bookLabel || '你的课本'}</b>，<br>这里住着 <b>${total || '好多'}</b> 只词宠，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。`],
+    ['🌼', `欢迎来到 <b>词宠岛</b>！<br>现在玩的是 <b>${bookLabel || '你的课本'}</b>，<br>你的家乡城市里住着 <b>${total || '好多'}</b> 只词宠，<br>它们只会为<b>会说英文的小朋友</b>孵化哦。`],
     ['🎮', move],
     ['🥚', isTouch
       ? '走近<b>发光的蛋</b>，点一点它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分，还能赚 <b>⭐星星</b>！'
       : '走近<b>发光的蛋</b>，按 <b>E</b> 打开它，<br>先听发音，再<b>点 🎤 大声读出来</b>，<br>10 秒内读完会自动打分，还能赚 <b>⭐星星</b>！'],
-    ['🤔', '被沙墙、荆棘挡路时会有<b>谜题</b>：<br>读懂谜面，<b>召唤对的那只词宠</b>来帮忙！<br>一次答对奖励 3⭐，攒够星星去<b>许愿井</b>换装扮～'],
-    ['🐾', '词宠饿了还会找你<b>复习</b>，<br>农场的南边有<b>海滩</b>、西边有<b>森林</b>…<br>想玩别的年级？点「课本」换一册就行！'],
+    ['🤔', '遇到<b>谜题</b>时，读懂谜面，<b>召唤对的那只词宠</b>来帮忙！<br>一次答对奖励 3⭐，攒够星星去<b>许愿井</b>换装扮～'],
+    ['🐾', '词宠饿了还会找你<b>复习</b>，<br>孵完一关就坐<b>小火车/飞机</b>去下一座城市，<br>路上点一点<b>大学/美食/风景牌子</b>长知识！<br>想玩别的年级？点「课本」换一册就行！'],
   ];
   let i = 0;
   const show = () => {

@@ -41,6 +41,23 @@ window.addEventListener('error', e => {
 });
 
 let started = false;
+// 好友分享链接：?city=chengdu&grade=4&term=s1 —— 未注册时预填档案（家乡=该城=第一关）；
+// 已注册时进游戏后跳到该城（未解锁/奖励城给对应提示）
+function parseShareLink() {
+  const q = new URLSearchParams(location.search);
+  const city = (q.get('city') || '').toLowerCase().replace(/[^a-z]/g, '');
+  const g = parseInt(q.get('grade'), 10);
+  const t = (q.get('term') || '').toLowerCase();
+  const semKey = (g >= 3 && g <= 6 && (t === 's1' || t === 's2')) ? g + (t === 's1' ? 'a' : 'b') : '';
+  return { city, semKey };
+}
+const SHARE = parseShareLink();
+if (SHARE.city) {
+  if (!save.getUsername() || !save.isRegistered()) {
+    save.setHomeCity(SHARE.city);                 // 新同学：家乡=分享城市=第一关
+    if (SHARE.semKey) save.setBookSem(SHARE.semKey);
+  }
+} else SHARE.city = '';
 async function begin(name, semKey, gender, password, serverScore) {
   if (started) return;
   started = true;
@@ -69,6 +86,7 @@ async function begin(name, semKey, gender, password, serverScore) {
     const game = new Game(canvas);
     game.start();
     window.__game = game; // 调试句柄
+    if (SHARE.city) setTimeout(() => game._handleShareCity && game._handleShareCity(SHARE.city), 1600);
   } catch (err) {
     console.error(err);
     window.__bootErr = err && (err.stack || err.message);
