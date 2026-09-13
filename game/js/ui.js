@@ -615,6 +615,30 @@ export function showCityCard({ city, variant, visit, quiz, onStar, onDone, isFin
   };
   bindChips();
   bindQuiz();
+  // 图集全挂时的兜底：用维基百科条目主图补一张真实城市照片
+  if (gal) {
+    const checkDead = () => gal.classList.toggle('dead', ![...gal.querySelectorAll('.cc-slide')].some(s => !s.dataset.err && s.src));
+    gal.querySelectorAll('.cc-slide').forEach(sl => {
+      if (!sl.dataset.err && !sl.complete) sl.addEventListener('error', () => { sl.dataset.err = '1'; sl.classList.remove('on'); checkDead(); }, { once: true });
+    });
+    setTimeout(async () => {
+      if (!gal.classList.contains('dead') || !ov.isConnected) return;
+      try {
+        const r = await fetch(`https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city.wiki || city.name)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        const src = (d.originalimage && d.originalimage.source) || (d.thumbnail && d.thumbnail.source);
+        if (!src || !ov.isConnected) return;
+        const im = document.createElement('img');
+        im.className = 'cc-slide on';
+        im.src = src;
+        im.alt = city.name;
+        gal.prepend(im);
+        gal.classList.remove('dead');
+        gal.querySelector('.cc-cap').textContent = city.name;
+      } catch (e) { /* 断网保持 emoji */ }
+    }, 2500);
+  }
   ov.querySelector('#cc-go').onclick = () => { if (slideTimer) clearInterval(slideTimer); sfx.pop(); ov.remove(); onDone && onDone(); };
 }
 // 地标类型中文名（风景 Tab 用）

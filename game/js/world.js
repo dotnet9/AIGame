@@ -11,7 +11,7 @@ const M = (color, o = {}) => new THREE.MeshStandardMaterial({
 
 // 城市岛地面贴图：草底 + 城市色分区 + 环形大道 + 十字街 + 中心广场（地图式画法：路缘+路面+中心虚线）
 function cityIslandTexture(color, level) {
-  const S = 768;
+  const S = 512;
   const cv = document.createElement('canvas');
   cv.width = cv.height = S;
   const c = cv.getContext('2d');
@@ -241,8 +241,9 @@ function glowTexture(inner = 'rgba(255,244,214,1)', outer = 'rgba(255,244,214,0)
   return tex;
 }
 
-export function buildWorld(scene, semIslands = ISLANDS) {
+export function buildWorld(scene, semIslands = ISLANDS, opts = {}) {
   const world = { colliders: [], anim: {}, gates: {}, platforms: [] };
+  const focus = opts.focus ?? -1;   // 只精建 focus±1 的城市，其余轻量占位（大地图性能保护）
   const C = world.colliders;
   // 可站立物件：给碰撞体一个"台面高度"，跳得够高就能落上去站着（站得高看得远）
   const colTop = (x, z, r, top, bottom = 0, bounce = false) => {
@@ -273,7 +274,8 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(140, 24, 16),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }));
   scene.add(dome);
-  scene.fog = new THREE.Fog(0xDFF3EC, 42, 150);
+  const cityOnly0 = !!semIslands.length && semIslands[0].level != null;
+  scene.fog = cityOnly0 ? new THREE.Fog(0xDFF3EC, 90, 420) : new THREE.Fog(0xDFF3EC, 42, 150);
 
   // ---- 太阳（亮核 + 光晕） ----
   const sunDir = new THREE.Vector3(18, 30, 12).normalize();
@@ -310,7 +312,7 @@ export function buildWorld(scene, semIslands = ISLANDS) {
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
   sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
-  sun.shadow.camera.far = 110;
+  sun.shadow.camera.far = cityOnly0 ? 400 : 110;
   sun.shadow.bias = -0.0004;
   sun.shadow.radius = 4;          // 阴影边缘更柔，画面更干净
   scene.add(sun);
@@ -812,9 +814,22 @@ export function buildWorld(scene, semIslands = ISLANDS) {
 
   // ---- 城市巡游舞台：每关一个城市（真实轮廓地形+地标+名牌+特产装饰） ----
   world.islands = [];
-  for (const isl of semIslands) {
+  for (let si = 0; si < semIslands.length; si++) {
+    const isl = semIslands[si];
     const { cx, cz, r, color, key } = isl;
     const grp = new THREE.Group();
+    if (focus >= 0 && Math.abs(si - focus) > 1) {
+      const lt = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.92, 6, 20),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(color).lerp(new THREE.Color('#9CCF8C'), 0.55), roughness: 0.95 }));
+      lt.position.y = -3; grp.add(lt);
+      const lr = new THREE.Mesh(new THREE.ConeGeometry(r * 0.92, r * 0.9, 20), M('#A8825B'));
+      lr.rotation.x = Math.PI; lr.position.y = -6 - r * 0.45; grp.add(lr);
+      const ln = new THREE.Sprite(letterTexture(isl.name || '', color, '#FFFDF4'));
+      ln.scale.set(3.4, 0.95, 1); ln.position.set(0, 4.5, 0); grp.add(ln);
+      grp.position.set(cx, 0, cz); scene.add(grp);
+      world.islands.push({ ...isl, grp, light: true });
+      continue;
+    }
     // 岛身：按城市轮廓多边形生成（顶面贴图 UV 按包围盒映射，岩裙沿边下垂）
     if (isl.shape) {
       const pts = isl.shape;                      // 已是世界坐标（含 cx/cz 偏移的局部点）
@@ -1082,9 +1097,21 @@ function bigMushroom(s = 1) {
 }
 
 // ============ 城市地标原型：9 种程序化低模拼装（cities.js 按 landmark 类型选用） ============
-function cityLandmark(type, color) {
+export function cityLandmark(type, color) {
   const g = new THREE.Group();
   const glow = () => M(color, { emissive: color, ei: 0.35 });
+    // uni-gate：大学校门（双柱+横梁+门楣校牌），牌子系统用于大学，真实感拉满
+    if (type === 'uni-gate') {
+      box(g, 0.55, 3.2, 0.55, '#F5F1E8', -1.5, 1.6, 0);
+      box(g, 0.55, 3.2, 0.55, '#F5F1E8', 1.5, 1.6, 0);
+      box(g, 0.62, 0.35, 0.62, '#3E7CB1', -1.5, 3.35, 0);
+      box(g, 0.62, 0.35, 0.62, '#3E7CB1', 1.5, 3.35, 0);
+      box(g, 4.2, 0.5, 0.5, '#3E7CB1', 0, 3.6, 0);
+      box(g, 4.2, 0.16, 0.56, '#FFFDF4', 0, 3.15, 0);
+      box(g, 0.16, 0.9, 0.4, '#8A8A8A', -0.5, 0.45, 0);
+      box(g, 0.16, 0.9, 0.4, '#8A8A8A', 0.5, 0.45, 0);
+      box(g, 2.4, 0.1, 1.2, '#D8CCA8', 0, 0.05, 0.4);
+    }
   if (type === 'gate') {
     // 城楼：城墙台 + 门洞 + 两层飞檐（北京/西安）
     box(g, 6, 2.2, 2.4, '#B08858', 0, 1.1, 0);

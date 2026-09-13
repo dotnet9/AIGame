@@ -8,6 +8,7 @@ import { WORD_MAP, ZONE_NAMES, PER_CHAPTER, allWordsForSem, chaptersFor, islands
 import { CITY_MAP, cityRoute, cityVariant, getCityQuiz, DECO_EMOJI } from './cities.js';
 import { getCityShape } from './city-shape.js';
 import { NPCManager } from './npcs.js';
+import { cityLandmark } from './world.js';
 import { buildWorld } from './world.js';
 import { buildPlayer, letterTexture, petThumbnail, speechBubbleTexture, PROPS } from './models.js';
 import { EggManager, PetManager } from './pets.js';
@@ -96,7 +97,7 @@ export class Game {
       const a = (i / route.length) * Math.PI * 2 + 0.35;
       const dist = 88 + (i % 3) * 18;                      // 全尺寸岛外推
       const v0 = cityVariant(c, 0);
-      const rr = Math.min(34, Math.max(22, lv.radius || 28));   // 城市占满可视区域
+      const rr = Math.round((lv.radius || 28) * 3);   // 大地图：面积约放大10倍，牌子/街道真正铺开
       const shape = getCityShape(cid, lv.shape).map(([sx, sz]) => [sx * rr, sz * rr]);   // 局部多边形
       return {
         key: cid, uid: cid + '#' + i, name: c.name, en: c.en, emoji: v0.emoji, color: c.color,
@@ -162,7 +163,7 @@ export class Game {
   _initScene() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 260);
-    this.world = buildWorld(this.scene, this.islands);
+    this.world = buildWorld(this.scene, this.islands, { focus: Math.max(0, this.chapterIndex(this.hatchedInScope())) });   // 只精建当前关±1 的城市，其余轻量占位
     // 各向异性过滤按显卡实际上限收口：手机一般只支持 4~8，写死 16 会被驱动忽略导致远景摩尔条纹
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
     this.scene.traverse(o => {
@@ -1610,14 +1611,29 @@ export class Game {
     for (const [b, items] of Object.entries(buckets)) {
       const [dx, dz] = DIRS[b];
       items.forEach((it, i) => {
-        const rr = stage.r * Math.min(0.85, 0.5 + i * 0.09);   // 同方位多条目按半径错开
+        const rr = it.type === 'uni'
+          ? stage.r * Math.min(0.9, 0.3 + i * 0.15)
+          : stage.r * Math.min(0.92, 0.5 + i * 0.06);
         let x = stage.cx + dx * rr, z = stage.cz + dz * rr;
         const clampP = { x, z };
         this._clampCityPos(clampP, stage);                     // 有机轮廓下确保牌子在陆地内
         x = clampP.x; z = clampP.z;
+        if (it.type === 'uni') {
+          const gate = cityLandmark('uni-gate', colorOf.uni);
+          gate.position.set(x, 0, z);
+          gate.rotation.y = Math.atan2(stage.cx - x, stage.cz - z);
+          const nm = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: this._signNameTexture(it.name || it.zh || ''), transparent: true, depthWrite: false,
+          }));
+          nm.scale.set(4.2, 0.94, 1); nm.position.set(0, 4.6, 0); gate.add(nm);
+          grp.add(gate);
+          this._signList.push({ ...it, x, z });
+          this._signEggSpots.unshift({ x: x - dx * 2.2 + dz * 1.6, z: z - dz * 2.2 - dx * 1.6 });
+          return;
+        }
         const sign = this._makeSign(it, colorOf[it.type]);
         sign.position.set(x, 0, z);
-        sign.lookAt(stage.cx, 0, stage.cz);                    // 牌面朝向城中心
+        sign.rotation.y = Math.atan2(stage.cx - x, stage.cz - z);   // 牌面朝向城中心（纯Y旋转，lookAt会翻滚）
         grp.add(sign);
         this._signList.push({ ...it, x, z });
         if (this._signEggSpots.length < 26) {
